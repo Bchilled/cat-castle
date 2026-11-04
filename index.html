@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cat Castle</title>
+<!-- Three.js from a CDN via an import map: no build step, runs on GitHub Pages. -->
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+<style>
+  :root { --ink:#f1e9da; --dim:#b9ad98; --bg:rgba(24,20,16,.78); --accent:#e0a33a; --bad:#d8503a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1714; font-family: "Trebuchet MS", system-ui, sans-serif; color: var(--ink); }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .panel { position: fixed; background: var(--bg); border: 2px solid #0e0b09; border-radius: 6px; padding: 6px 10px; }
+  #top { top: 10px; left: 10px; display: flex; gap: 16px; font-size: 17px; }
+  #top b { color: var(--accent); }
+  #wavebox { top: 10px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #wave { font-size: 20px; font-weight: bold; } #status { font-size: 13px; color: var(--dim); }
+  #me { bottom: 82px; left: 10px; width: 220px; }
+  #hp { height: 10px; background: #3a1410; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  #hpfill { height: 100%; background: #c84a2a; width: 100%; transition: width .15s; }
+  #trapbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+  .slot { background: var(--bg); border: 2px solid #0e0b09; border-radius: 6px; padding: 4px 8px; min-width: 96px; font-size: 13px; display: grid; grid-template-columns: auto 1fr; gap: 0 6px; }
+  .slot .key { grid-row: span 2; font-size: 20px; font-weight: bold; color: var(--accent); }
+  .slot .cost { color: var(--dim); } .slot .cost::after { content: " coins"; }
+  .slot.sel { border-color: var(--accent); background: rgba(80,58,24,.9); } .slot.poor .cost { color: var(--bad); }
+  #crosshair { position: fixed; top: 50%; left: 50%; width: 14px; height: 14px; margin: -7px; border: 2px solid var(--ink); border-radius: 50%; opacity: .8; pointer-events: none; }
+  #crosshair.bad { border-color: var(--bad); }
+  #prompt { position: fixed; bottom: 82px; left: 50%; transform: translateX(-50%); font-size: 15px; text-shadow: 0 1px 3px #000; }
+  #msg { position: fixed; top: 72px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: bold; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity .3s; }
+  #sub { position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); max-width: 70vw; text-align: center; font-size: 18px; background: rgba(0,0,0,.55); padding: 4px 12px; border-radius: 4px; opacity: 0; transition: opacity .3s; }
+  #sub b { color: var(--accent); }
+  .show { opacity: 1 !important; }
+  #hurt { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 120px rgba(200,30,20,.0); }
+  #hurt.go { animation: hurt .4s; } @keyframes hurt { 0% { box-shadow: inset 0 0 140px rgba(200,30,20,.7);} 100% { box-shadow: inset 0 0 120px rgba(200,30,20,0);} }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(20,16,12,.92); text-align: center; padding: 20px; }
+  .screen.show { display: flex; }
+  .screen h1 { font-size: 46px; margin: 0 0 6px; color: var(--accent); letter-spacing: 1px; }
+  .screen p { color: var(--dim); max-width: 560px; }
+  button { font: inherit; font-size: 18px; padding: 10px 22px; margin: 6px; background: #5a3f22; color: var(--ink); border: 2px solid #0e0b09; border-radius: 6px; cursor: pointer; }
+  button:hover { background: #7a5630; }
+  .controls { font-size: 14px; color: var(--dim); line-height: 1.7; margin-top: 14px; }
+  .controls b { color: var(--ink); }
+  .paws { display: flex; gap: 8px; margin: 10px; } .paw { width: 46px; height: 46px; } .bonus .paw { width: 22px; height: 22px; vertical-align: middle; }
+  .paw.on { fill: var(--accent); } .paw.off { fill: #3b322a; }
+  .bonus { list-style: none; padding: 0; text-align: left; color: var(--dim); } .bonus li.got { color: var(--ink); }
+  .dim { font-size: 13px; }
+  #version { position: fixed; right: 8px; bottom: 6px; font-size: 11px; color: #776b5c; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="top" class="panel">Lives <b id="lives">20</b> Coins <b id="coins">0</b> Yarn <b id="yarn">0</b></div>
+<div id="wavebox" class="panel"><div id="wave"></div><div id="status"></div></div>
+<div id="me" class="panel">Fred · Cheese <b id="cheese">0</b><div id="hp"><div id="hpfill"></div></div></div>
+<div id="trapbar"></div>
+<div id="crosshair"></div>
+<div id="prompt"></div>
+<div id="msg"></div>
+<div id="sub"></div>
+<div id="hurt"></div>
+<div id="version"></div>
+
+<div id="menu" class="screen show">
+  <h1>Cat Castle</h1>
+  <p>The mice want the kitchen. Fred wants them dead. Trap the road, hold the bridge, barricade the courtyard and drag their cheese back to the stall.</p>
+  <div>
+    <button data-mode="normal">Castle — 24 waves</button>
+    <button data-mode="endless">Endless</button>
+  </div>
+  <p id="profile" class="dim"></p>
+  <div class="controls">
+    <b>Click</b> to grab the mouse · <b>WASD</b> move · <b>Mouse</b> look · <b>Space</b> jump, again to double-jump, at a wall to wall-kick<br>
+    <b>Hold left click</b> claw (stacks bleed) · <b>1–5</b> pick a trap, <b>left click</b> to place, <b>R</b> turn flipper, <b>X</b> sell trap<br>
+    <b>E</b> sell cheese at the stall · <b>G</b> start the next wave · <b>Esc</b> free the mouse
+  </div>
+</div>
+<div id="end" class="screen"></div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
