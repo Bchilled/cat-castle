@@ -5,13 +5,13 @@ Mouse-scale rebuild: Map 1 is now the castle entrance hall, seen at real size by
 
 Added
 - Entrance hall map from Brent's sketch: mice squeeze under the great front door (Y), cross the doormat and flagstones, cross a rainwater drain on a yardstick, chew through a book wedged in the furniture line, then weave between a side table, blanket chest, coal scuttle, suit of armour and long bench to the gap under the inner door (X). Half-tile grid so traps fit in quarters and sit flush against furniture. Tables, benches and an old boot are overhangs you walk under (ceiling traps hang there) and stand on. Climbing crates. Three cheese stashes. `src/sim/map.js` lines 1–143.
-- Two playable cats: Fred (fast, agile, double jump + wall kick) and Puddin (big long-haired calico, tanky, slow, no double jump, pounce that stuns). `src/config.js` lines 21–75; `src/render/models.js` lines 36–132.
-- Every third claw hit is a bite; hairball ranged attack (right click) with splash + slow; Puddin's pounce (Shift); energy pool that powers them; ability cooldowns. `src/sim/sim.js` lines 344–428, 520–546.
-- Three new traps: glue pad, tack strip, hairdryer (blows mice back, combos with the drain). Trap footprints in half-tiles, R rotates any trap, wall/ceiling traps snap to the surface you aim at. `src/config.js` lines 92–104; `src/sim/sim.js` lines 165–253, 548–628; `src/render/models.js` lines 134–208.
-- Swarms of tiny weak pups mixed into every wave. `src/sim/waves.js` lines 7–30; `src/config.js` lines 77–86.
-- Roguelike trinkets: rare drops (bosses always) that stack for the run, including cooldown reducers. `src/config.js` lines 108–118; `src/sim/sim.js` lines 255–305.
-- Harsher flippers and physics splats: mice hit hard by landings or furniture take damage and leave splat marks. `src/sim/sim.js` lines 470–495.
-- Placement that would seal every route is refused ("Leave them a way through"); mice still chew barricades when that's cheaper. `src/sim/sim.js` lines 196–206.
+- Two playable cats: Fred (fast, agile, double jump + wall kick) and Puddin (big long-haired calico, tanky, slow, no double jump, pounce that stuns). `src/config.js` lines 36–75; `src/render/models.js` lines 39–112.
+- Every third claw hit is a bite; hairball ranged attack (right click) with splash + slow; Puddin's pounce (Shift); energy pool that powers them; ability cooldowns. `src/sim/sim.js` lines 374–495, 665–686.
+- Three new traps: glue pad, tack strip, hairdryer (blows mice back, combos with the drain). Trap footprints in half-tiles, R rotates any trap, wall/ceiling traps snap to the surface you aim at. `src/config.js` lines 90–99; `src/sim/sim.js` lines 185–260, 687–754; `src/render/models.js` lines 115–176.
+- Swarms of tiny weak pups mixed into every wave. `src/sim/waves.js` lines 7–31; `src/config.js` lines 78–86.
+- Roguelike trinkets: rare drops (bosses always) that stack for the run, including cooldown reducers. `src/config.js` lines 106–118; `src/sim/sim.js` lines 262–295.
+- Harsher flippers and physics splats: mice hit hard by landings or furniture take damage and leave splat marks. `src/sim/sim.js` lines 551–590.
+- Placement that would seal every route is refused ("Leave them a way through"); mice still chew barricades when that's cheaper. `src/sim/sim.js` lines 197–223.
 - HUD: whisker crosshair (left whiskers health, right whiskers energy), ability cooldown icons with bite pips, square radar top right, trinket icons, 8-slot trap bar, controls panel bottom right (H hides). `src/ui/hud.js` lines 1–133; `index.html` lines 1–124.
 - Rendering: furniture models, drain and yardstick, doors with daylight gap and glowing exit, ceiling beams far overhead, wall lights, instanced mice (hundreds on screen), claw swipe and bite animations, boss HP bars, decals, low close camera with wall pull-in. `src/render/scene.js` lines 1–419.
 - Input: left click claw, right click hairball or place trap, Shift pounce, 1–8 traps, R rotate, wide look up/down, crosshair raycast onto floors, walls and ceilings. `src/main.js` lines 1–137.
