@@ -1,6 +1,6 @@
 # Cat Castle
 
-Cats vs mice trap tower defense in the browser (Three.js), at mouse scale in a human castle. Play as Fred (scruffy, fast ginger tom) or Puddin (big tanky calico) and stop the mice pushing room by room toward the king's chamber.
+Cats vs mice trap tower defense in the browser (Three.js), at mouse scale in a human castle. Play as Fred (quick, fragile, ranged ginger tom) or Puddin (huge, slow, biting calico) and stop the mice pushing room by room toward the king's chamber.
 
 Play: https://brentsnow.ca/cat-castle/
 
@@ -14,12 +14,12 @@ python -m http.server 8000
 Then go to http://localhost:8000. (Opening the file directly won't work; browsers block ES modules from `file://`.)
 
 ## Controls
-Click the game to lock the mouse. WASD move, mouse look, Space jump (Fred: again in the air to double-jump, at a wall to wall-kick). Left click claws (every third hit bites). Right click throws a hairball, or places the trap you're holding. Shift pounces (Puddin). Keys 1–8 pick a trap, R rotates it, X sells the trap under the crosshair, Q puts it away. E trades cheese at a stash. G starts the next wave. H hides the controls panel.
+Click the game to lock the mouse. WASD move, mouse look, wheel zooms the camera. Hold left click to attack (Fred spits pellets, Puddin bites). Right click is Fred's hairball or Puddin's pounce, or places the trap you're holding. Space jumps (Fred double-jumps and wall-kicks; Puddin holds to charge a leap). Keys 1–8 pick a trap, R rotates it, X sells the trap under the crosshair, Q puts it away. E trades tails at a stash. G starts the next wave. H hides the controls panel.
 
 ## How it plays
-Map 1 is the entrance hall. Mice come in under the front door, cross the doormat, cross the drain on a yardstick and chew through a book wedged between the furniture. That falls in a few bites and stays down; a siege mouse knocks it down on wave 6 if it's still standing. Then they head for the gap under the inner door. They always take the cheapest route, counting distance and traps, and reroute when traps change. You can't seal every route, but they'll chew through barricades when that's cheaper.
+Map 1 is the castle entrance. Mice pour out of a hole in a tree stump, run the walled forest road, cross the moat on a fallen branch, chew through a board jammed in the portcullis (it breaks in a few bites and stays down; a siege mouse knocks it out on wave 6 if it's still standing), run the roofed gatehouse tunnel, then split around the guardhouse toward the mouse hole into the great hall. They take the cheapest route, which you can see as glowing arrows on the floor, and reroute when traps change. You can't seal every route, but they'll chew through barricades when that's cheaper. They come in mobs, and a packed mob is faster and tougher.
 
-Dead mice drop cheese; carry it to a stash and trade it for sardines, which buy traps. Rarely they drop trinkets that buff you for the rest of the run. Dying costs 3 lives and drops your cheese (lost if you drown). Anything in the drain dies.
+Dead mice drop tails; carry them to a stash and trade them for sardines, which buy traps. Rarely they drop trinkets that buff you for the rest of the run. Dying costs 3 lives and drops your tails (lost if you drown). Anything in the moat dies.
 
 20 lives. Clear wave 24 to win; mini boss every 6th wave, big boss rat every 12th. Endless keeps going. Winning rates 1–5 paw prints plus bonus paws, saved in the browser along with yarn from bosses.
 

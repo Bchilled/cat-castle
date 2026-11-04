@@ -6,6 +6,8 @@ import { W, CELL } from './sim/map.js';
 import { LocalTransport } from './net/local.js';
 import { Scene } from './render/scene.js';
 import { Hud } from './ui/hud.js';
+import * as THREE from 'three';
+import { makeCat } from './render/models.js';
 
 const LOCAL_ID = 'p1';
 
@@ -21,7 +23,20 @@ document.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click',
   chosenCat = b.dataset.cat;
   document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('picked', x === b));
 }));
-document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => start(b.dataset.mode)));
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { previewOn = false; start(b.dataset.mode); }));
+
+// Splash: each cat turning slowly on its card.
+let previewOn = true;
+document.querySelectorAll('.catview').forEach(cv => {
+  const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
+  const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffe8d0, 0x3a2a1c, 2)); const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(2, 3, 2); sc.add(dl);
+  const cam = new THREE.PerspectiveCamera(35, cv.width / cv.height, 0.1, 50);
+  const cat = makeCat(cv.dataset.kind); sc.add(cat);
+  const big = cv.dataset.kind === 'puddin';
+  cam.position.set(0, big ? 1.4 : 1.1, big ? 4.6 : 3.6); cam.lookAt(0, big ? 0.7 : 0.55, 0);
+  const tick = (t) => { if (!previewOn) { r.dispose(); return; } cat.rotation.y = t / 1600; cat.userData.tail.rotation.z = Math.sin(t / 400) * 0.3; r.render(sc, cam); requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+});
 
 function start(mode) {
   document.getElementById('menu').classList.remove('show');
@@ -35,7 +50,7 @@ function start(mode) {
   // ---------- input ----------
   const keys = new Set();
   let yaw = Math.PI, pitch = 0.3;
-  let clawHeld = false, jumpQ = false, fireQ = false, pounceQ = false;
+  let attackHeld = false, jumpQ = false, jumpHeld = false, secondaryQ = false;
   let selected = null, rot = 0, aim = null;
   canvas.addEventListener('click', () => { if (document.pointerLockElement !== canvas) canvas.requestPointerLock(); });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -47,35 +62,35 @@ function start(mode) {
   });
   canvas.addEventListener('mousedown', e => {
     if (document.pointerLockElement !== canvas) return;
-    if (e.button === 0) clawHeld = true;                       // left: always claw/bite
-    if (e.button === 2) {                                       // right: place trap, else hairball
-      if (selected) placeSelected(); else fireQ = true;
+    if (e.button === 0) attackHeld = true;                     // left: Fred spits, Puddin bites (hold)
+    if (e.button === 2) {                                       // right: place the held trap, else hairball / pounce
+      if (selected) placeSelected(); else secondaryQ = true;
     }
   });
-  document.addEventListener('mouseup', e => { if (e.button === 0) clawHeld = false; });
+  document.addEventListener('mouseup', e => { if (e.button === 0) attackHeld = false; });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); scene.zoom(e.deltaY * 0.004); }, { passive: false });   // camera distance
   document.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
     if (k === ' ') e.preventDefault();
     if (e.repeat) return;
     keys.add(k);
-    if (k === ' ') jumpQ = true;
-    if (k === 'shift') pounceQ = true;
+    if (k === ' ') { jumpQ = true; jumpHeld = true; }
     const n = parseInt(k, 10);
     if (n >= 1 && n <= TRAP_ORDER.length) { const t = TRAP_ORDER[n - 1]; selected = selected === t ? null : t; }
     if (k === 'q') selected = null;
     if (k === 'r') rot = (rot + 1) % 4;
-    if (k === 'e') net.send({ type: 'sellCheese', id: LOCAL_ID });
-    if (k === 'x' && aim && aim.cell >= 0) net.send({ type: 'sellTrap', id: LOCAL_ID, cell: aim.cell, layer: aim.surface === 'top' ? 'floor' : aim.surface });
+    if (k === 'e') net.send({ type: 'sellTails', id: LOCAL_ID });
+    if (k === 'x' && aim && aim.cell >= 0 && aim.surface !== 'none') net.send({ type: 'sellTrap', id: LOCAL_ID, cell: aim.cell, layer: aim.surface === 'top' ? 'floor' : aim.surface });
     if (k === 'g') net.send({ type: 'startWave', id: LOCAL_ID });
     if (k === 'h') document.getElementById('controls').classList.toggle('hidden');
   });
-  document.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+  document.addEventListener('keyup', e => { const k = e.key.toLowerCase(); keys.delete(k); if (k === ' ') jumpHeld = false; });
 
   // Turn the crosshair hit into a trap anchor + footprint.
   function placement() {
     if (!selected || !aim) return null;
     const def = TRAPS[selected];
-    if (aim.surface !== def.surface) return { ok: false, cells: aim.cell >= 0 ? sim.footprint(selected, aim.cell % W, (aim.cell / W) | 0, rot, aim.wallDir) : null, ax: 0, az: 0, wallDir: aim.wallDir };
+    if (aim.surface !== def.surface) return { ok: false, cells: aim.cell >= 0 && aim.surface !== 'none' ? sim.footprint(selected, aim.cell % W, (aim.cell / W) | 0, rot, aim.wallDir) : null, ax: 0, az: 0, wallDir: aim.wallDir };
     let [w, d] = def.size; if (def.surface !== 'wall' && rot % 2) [w, d] = [d, w];
     let ax, az;
     if (def.surface === 'wall') {
@@ -105,8 +120,8 @@ function start(mode) {
     let face = yaw;
     const me = sim.cats.get(LOCAL_ID);
     if (a && me && Math.hypot(a.x - me.x, a.z - me.z) > 0.8) face = Math.atan2(a.x - me.x, a.z - me.z);
-    net.send({ type: 'input', id: LOCAL_ID, mx, mz, yaw: face, pitch, jump: jumpQ, claw: clawHeld, fire: fireQ, pounce: pounceQ, aim: a });
-    jumpQ = fireQ = pounceQ = false;
+    net.send({ type: 'input', id: LOCAL_ID, mx, mz, yaw: face, pitch, jump: jumpQ, jumpHeld, primary: attackHeld && !selected, secondary: secondaryQ, aim: a });
+    jumpQ = secondaryQ = false;
   }
 
   // ---------- loop ----------

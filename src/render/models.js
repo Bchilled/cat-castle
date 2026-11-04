@@ -75,16 +75,16 @@ function catRig(look) {
   }
   // Faint claw-reach wedge on the floor so you can see what a swipe will hit.
   // Ring sector centred on +z (theta -PI/2 maps to +z once laid flat).
-  const reach = new THREE.Mesh(new THREE.RingGeometry(0.25, look.reach, 16, 1, -Math.PI / 2 - 1.1, 2.2),
+  const reach = new THREE.Mesh(new THREE.RingGeometry(0.25, look.reach || 0.3, 16, 1, -Math.PI / 2 - 0.9, 1.8),
     new THREE.MeshBasicMaterial({ color: 0xffe0b0, transparent: true, opacity: 0.12, depthWrite: false }));
-  reach.rotation.x = -Math.PI / 2; reach.position.y = 0.03; g.add(reach);
+  reach.rotation.x = -Math.PI / 2; reach.position.y = 0.03; reach.visible = !!look.reach; g.add(reach);
   g.userData = { body, head, jaw, legs, tail, slash, reach, scale: s };
   return g;
 }
 
 // Fred: scruffy ginger tom, white snowball patch on his back, chewed ear.
 export function makeFred() {
-  const g = catRig({ reach: 1.3, scale: 1, girth: 1, base: 0xc46a2b, muzzle: 0xe9e4d8, eye: 0xd9c22a, chewedEar: true, tailFluff: 1, tailTip: 0x8a4518 });
+  const g = catRig({ reach: 0, scale: 1, girth: 1, base: 0xc46a2b, muzzle: 0xe9e4d8, eye: 0xd9c22a, chewedEar: true, tailFluff: 1, tailTip: 0x8a4518 });
   const b = g.userData.body;
   b.add(part(new THREE.IcosahedronGeometry(0.2, 0), 0xe9e4d8, 0, 0.82, -0.12, 1.1, 0.45, 1.1, false));      // snowball patch
   for (let i = 0; i < 3; i++) b.add(box(0x8a4518, 0, 0.62 + i * 0.03, 0.18 - i * 0.22, 0.62 - i * 0.05, 0.05, 0.08, false)); // stripes
@@ -96,7 +96,7 @@ export function makeFred() {
 // fluffy ruff and tail, heavy-set.
 export function makePuddin() {
   const s = 1.3;
-  const g = catRig({ reach: 1.5, scale: s, girth: 1.15, base: 0xeee7da, head: 0xeee7da, muzzle: 0xfaf6ee, eye: 0x7fae3a, tailFluff: 2.2,
+  const g = catRig({ reach: 1.4, scale: s, girth: 1.15, base: 0xeee7da, head: 0xeee7da, muzzle: 0xfaf6ee, eye: 0x7fae3a, tailFluff: 2.2,
     tail: 0x2b2420, tailTip: 0xd27a34, ear: 0xd27a34, legs: 0xeee7da });
   const b = g.userData.body;
   // Calico patches.
@@ -194,93 +194,80 @@ export function makeTrinket(tier) {
 }
 
 // ---------- furniture ----------
-const WOOD = 0x6e4e30, DARKWOOD = 0x4a3420, STONE = 0x6f6a62;
+// Rule: every piece of art stays inside its collision box (rect + height), so
+// anything you can see, you bump into. Nothing decorative pokes into walkways.
+const WOOD = 0x6e4e30, DARKWOOD = 0x4a3420, STONE = 0x6f6a62, STONE2 = 0x5e5850;
 export function makeFurniture(f) {
   const [x0, z0, x1, z1] = f.rect, w = x1 - x0, d = z1 - z0;
   const g = new THREE.Group(); g.position.set(x0 + w / 2, 0, z0 + d / 2);
   const B = (c, x, y, z, sx, sy, sz, line = true) => { const m = box(c, x, y, z, sx, sy, sz, line); g.add(m); return m; };
   const leg = 0.5;
   switch (f.look) {
-    case 'wall': {
-      B(0x5e5850, 0, f.h / 2, 0, w, f.h, d, false);
-      B(0x3e3428, 0, 1.2, 0, w + 0.05, 2.4, d + 0.05, false);       // wainscot band
+    case 'stone': {
+      B(STONE2, 0, f.h / 2, 0, w, f.h, d, false);
+      // Mortar courses: thin darker bands, flush with the faces.
+      for (let y = 1.2; y < f.h; y += 1.4) B(0x4a453f, 0, y, 0, w + 0.02, 0.08, d + 0.02, false);
       break;
     }
-    case 'bench': case 'table': {
-      B(f.look === 'table' ? 0x7a5634 : WOOD, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+    case 'hallwall': {
+      B(STONE2, 0, f.h / 2, 0, w, f.h, d, false);
+      for (let y = 1.2; y < f.h; y += 1.4) B(0x4a453f, 0, y, 0, w + 0.02, 0.08, d + 0.02, false);
+      // The great hall's human-size door, painted flush on the wall face.
+      B(0x4a3220, -w / 2 + 29, 5, d / 2 + 0.01, 9, 10, 0.02, false);
+      for (let k = 0; k < 3; k++) B(0x26221e, -w / 2 + 29, 2 + k * 3, d / 2 + 0.02, 9.1, 0.3, 0.02, false);
+      break;
+    }
+    case 'tunnelroof': {
+      B(STONE2, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d, false);
+      for (let z = -d / 2 + 2; z < d / 2; z += 3) B(0x3e3a34, 0, f.bot + 0.15, z, w, 0.3, 0.6, false);   // ribs under the vault
+      break;
+    }
+    case 'guardhouse': {
+      B(0x7a7268, 0, f.h / 2, 0, w, f.h, d);
+      for (let y = 1.2; y < f.h; y += 1.4) B(0x5a544c, 0, y, 0, w + 0.02, 0.08, d + 0.02, false);
+      B(0x4a3220, 0, 3, d / 2 + 0.01, 3.5, 6, 0.02, false);          // door, flush
+      B(0x1a1612, w / 4, 4, d / 2 + 0.01, 2, 1.5, 0.02, false);      // window, flush
+      const roof = new THREE.Group(); roof.position.y = f.h;
+      const cone = outline(new THREE.Mesh(new THREE.ConeGeometry(0.71, 1, 4, 1), mat(0x4a3a2c)), 1.02);
+      cone.rotation.y = Math.PI / 4; cone.position.y = 0.5; roof.add(cone); roof.scale.set(w, 3, d); g.add(roof);
+      break;
+    }
+    case 'barrels': {
+      // Barrels packed into the block; the collider is the whole block.
+      const r = 0.95;
+      for (let bx = -w / 2 + r; bx <= w / 2 - r + 0.01; bx += 2 * r + 0.05)
+        for (let bz = -d / 2 + r; bz <= d / 2 - r + 0.01; bz += 2 * r + 0.05) {
+          g.add(part(cyl(r * 0.92, r, f.h, 10), 0x7a5634, bx, f.h / 2, bz));
+          for (const y of [0.4, f.h - 0.4]) g.add(part(cyl(r * 0.97, r * 0.97, 0.12, 10), 0x2e2c2a, bx, y, bz, 1, 1, 1, false));
+        }
+      break;
+    }
+    case 'bales': {
+      for (let bz = -d / 2; bz < d / 2 - 0.01; bz += 2.2) {
+        const len = Math.min(2.2, d / 2 - bz);
+        B(0xc8a858, 0, f.h / 2, bz + len / 2, w, f.h, len - 0.04);
+        B(0x8a6a38, 0, f.h / 2, bz + len / 2, w + 0.02, 0.1, len * 0.9, false);   // twine
+      }
+      break;
+    }
+    case 'bench': {
+      B(WOOD, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) B(DARKWOOD, sx * (w / 2 - leg / 2), f.bot / 2, sz * (d / 2 - leg / 2), leg, f.bot, leg);
-      if (f.look === 'table') B(0xd8d0c0, 0, f.top + 0.02, 0, w * 0.7, 0.04, d * 0.6, false);      // runner cloth
       break;
     }
-    case 'boot': {   // old boot lying on its side: a leather tunnel
-      B(0x3a2a20, -w / 2 + leg / 2, f.top / 2, 0, leg, f.top, d);
-      B(0x3a2a20, w / 2 - leg / 2, f.top / 2, 0, leg, f.top, d);
-      // Half-cylinder roof: the curved upper of the boot, open underneath.
-      const half = new THREE.CylinderGeometry(w / 2, w / 2, d, 10, 1, true, -Math.PI / 2, Math.PI);
-      const shell = new THREE.Mesh(half, mat(0x4a3426, { side: THREE.DoubleSide }));
-      shell.rotation.x = -Math.PI / 2; shell.position.y = f.top - w / 2; g.add(shell);   // -90° puts the curve on top; peak = walkable top
-      B(0x2a1e16, 0, 0.15, d / 2 + 0.6, w * 1.05, 0.3, 1.4);                  // sole/toe
+    case 'arch': {
+      // Wooden gallery over the last stretch before the hall door.
+      B(DARKWOOD, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      for (let x = -w / 2 + 1; x < w / 2; x += 3) B(0x3a2a1a, x, f.bot - 0.0, -d / 2 + 0.3, 0.3, 0.01, d - 0.6, false);
       break;
     }
-    case 'boot2': {
-      B(0x3a2a20, 0, f.h / 2 + 0.6, -d / 4, w * 0.8, f.h + 1.2, d / 2);
-      B(0x3a2a20, 0, 0.5, d / 6, w, 1, d * 0.8);
-      B(0x1e1612, 0, 0.08, 0, w * 1.05, 0.16, d * 1.02);
-      break;
-    }
-    case 'logs': {
-      for (let row = 0; row < 3; row++) for (let k = 0; k < 7 - row; k++) {
-        const r = 0.38; const lg = part(cyl(r, r, d * 0.95, 7), k % 2 ? 0x6a4a2e : 0x7d5a38, -w / 2 + 0.6 + k * 1.5 + row * 0.75, r + row * 0.7, 0);
-        lg.rotation.x = Math.PI / 2; g.add(lg);
+    case 'log': {
+      // Hollow log: flat-bottomed bark roof over the road (collider = slab).
+      B(0x5a4030, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      for (const k of [-1, 1]) {
+        const ring = new THREE.Mesh(new THREE.BoxGeometry(w, f.top - f.bot, 0.05), mat(0xb08a5a));
+        ring.position.set(0, (f.bot + f.top) / 2, k * (d / 2 + 0.01)); g.add(ring);
       }
-      break;
-    }
-    case 'chest': {
-      B(0x6e4e30, 0, f.h / 2, 0, w, f.h, d);
-      B(0x5a3e25, 0, f.h - 0.15, 0, w + 0.08, 0.3, d + 0.08);
-      for (const k of [-1, 1]) B(0x2e2c2a, k * w / 3, f.h / 2, 0, 0.25, f.h + 0.02, d + 0.06, false);   // iron straps
-      B(0xb89a40, 0, f.h * 0.75, d / 2 + 0.05, 0.6, 0.5, 0.1, false);                                      // lock
-      break;
-    }
-    case 'rack': {
-      for (const k of [-1, 1]) B(DARKWOOD, k * (w / 2 - 0.2), f.h / 2, 0, 0.4, f.h, d);
-      for (let y = 0.4; y < f.h; y += 1.1) B(WOOD, 0, y, 0, w, 0.15, d * 0.9);
-      B(0x3a2a20, -2, 0.9, 0, 1.4, 1.2, d * 0.8); B(0x2a1e16, 2.5, 2.0, 0, 1.6, 1.0, d * 0.8);            // boots on the rack
-      break;
-    }
-    case 'umbrella': {
-      g.add(part(cyl(w / 2, w / 2 * 0.9, f.h, 9), 0x6a5a48, 0, f.h / 2, 0));
-      for (let k = 0; k < 3; k++) {
-        const sh = part(cyl(0.08, 0.08, 9, 5), 0x2e2a28, (k - 1) * 0.6, f.h + 3.5, (k % 2) * 0.4); sh.rotation.z = (k - 1) * 0.12; g.add(sh);
-        const top = part(new THREE.ConeGeometry(0.5, 2.5, 6), [0x2a2a40, 0x5a2a2a, 0x2a4a2a][k], (k - 1) * 0.6 + (k - 1) * 0.9, f.h + 7.5, (k % 2) * 0.4); g.add(top);
-      }
-      break;
-    }
-    case 'basket': {
-      const br = Math.min(w, d) / 2;   // fit inside the collision box
-      const bk = part(cyl(br, br * 0.85, f.h, 10), 0x8a7048, 0, f.h / 2, 0); bk.scale.x = w / (2 * br); g.add(bk);
-      for (let k = 0; k < 4; k++) { const lg = part(cyl(0.25, 0.25, w * 0.8, 6), 0x6a4a2e, 0, f.h - 0.1, (k - 1.5) * 0.6); lg.rotation.z = Math.PI / 2; g.add(lg); }
-      break;
-    }
-    case 'scuttle': {
-      // Lying drum sized exactly to its collision box (w long, d deep, h tall).
-      const b = part(cyl(0.5, 0.42, 1, 8), 0x2e2c2a, 0, f.h / 2, 0); b.rotation.z = Math.PI / 2; b.scale.set(f.h, w, d); g.add(b);
-      for (let k = 0; k < 8; k++) g.add(part(new THREE.DodecahedronGeometry(0.3, 0), 0x18181a, (k - 4) * 0.9, f.h - 0.05, (k % 3 - 1) * 0.6));
-      break;
-    }
-    case 'plinth': B(STONE, 0, f.h / 2, 0, w, f.h, d); break;
-    case 'armour': {
-      const STEEL = 0x8a8c90;
-      for (const k of [-1, 1]) B(STEEL, k * 0.5, 1.2 + 1.5, 0, 0.6, 3, 0.7);                   // legs (on top of the plinth)
-      B(STEEL, 0, 1.2 + 4.0, 0, 2.2, 2.2, 1.3);                                                   // breastplate
-      g.add(part(new THREE.IcosahedronGeometry(0.7, 0), STEEL, 0, 1.2 + 5.6, 0));                // helmet
-      B(0x2a2a2a, 0, 1.2 + 5.6, 0.62, 0.8, 0.12, 0.05, false);                                     // visor slit
-      const sword = B(0xc8c8cc, 1.5, 1.2 + 3.2, 0.5, 0.15, 5, 0.06); sword.rotation.z = 0.05;
-      break;
-    }
-    case 'crate': {
-      B(0x8a6a44, 0, f.h / 2, 0, w, f.h, d);
-      for (const k of [-1, 1]) B(0x5a4228, 0, f.h / 2, k * (d / 2 + 0.01), w * 1.01, 0.18, 0.04, false);
       break;
     }
     default: B(WOOD, 0, (f.h || 1) / 2, 0, w, f.h || 1, d);

@@ -2,7 +2,7 @@
 // cooldowns, square radar, trap bar, trinkets, prompts, cat subtitles, menus.
 // Plain HTML/SVG/canvas over the 3D view. Why: crisp text, cheap, easy to restyle.
 
-import { TRAPS, TRAP_ORDER, RULES, VERSION, TRINKETS, CAT, MICE } from '../config.js';
+import { TRAPS, TRAP_ORDER, RULES, TRINKETS, CAT, MICE } from '../config.js';
 import { W, H, CELL, T, STALLS, HOLE, SPAWN, GATE } from '../sim/map.js';
 
 const $ = (id) => document.getElementById(id);
@@ -18,14 +18,13 @@ function whiskerSvg() {
   const lines = (paths, cls) => paths.map(d => `<path d="${d}" class="wbase"/><path d="${d}" class="${cls}" pathLength="100"/>`).join('');
   return `<svg viewBox="0 0 120 44">${lines(WHISK_L, 'whp')}${lines(WHISK_R, 'wen')}<path d="M56 19 L64 19 L60 25 Z" class="nose"/></svg>`;
 }
-const TYPE_RGB = { [T.FLOOR]: '#4a443e', [T.RUG]: '#6a3a2a', [T.WATER]: '#2e4a52', [T.BRIDGE]: '#a88a50', [T.SOLID]: '#1e1a16', [T.GATE]: '#6a2a24', [T.HOLE]: '#d8402a', [T.STALL]: '#c8a030' };
+const TYPE_RGB = { [T.FLOOR]: '#5a544c', [T.ROAD]: '#5a4630', [T.WATER]: '#2f6f9a', [T.BRIDGE]: '#7a5a38', [T.SOLID]: '#1e1a16', [T.GATE]: '#7a5a38', [T.HOLE]: '#d8402a', [T.STALL]: '#c8a030' };
 
 export class Hud {
   constructor(sim) {
     this.sim = sim; this.msgT = 0; this.subT = 0;
     $('trapbar').innerHTML = TRAP_ORDER.map((k, i) =>
       `<div class="slot" data-k="${k}"><span class="key">${i + 1}</span><span class="nm">${TRAPS[k].name}</span><span class="cost">${TRAPS[k].cost}</span></div>`).join('');
-    $('version').textContent = 'v' + VERSION;
     $('crosshair').innerHTML = whiskerSvg();
     this.whp = [...document.querySelectorAll('#crosshair .whp')];
     this.wen = [...document.querySelectorAll('#crosshair .wen')];
@@ -47,7 +46,7 @@ export class Hud {
     $('lives').textContent = h.lives;
     $('sardines').textContent = h.sardines;
     $('yarn').textContent = h.yarn;
-    $('cheese').textContent = `${h.cheese}/${RULES.cheeseCarryCap}`;
+    $('tails').textContent = `${h.tails}/${RULES.tailCarryCap}`;
     $('catname').textContent = h.name;
     $('wave').textContent = h.wave ? `Wave ${h.wave}${h.mode === 'normal' ? ' / ' + RULES.winWave : ''}` : 'Get ready';
     let status = '';
@@ -58,14 +57,14 @@ export class Hud {
     for (const p of this.whp) p.style.strokeDasharray = `${Math.max(0, h.hp) * 100} 100`;
     for (const p of this.wen) p.style.strokeDasharray = `${Math.max(0, h.energy) * 100} 100`;
     $('crosshair').classList.toggle('bad', !!sel && !aimValid);
-    // Ability cooldowns.
-    const energyOk = (cost) => h.energy * CAT.maxEnergy >= cost;
-    // Bite pips: claw hits landed toward the next bite.
-    const done = (CAT.biteEvery - h.biteIn) % CAT.biteEvery;
-    $('ab-bite').innerHTML = Array.from({ length: CAT.biteEvery }, (_, i) => `<i class="${i < done ? 'on' : ''}"></i>`).join('');
-    setCd($('ab-hair'), h.hairCd, energyOk(CAT.hairballCost));
-    $('ab-pounce').style.display = h.canPounce ? '' : 'none';
-    setCd($('ab-pounce'), h.pounceCd, energyOk(CAT.pounceCost));
+    // Ability panel, per cat.
+    const fred = h.kind === 'fred';
+    $('ab-pri-name').textContent = fred ? 'Spit' : 'Bite';
+    $('ab-pri-note').textContent = fred ? 'bleed' : (h.eatCd > 0 ? `eat ${Math.ceil(h.eatCd * CAT.eatCooldown)}s` : 'eat ready');
+    $('ab-sec-name').textContent = fred ? 'Hairball' : 'Pounce';
+    setCd($('ab-sec'), h.secCd, h.energy * CAT.maxEnergy >= h.secCost);
+    $('ab-jump-name').textContent = fred ? 'Double jump' : 'Charge leap';
+    $('ab-charge').style.width = `${Math.round(h.charge * 100)}%`;
     // Trap bar.
     document.querySelectorAll('.slot').forEach(s => {
       s.classList.toggle('sel', s.dataset.k === sel);
@@ -76,7 +75,7 @@ export class Hud {
     $('trinkets').innerHTML = tk.map(([k, n]) => `<span class="tk ${TRINKETS[k].tier}" title="${TRINKETS[k].name}: ${TRINKETS[k].desc}">${TRINKETS[k].name.split(' ').map(w => w[0]).join('')}${n > 1 ? '<b>' + n + '</b>' : ''}</span>`).join('');
     let prompt = '';
     if (!h.alive) prompt = `Respawning in ${Math.ceil(h.respawnT)}…`;
-    else if (h.nearStall && h.cheese > 0) prompt = `E — trade ${h.cheese} cheese for sardines`;
+    else if (h.nearStall && h.tails > 0) prompt = `E — trade ${h.tails} tails for sardines`;
     else if (sel) prompt = `Right click to place ${TRAPS[sel].name} · R rotate · X sell · Q put away`;
     $('prompt').textContent = prompt;
     this.msgT -= dt; if (this.msgT <= 0) $('msg').classList.remove('show');
@@ -89,7 +88,10 @@ export class Hud {
     c.drawImage(this.base, 0, 0);
     if (!sim.gate.up) { c.fillStyle = TYPE_RGB[T.FLOOR]; c.fillRect(this.rx(GATE.x0), this.rz(GATE.z0), this.rx(GATE.x1) - this.rx(GATE.x0), this.rz(GATE.z1) - this.rz(GATE.z0)); }
     for (const tr of sim.traps.values()) { c.fillStyle = tr.kind === 'barricade' ? '#c4a46a' : tr.layer === 'ceiling' ? '#6fb8ff' : '#7fd06a'; c.fillRect(this.rx(tr.x0), this.rz(tr.z0), Math.max(2, this.rx(tr.x1) - this.rx(tr.x0)), Math.max(2, this.rz(tr.z1) - this.rz(tr.z0))); }
-    c.fillStyle = '#e8c33a'; for (const ch of sim.cheese) c.fillRect(this.rx(ch.x) - 1, this.rz(ch.z) - 1, 2, 2);
+    // Mouse route.
+    const route = sim.route(); c.strokeStyle = 'rgba(180,138,255,0.7)'; c.lineWidth = 1.5; c.beginPath();
+    route.forEach(([x, z], k) => { if (k === 0) c.moveTo(this.rx(x), this.rz(z)); else c.lineTo(this.rx(x), this.rz(z)); }); c.stroke();
+    c.fillStyle = '#e8c33a'; for (const t of sim.tails) c.fillRect(this.rx(t.x) - 1, this.rz(t.z) - 1, 2, 2);
     for (const m of sim.mice) {
       const d = MICE[m.type]; c.fillStyle = d.boss ? '#ff3a2a' : '#e86a4a';
       const r = d.boss ? 4 : d.size > 0.5 ? 2 : 1.3;

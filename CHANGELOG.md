@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.0 — 2026-11-03
+Working core for one map: corridor-style castle entrance, two distinct cats, tails economy, mobs.
+
+Added
+- New Map 1, the castle entrance as walled lanes: arched mouse hole in a stump (Y), forest road walled by roots/rocks/bushes with a hollow-log roofed stretch, real moving moat water crossed on a fallen branch, wooden board jammed in the portcullis gap (gate, with a cat-sized hole), roofed stone gatehouse tunnel, guard yard splitting into a roofed lane under a long bench (barrels as its wall) and a lane between the guardhouse and hay bales, a gallery roof before the arched mouse hole into the great hall (X). Barrels and bales are cat walkways. `src/sim/map.js` lines 1–155.
+- Fred kit: hold left click to spit pellets (light damage, each adds bleed), right click big hairball, double jump, wall kicks, auto-mantle onto ledges, 70 HP, fastest. Puddin kit: hold left click to bite (heavy; a killing bite eats the mouse — heals 15% on a 6 s cooldown, no tail), right click pounce with stun, hold Space to charge a leap whose landing flings small mice, 200 HP, slow. `src/config.js` lines 37–90; `src/sim/sim.js` lines 387–570.
+- Tails replace cheese: dead mice drop tails, cats carry and trade them at tail stashes for sardines; traded tails get pegged on the stash line. `src/sim/sim.js` lines 290–330; `src/render/scene.js` stash lines.
+- Mobs: waves spawn in packs of 6–15 plus stragglers; mice push apart, slide along walls, spread across lanes; a mouse with 5+ packmates nearby is 20% faster and takes 15% less damage; flung mice bowl over others; cats shove through crowds (Puddin harder). `src/sim/waves.js` lines 1–48; `src/sim/sim.js` lines 619–780.
+- Visible mouse route: glowing chevrons on the floor (bright in build phase) and a line on the radar, updated whenever traps change the route. `src/sim/sim.js` lines 184–195; `src/render/scene.js` buildRoute/updateRoute; `src/ui/hud.js` drawRadar.
+- Responsive tail: idle sway, lifts and swishes when running, flicks on turns, droops when hurt; crouch when charging, stretch when pouncing. `src/render/scene.js` cat sync.
+- Splash page with both cats turning on their cards; mouse-wheel camera zoom. `index.html`; `src/main.js` lines 1–45.
+
+Changed
+- Every visible solid now sits inside its collider (furniture art rebuilt to fit; stashes have full-height colliders; forest hedge is exactly as tall as its collision).
+- Camera further back over the right shoulder (Fred 5.5, Puddin 6.5, wheel zooms 2.5–10); the cat fades if the camera is pushed right up against it.
+- Ranged attacks always fire toward the crosshair, even at nothing (previously hairballs silently failed beyond ~20 units).
+- Version number removed from every screen.
+- Tests rewritten for the new map and kits (29 checks). `tests/sim-test.mjs` lines 1–147.
+
+Fixed
+- Infinite wall kicks let Fred climb out of the map: wall kicks now refresh only on landing, can't repeat on the same wall, and nothing goes above the wall tops.
+
+Removed
+- Entrance-hall household map (drain, yardstick, book gate), Shift pounce key, claw for Fred, bite-every-third-hit.
+
 ## 0.2.2 — 2026-11-03
 Changed
 - Hairball nerfed: damage 22 → 12, splash radius 1.4 → 1.0, energy cost 25 → 35, cooldown 0.6 → 1.2 s. Slow unchanged. `src/config.js` CAT block (~lines 44–51).

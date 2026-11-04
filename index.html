@@ -34,13 +34,12 @@
   #crosshair.bad .nose { fill: var(--bad); }
   /* Abilities */
   #abilities { position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
-  .ab { position: relative; width: 74px; height: 50px; background: var(--bg); border: 2px solid #0e0b09; border-radius: 6px; font-size: 11px; text-align: center; padding-top: 4px; overflow: hidden; }
+  .ab { position: relative; width: 92px; height: 50px; background: var(--bg); border: 2px solid #0e0b09; border-radius: 6px; font-size: 11px; text-align: center; padding-top: 4px; overflow: hidden; }
   .ab .k { display: block; color: var(--accent); font-weight: bold; font-size: 12px; }
   .ab::after { content: ""; position: absolute; inset: 0; background: conic-gradient(rgba(0,0,0,.65) var(--cd, 0deg), transparent 0); pointer-events: none; }
   .ab.noenergy { opacity: .45; }
-  #ab-bite { display: flex; gap: 4px; justify-content: center; margin-top: 3px; }
-  #ab-bite i { width: 8px; height: 8px; border-radius: 50%; background: #3b322a; border: 1px solid #0e0b09; }
-  #ab-bite i.on { background: var(--accent); }
+  .ab small { display: block; color: var(--dim); font-size: 10px; }
+  .ab .charge { height: 4px; margin: 3px 8px 0; background: #3b322a; } .ab .charge i { display: block; height: 100%; width: 0; background: var(--accent); }
   /* Trap bar */
   #trapbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; }
   .slot { background: var(--bg); border: 2px solid #0e0b09; border-radius: 6px; padding: 3px 7px; width: 104px; font-size: 12px; display: grid; grid-template-columns: auto 1fr; gap: 0 6px; white-space: nowrap; overflow: hidden; }
@@ -57,7 +56,7 @@
   .show { opacity: 1 !important; }
   #hurt { position: fixed; inset: 0; pointer-events: none; }
   #hurt.go { animation: hurt .4s; } @keyframes hurt { 0% { box-shadow: inset 0 0 140px rgba(200,30,20,.7);} 100% { box-shadow: inset 0 0 120px rgba(200,30,20,0);} }
-  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(20,16,12,.94); text-align: center; padding: 20px; }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; background: #1a140f; text-align: center; padding: 20px; }
   .screen.show { display: flex; }
   .screen h1 { font-size: 46px; margin: 0 0 6px; color: var(--accent); letter-spacing: 1px; }
   .screen h2 { font-size: 18px; margin: 18px 0 4px; color: var(--ink); }
@@ -65,12 +64,17 @@
   button { font: inherit; font-size: 17px; padding: 9px 20px; margin: 5px; background: #5a3f22; color: var(--ink); border: 2px solid #0e0b09; border-radius: 6px; cursor: pointer; }
   button:hover { background: #7a5630; }
   button.picked { border-color: var(--accent); background: #7a5630; }
-  .catpick { text-align: left; width: 250px; } .catpick small { display: block; color: var(--dim); font-size: 12px; }
+  .title { font-size: 72px; font-weight: bold; color: var(--accent); letter-spacing: 2px; text-shadow: 0 4px 0 #3a2210, 0 8px 24px #000; }
+  .tag { font-size: 18px; margin: 4px 0 22px; }
+  .cats { display: flex; gap: 18px; }
+  .catpick { width: 260px; text-align: center; padding: 10px; } .catpick b { display: block; font-size: 22px; margin-top: 4px; }
+  .catpick small { display: block; color: var(--dim); font-size: 13px; line-height: 1.4; }
+  .catview { display: block; margin: 0 auto; width: 220px; height: 160px; }
+  .modes { margin-top: 20px; } .play { font-size: 20px; padding: 12px 28px; background: #8a5a22; }
   .paws { display: flex; gap: 8px; margin: 10px; } .paw { width: 46px; height: 46px; } .bonus .paw { width: 22px; height: 22px; vertical-align: middle; }
   .paw.on { fill: var(--accent); } .paw.off { fill: #3b322a; }
   .bonus { list-style: none; padding: 0; text-align: left; color: var(--dim); } .bonus li.got { color: var(--ink); }
   .dim { font-size: 13px; }
-  #version { position: fixed; left: 8px; bottom: 6px; font-size: 11px; color: #776b5c; }
 </style>
 </head>
 <body>
@@ -78,44 +82,39 @@
 <div id="top" class="panel">Lives <b id="lives">20</b> Sardines <b id="sardines">0</b> Yarn <b id="yarn">0</b></div>
 <div id="wavebox" class="panel"><div id="wave"></div><div id="status"></div></div>
 <div id="radarbox" class="panel"><canvas id="radar" width="200" height="200"></canvas><div id="trinkets"></div></div>
-<div id="me" class="panel"><span id="catname"></span> · Cheese <b id="cheese">0</b></div>
+<div id="me" class="panel"><span id="catname"></span> · Tails <b id="tails">0</b></div>
 <div id="crosshair"></div>
 <div id="abilities">
-  <div class="ab"><span class="k">L-click</span>Claw · bite<div id="ab-bite"></div></div>
-  <div class="ab" id="ab-hair"><span class="k">R-click</span>Hairball</div>
-  <div class="ab" id="ab-pounce"><span class="k">Shift</span>Pounce</div>
+  <div class="ab"><span class="k">L-click</span><span id="ab-pri-name">Spit</span><small id="ab-pri-note"></small></div>
+  <div class="ab" id="ab-sec"><span class="k">R-click</span><span id="ab-sec-name">Hairball</span></div>
+  <div class="ab"><span class="k">Space</span><span id="ab-jump-name">Double jump</span><div class="charge"><i id="ab-charge"></i></div></div>
 </div>
 <div id="trapbar"></div>
 <div id="controls" class="panel">
-  <b>WASD</b> move · <b>Mouse</b> look<br>
-  <b>Space</b> jump (Fred: again to double-jump, at a wall to wall-kick)<br>
-  <b>Left click</b> claw — every 3rd hit bites<br>
-  <b>Right click</b> hairball, or place the held trap<br>
-  <b>Shift</b> pounce (Puddin) · <b>1–8</b> pick trap · <b>R</b> rotate<br>
-  <b>X</b> sell trap · <b>Q</b> put trap away · <b>E</b> trade cheese<br>
-  <b>G</b> start next wave · <b>H</b> hide this · <b>Esc</b> free mouse
+  <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom<br>
+  <b>Left click</b> Fred spits / Puddin bites (hold)<br>
+  <b>Right click</b> hairball / pounce, or place the held trap<br>
+  <b>Space</b> Fred: double jump, wall kick · Puddin: hold to charge a leap<br>
+  <b>1–8</b> pick trap · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away<br>
+  <b>E</b> trade tails at a stash · <b>G</b> next wave · <b>H</b> hide this
 </div>
 <div id="prompt"></div>
 <div id="msg"></div>
 <div id="sub"></div>
 <div id="hurt"></div>
-<div id="version"></div>
 
 <div id="menu" class="screen show">
-  <h1>Cat Castle</h1>
-  <p>The mice are coming in under the front door. Hold the entrance hall: trap the doormat, hold the yardstick over the drain, barricade between the furniture and drag their cheese to a stash for sardines.</p>
-  <h2>Pick your cat</h2>
-  <div>
-    <button class="catpick picked" data-cat="fred">Fred<small>Scruffy ginger tom. Fast, double jump, wall kick.</small></button>
-    <button class="catpick" data-cat="puddin">Puddin<small>Big long-haired calico. Tanky, slow, pounce that stuns.</small></button>
+  <div class="title">Cat Castle</div>
+  <p class="tag">Two mean cats. One castle. Far too many mice.</p>
+  <div class="cats">
+    <button class="catpick picked" data-cat="fred"><canvas class="catview" data-kind="fred" width="220" height="160"></canvas><b>Fred</b><small>Scruffy ginger tom. Quick and fragile: spits pellets that bleed, hairball splash, parkour.</small></button>
+    <button class="catpick" data-cat="puddin"><canvas class="catview" data-kind="puddin" width="220" height="160"></canvas><b>Puddin</b><small>Huge long-haired calico. Slow tank: heavy bite that eats to heal, stunning pounce, charged leap.</small></button>
   </div>
-  <h2>Mode</h2>
-  <div>
-    <button data-mode="normal">Entrance hall — 24 waves</button>
+  <div class="modes">
+    <button class="play" data-mode="normal">Castle entrance · 24 waves</button>
     <button data-mode="endless">Endless</button>
   </div>
   <p id="profile" class="dim"></p>
-  <p class="dim">Click the game to grab the mouse. Controls are shown bottom right (H hides them).</p>
 </div>
 <div id="end" class="screen"></div>
 

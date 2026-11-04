@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.2.2';
+export const VERSION = '0.3.0';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
 // is what lets a future multiplayer host run the one true copy of the game.
@@ -19,8 +19,8 @@ export const RULES = {
   livesLostPerMouse: 1,
   livesLostPerBoss: 5,
   startSardines: 300,
-  cheesePrice: 5,            // sardines per cheese sold at a stall
-  cheeseCarryCap: 15,        // max cheese a cat can carry
+  tailPrice: 5,              // sardines per mouse tail traded at a stash
+  tailCarryCap: 20,          // max tails a cat can carry
   pickupRadius: 1.2,
   stallRadius: 2.2,          // how close you must be to sell
   buildPhaseSeconds: 25,     // break between waves (press G to skip)
@@ -30,18 +30,24 @@ export const RULES = {
   trinketChance: 0.02,       // chance a normal mouse drops a trinket instead of cheese
   splatSpeed: 9,             // landing faster than this hurts mice (flippers splat them)
   splatDamage: 6,            // damage per unit of speed over splatSpeed
+  // Strength in numbers: a mouse with this many packmates close by is faster and tougher.
+  packRadius: 1.5,
+  packCount: 5,
+  packSpeed: 1.2,
+  packDamageTaken: 0.85,
 };
 
 // Shared cat combat numbers.
 export const CAT = {
-  clawArc: 1.1,              // radians either side of facing
-  clawKnock: 2.5,
   bleedDps: 3,               // per stack
   bleedSeconds: 3,
   bleedMaxStacks: 5,
-  biteEvery: 3,              // every third claw hit is a bite on one target
   maxEnergy: 100,
-  // Hairball (right click): arcing shot at the crosshair, splash + slow.
+  // Fred, left click: quick spat pellets — light damage, each adds a bleed stack.
+  pelletInterval: 0.18,
+  pelletSpeed: 26,
+  pelletDamage: 4,
+  // Fred, right click: big hairball — arcs to the crosshair, splash + slow.
   hairballCost: 35,
   hairballCooldown: 1.2,
   hairballSpeed: 16,
@@ -49,7 +55,14 @@ export const CAT = {
   hairballRadius: 1.0,
   hairballSlow: 0.45,        // speed multiplier while slowed
   hairballSlowSecs: 2.5,
-  // Pounce (Shift, Puddin only): leap at the crosshair, splat + stun on landing.
+  // Puddin, left click: heavy bite. Killing with a bite eats the mouse: heal, no tail.
+  biteInterval: 0.55,
+  biteDamage: 34,
+  biteRange: 1.4,
+  biteArc: 0.9,
+  eatHeal: 0.15,             // fraction of max HP
+  eatCooldown: 6,
+  // Puddin, right click: pounce at the crosshair, splat + stun on landing.
   pounceCost: 30,
   pounceCooldown: 2.5,
   pounceH: 11,
@@ -57,32 +70,36 @@ export const CAT = {
   pounceDamage: 40,
   pounceRadius: 1.6,
   pounceStun: 1.8,
+  // Puddin, Space: hold to charge a leap, heavy landing flings small mice.
+  leapMaxCharge: 0.8,
+  leapExtra: 7,
+  slamRadius: 1.8,
+  slamPush: 6,
 };
 
-// Playable cats. Fred: fast, agile, double jump + wall kick.
-// Puddin: big long-haired calico, tanky and slow, no double jump, has the pounce.
+// Playable cats. Fred: quick, fragile, ranged, parkour. Puddin: slow tank, melee.
 export const CATS = {
   fred: {
-    name: 'Fred', maxHp: 90, speed: 9.5, airControl: 0.18, jumpVel: 9, airJumps: 1, wallKick: 7,
-    radius: 0.35, height: 0.95, stepHeight: 0.3, energyRegen: 10,
-    clawInterval: 0.12, clawRange: 1.3, clawDamage: 9, biteDamage: 30, pounce: false,
+    name: 'Fred', maxHp: 70, speed: 10, airControl: 0.2, jumpVel: 9, airJumps: 1, wallKick: 7, mantle: 0.9,
+    radius: 0.35, height: 0.95, stepHeight: 0.3, energyRegen: 12, push: 1,
+    primary: 'pellet', secondary: 'hairball', leap: false,
   },
   puddin: {
-    name: 'Puddin', maxHp: 180, speed: 6.5, airControl: 0.08, jumpVel: 8, airJumps: 0, wallKick: 0,
-    radius: 0.5, height: 1.25, stepHeight: 0.35, energyRegen: 8,
-    clawInterval: 0.2, clawRange: 1.5, clawDamage: 13, biteDamage: 45, pounce: true,
+    name: 'Puddin', maxHp: 200, speed: 6, airControl: 0.06, jumpVel: 7.5, airJumps: 0, wallKick: 0, mantle: 0.4,
+    radius: 0.5, height: 1.25, stepHeight: 0.35, energyRegen: 8, push: 2.5,
+    primary: 'bite', secondary: 'pounce', leap: true,
   },
 };
 
-// Mouse types. cheese = drop amount; cheeseChance = odds it drops at all.
+// Mouse types. tails = tail value dropped (big rat tails count for several); tailChance = odds it drops.
 export const MICE = {
-  pup:     { hp: 7,    speed: 3.0, size: 0.28, cheese: 1,  cheeseChance: 0.4, bite: 2,  gateDmg: 3,  color: 0x948a82 },
-  mouse:   { hp: 26,   speed: 2.6, size: 0.45, cheese: 1,  cheeseChance: 1,   bite: 6,  gateDmg: 10, color: 0x8a8580 },
-  runner:  { hp: 16,   speed: 4.4, size: 0.4,  cheese: 1,  cheeseChance: 1,   bite: 4,  gateDmg: 6,  color: 0x7a5a3a },
-  tank:    { hp: 100,  speed: 1.8, size: 0.7,  cheese: 3,  cheeseChance: 1,   bite: 12, gateDmg: 25, color: 0x4f4b48 },
-  lobber:  { hp: 60,   speed: 2.2, size: 0.55, cheese: 4,  cheeseChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45 },
-  miniboss:{ hp: 450,  speed: 1.6, size: 1.1,  cheese: 15, cheeseChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true },
-  bigboss: { hp: 1400, speed: 1.3, size: 1.7,  cheese: 40, cheeseChance: 1,   bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true },
+  pup:     { hp: 7,    speed: 3.0, size: 0.28, tails: 1, tailChance: 0.5, bite: 2,  gateDmg: 3,  color: 0x948a82 },
+  mouse:   { hp: 26,   speed: 2.6, size: 0.45, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x8a8580 },
+  runner:  { hp: 16,   speed: 4.4, size: 0.4,  tails: 1, tailChance: 1,   bite: 4,  gateDmg: 6,  color: 0x7a5a3a },
+  tank:    { hp: 100,  speed: 1.8, size: 0.7,  tails: 1, tailChance: 1,   bite: 12, gateDmg: 25, color: 0x4f4b48 },
+  lobber:  { hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45 },
+  miniboss:{ hp: 450,  speed: 1.6, size: 1.1,  tails: 6, tailChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true },
+  bigboss: { hp: 1400, speed: 1.3, size: 1.7,  tails: 15, tailChance: 1,   bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true },
 };
 
 // Traps. surface: floor | wall | ceiling. size: [w, d] in half-tiles (cells).
@@ -104,14 +121,14 @@ export const GATE = { hp: 60 };   // falls in a few bites, stays down once broke
 
 // Roguelike trinkets: last for the current run, stack. Legendary only from bosses.
 export const TRINKETS = {
-  bell:    { name: 'Rusty bell',        tier: 'common',    desc: 'Mice drop 25% more cheese' },
+  bell:    { name: 'Rusty bell',        tier: 'common',    desc: 'Mice drop 25% more tails' },
   catnip:  { name: 'Catnip sprig',      tier: 'common',    desc: '+10% run speed' },
   cap:     { name: 'Bottle-cap shield', tier: 'common',    desc: 'Take 15% less bite damage' },
-  rind:    { name: 'Mouldy rind',       tier: 'rare',      desc: 'Cheese sells for 20% more' },
+  rind:    { name: 'Mouldy rind',       tier: 'rare',      desc: 'Tails trade for 20% more' },
   collar:  { name: 'Flea collar',       tier: 'rare',      desc: '+2 max bleed stacks' },
   tin:     { name: 'Sardine tin',       tier: 'rare',      desc: '+30% energy regen' },
   whisker: { name: 'Lucky whisker',     tier: 'rare',      desc: '+8% chance to crit for double damage' },
-  watch:   { name: 'Pocket watch',      tier: 'rare',      desc: 'Hairball and pounce recharge 20% faster' },
+  watch:   { name: 'Pocket watch',      tier: 'rare',      desc: 'Right-click abilities recharge 20% faster' },
   key:     { name: 'Wind-up key',       tier: 'rare',      desc: 'Traps reset 20% faster' },
   thimble: { name: 'Silver thimble',    tier: 'legendary', desc: 'Traps deal 25% more damage' },
   crown:   { name: 'Crown jewel chip',  tier: 'legendary', desc: 'All your cooldowns 35% shorter' },
