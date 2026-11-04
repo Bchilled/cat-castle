@@ -360,7 +360,9 @@ export class Sim {
         this.emit({ t: 'end', won: true, rating: this.rating });
       } else {
         this.phase = 'build'; this.phaseTimer = RULES.buildPhaseSeconds;
-        this.emit({ t: 'msg', text: `Wave ${this.wave} cleared` });
+        // Income that doesn't depend on hauling tails, so you can always build.
+        const bonus = RULES.waveBonus + this.wave * 10; this.sardines += bonus;
+        this.emit({ t: 'msg', text: `Wave ${this.wave} cleared  +${bonus} sardines` });
       }
     }
   }

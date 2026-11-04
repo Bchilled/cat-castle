@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2 — 2026-11-03
+Changed
+- Starting sardines 300 → 1000 (enough for ~15–20 traps on the first build). `src/config.js` RULES.
+- Clearing a wave pays 100 + 10 × wave number sardines, on top of tails. `src/config.js` RULES; `src/sim/sim.js` stepPhase().
+
 ## 0.4.1 — 2026-11-03
 Fixed
 - White stripes in front of the cat: leftover claw-scratch streaks were being forced visible every frame by the camera-fade code. Streaks removed; fade now only touches the body. `src/render/models.js` catRig; `src/render/scene.js` camera block.

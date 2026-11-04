@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.4.1';
+export const VERSION = '0.4.2';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
 // is what lets a future multiplayer host run the one true copy of the game.
@@ -18,7 +18,8 @@ export const RULES = {
   livesLostPerCatDeath: 3,
   livesLostPerMouse: 1,
   livesLostPerBoss: 5,
-  startSardines: 300,
+  startSardines: 1000,       // enough for ~15–20 traps on the first build
+  waveBonus: 100,            // sardines paid for clearing a wave (+10 per wave number)
   tailPrice: 5,              // sardines per mouse tail traded at a stash
   tailCarryCap: 20,          // max tails a cat can carry
   pickupRadius: 1.2,
