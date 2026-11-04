@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.2.1';
+export const VERSION = '0.2.2';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
 // is what lets a future multiplayer host run the one true copy of the game.
@@ -42,11 +42,11 @@ export const CAT = {
   biteEvery: 3,              // every third claw hit is a bite on one target
   maxEnergy: 100,
   // Hairball (right click): arcing shot at the crosshair, splash + slow.
-  hairballCost: 25,
-  hairballCooldown: 0.6,
+  hairballCost: 35,
+  hairballCooldown: 1.2,
   hairballSpeed: 16,
-  hairballDamage: 22,
-  hairballRadius: 1.4,
+  hairballDamage: 12,
+  hairballRadius: 1.0,
   hairballSlow: 0.45,        // speed multiplier while slowed
   hairballSlowSecs: 2.5,
   // Pounce (Shift, Puddin only): leap at the crosshair, splat + stun on landing.

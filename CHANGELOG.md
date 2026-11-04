@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-11-03
+Changed
+- Hairball nerfed: damage 22 → 12, splash radius 1.4 → 1.0, energy cost 25 → 35, cooldown 0.6 → 1.2 s. Slow unchanged. `src/config.js` CAT block (~lines 44–51).
+
 ## 0.2.1 — 2026-11-03
 Fixed
 - Camera sat low and close so the cat covered the crosshair; it now sits higher over the right shoulder with the cat low-left in frame. `src/render/scene.js` camera block (~lines 337–356).
