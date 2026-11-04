@@ -291,6 +291,7 @@ export class Scene {
       else { ud.legs[0].rotation.z = ud.legs[1].rotation.z = 0; }
       ud.slash.children.forEach(st => { st.material.opacity = c.swipeT > 0 ? c.swipeT / 0.12 * 0.8 : 0; });
       ud.slash.rotation.z = c.swipeSide ? -0.5 : 0.5;
+      ud.reach.material.opacity = cat.clawing ? 0.28 : 0.1;   // brighter while holding claw
       // Bite: head lunges, jaw drops.
       ud.head.position.z = 0.55 * ud.scale + (c.biteT > 0 ? 0.2 : 0);
       ud.jaw.rotation.x = c.biteT > 0.09 ? 0.6 : 0;
@@ -333,20 +334,24 @@ export class Scene {
     this.water.position.y = -0.45 + Math.sin(now / 900) * 0.02;
     this.exitRing.material.opacity = 0.5 + Math.sin(now / 250) * 0.3;
 
-    // ----- third-person camera, low and close so the world towers over you -----
+    // ----- third-person camera -----
+    // Over the right shoulder, above the cat's head, so the cat sits low-left
+    // in frame and never covers the crosshair. Still low enough that the
+    // furniture towers over you.
     const me = this.localCat;
     if (me) {
-      const p = me.mesh.position, catH = me.kind === 'puddin' ? 1.25 : 0.95, dist = me.kind === 'puddin' ? 3.6 : 3.0;
-      const target = new THREE.Vector3(p.x, p.y + catH * 0.95, p.z);
+      const p = me.mesh.position, catH = me.kind === 'puddin' ? 1.25 : 0.95, dist = me.kind === 'puddin' ? 4.8 : 4.2;
+      const target = new THREE.Vector3(p.x, p.y + catH * 1.55, p.z);
       const back = new THREE.Vector3(-Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), -Math.cos(camYaw) * Math.cos(camPitch));
+      const right = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));
+      const shoulder = me.kind === 'puddin' ? 0.95 : 0.8;
       let d = dist;
       for (let s = 0.4; s <= dist; s += 0.2) {
-        const q = target.clone().addScaledVector(back, s);
+        const q = target.clone().addScaledVector(back, s).addScaledVector(right, shoulder);
         if (q.y < 0.15 || q.y > 15.5 || sim.blocks(cellOf(q.x, q.z), q.y - 0.15, 0.3, 0, true)) { d = Math.max(0.6, s - 0.25); break; }
       }
-      const right = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));
-      this.camera.position.copy(target).addScaledVector(back, d).addScaledVector(right, 0.45);
-      this.camera.lookAt(target.clone().addScaledVector(back, -12).addScaledVector(right, 0.45));
+      this.camera.position.copy(target).addScaledVector(back, d).addScaledVector(right, shoulder);
+      this.camera.lookAt(target.clone().addScaledVector(back, -12).addScaledVector(right, shoulder));
     }
     this.renderer.render(this.scene, this.camera);
   }

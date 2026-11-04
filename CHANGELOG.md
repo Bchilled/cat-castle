@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 — 2026-11-03
+Fixed
+- Camera sat low and close so the cat covered the crosshair; it now sits higher over the right shoulder with the cat low-left in frame. `src/render/scene.js` camera block (~lines 337–356).
+- Attacks didn't go where the crosshair pointed; the cat now turns to face the crosshair target, so claws, bites and pounces land where you aim. `src/main.js` sendInput (~lines 96–110).
+- Furniture drawn bigger than its collision (coal scuttle, log basket, boot tunnel) so you seemed to walk through it; visuals now match. Removed tabletop props that had no collision. `src/render/models.js` furniture cases.
+Added
+- Faint claw-reach wedge on the floor in front of the cat, brighter while holding claw. `src/render/models.js` catRig; `src/render/scene.js` cat sync.
+
 ## 0.2.0 — 2026-11-03
 Mouse-scale rebuild: Map 1 is now the castle entrance hall, seen at real size by cats and mice.
 

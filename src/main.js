@@ -34,7 +34,7 @@ function start(mode) {
 
   // ---------- input ----------
   const keys = new Set();
-  let yaw = Math.PI, pitch = 0.25;
+  let yaw = Math.PI, pitch = 0.3;
   let clawHeld = false, jumpQ = false, fireQ = false, pounceQ = false;
   let selected = null, rot = 0, aim = null;
   canvas.addEventListener('click', () => { if (document.pointerLockElement !== canvas) canvas.requestPointerLock(); });
@@ -100,7 +100,12 @@ function start(mode) {
     let mx = Math.sin(yaw) * f - Math.cos(yaw) * r, mz = Math.cos(yaw) * f + Math.sin(yaw) * r;
     const len = Math.hypot(mx, mz); if (len > 1) { mx /= len; mz /= len; }
     const a = aim ? { x: aim.point.x, y: aim.point.y, z: aim.point.z } : null;
-    net.send({ type: 'input', id: LOCAL_ID, mx, mz, yaw, pitch, jump: jumpQ, claw: clawHeld, fire: fireQ, pounce: pounceQ, aim: a });
+    // The cat faces whatever the crosshair is on, so claws, bites and pounces
+    // go where you're pointing (the camera sits off to the side of the cat).
+    let face = yaw;
+    const me = sim.cats.get(LOCAL_ID);
+    if (a && me && Math.hypot(a.x - me.x, a.z - me.z) > 0.8) face = Math.atan2(a.x - me.x, a.z - me.z);
+    net.send({ type: 'input', id: LOCAL_ID, mx, mz, yaw: face, pitch, jump: jumpQ, claw: clawHeld, fire: fireQ, pounce: pounceQ, aim: a });
     jumpQ = fireQ = pounceQ = false;
   }
 
