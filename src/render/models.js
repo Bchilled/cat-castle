@@ -69,10 +69,7 @@ function catRig(look) {
   const t2 = part(cyl(0.05 * s * look.tailFluff, 0.06 * s * look.tailFluff, 0.38 * s, 5), look.tailTip || look.base, 0, 0.5 * s, -0.12 * s); t2.rotation.x = 0.4; tail.add(t2);
   // Swipe trail: three claw scratch streaks in front of the face.
   const slash = new THREE.Group(); slash.position.set(0, 0.55 * s, 0.9 * s); g.add(slash);
-  for (let k = -1; k <= 1; k++) {
-    const st = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, 0.02), new THREE.MeshBasicMaterial({ color: 0xfff1d0, transparent: true, opacity: 0 }));
-    st.position.x = k * 0.13; st.rotation.z = 0.7; slash.add(st);
-  }
+  // (claw scratch streaks removed: Fred is ranged now)
   // Faint claw-reach wedge on the floor so you can see what a swipe will hit.
   // Ring sector centred on +z (theta -PI/2 maps to +z once laid flat).
   const reach = new THREE.Mesh(new THREE.RingGeometry(0.25, look.reach || 0.3, 16, 1, -Math.PI / 2 - 0.9, 1.8),
@@ -84,10 +81,10 @@ function catRig(look) {
 
 // Fred: scruffy ginger tom, white snowball patch on his back, chewed ear.
 export function makeFred() {
-  const g = catRig({ reach: 0, scale: 1, girth: 1, base: 0xc46a2b, muzzle: 0xe9e4d8, eye: 0xd9c22a, chewedEar: true, tailFluff: 1, tailTip: 0x8a4518 });
+  const g = catRig({ reach: 0, scale: 0.85, girth: 0.72, base: 0xc46a2b, muzzle: 0xe9e4d8, eye: 0xd9c22a, chewedEar: true, tailFluff: 1, tailTip: 0x8a4518 });
   const b = g.userData.body;
-  b.add(part(new THREE.IcosahedronGeometry(0.2, 0), 0xe9e4d8, 0, 0.82, -0.12, 1.1, 0.45, 1.1, false));      // snowball patch
-  for (let i = 0; i < 3; i++) b.add(box(0x8a4518, 0, 0.62 + i * 0.03, 0.18 - i * 0.22, 0.62 - i * 0.05, 0.05, 0.08, false)); // stripes
+  b.add(part(new THREE.IcosahedronGeometry(0.2, 0), 0xe9e4d8, 0, 0.7, -0.1, 0.8, 0.4, 1.0, false));         // snowball patch
+  for (let i = 0; i < 3; i++) b.add(box(0x8a4518, 0, 0.55 + i * 0.02, 0.15 - i * 0.2, 0.44 - i * 0.04, 0.05, 0.07, false)); // tabby stripes
   g.userData.head.add(box(0xe9e4d8, 0.05, -0.17, 0.31, 0.04, 0.07, 0.02, false));                             // snaggle tooth
   return g;
 }

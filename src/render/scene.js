@@ -277,7 +277,17 @@ export class Scene {
         this.scene.add(g); this.trapMeshes.set(e.trap.id, g); break;
       }
       case 'trapRemove': { const g = trap(e.id); if (g) { this.spawnParticles(g.position.x, 0.4, g.position.z, 0xc4a46a, 10); this.scene.remove(g); this.trapMeshes.delete(e.id); } break; }
-      case 'snap': case 'flip': case 'zap': case 'blow': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
+      case 'snap': case 'flip': case 'blow': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
+      case 'zap': {
+        const g = trap(e.id); if (!g) break; g.userData.anim = 1;
+        for (const v of e.hits || []) {
+          const pts = [], a = new THREE.Vector3(g.position.x, g.position.y - 0.5, g.position.z), b = new THREE.Vector3(v[0], 0.3, v[1]);
+          for (let k = 0; k <= 6; k++) { const p = a.clone().lerp(b, k / 6); if (k && k < 6) { p.x += (Math.random() - 0.5) * 0.5; p.z += (Math.random() - 0.5) * 0.5; } pts.push(p); }
+          const bolt = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xbfe4ff, transparent: true }));
+          bolt.userData = { vx: 0, vy: 0, vz: 0, life: 0.2 }; this.scene.add(bolt); this.particles.push(bolt);
+        }
+        break;
+      }
       case 'kill':
         if (e.drowned) this.spawnParticles(e.x, -0.4, e.z, 0x9cc8e4, 8);
         else if (!e.eaten) { this.spawnParticles(e.x, e.y + 0.3, e.z, 0x8a1c14, e.splat ? 16 : 6, e.splat ? 5 : 3); this.decal(e.x, e.z, 0x5a1410, e.splat ? 0.5 : 0.25, Math.max(0.02, e.y + 0.02)); }
@@ -389,7 +399,7 @@ export class Scene {
     }
     // Particles, decals, water, route
     this.particles = this.particles.filter(p => {
-      const u = p.userData; u.life -= dt; u.vy -= 9 * dt;
+      const u = p.userData; u.life -= dt; if (!p.isLine) u.vy -= 9 * dt;
       p.position.x += u.vx * dt; p.position.y += u.vy * dt; p.position.z += u.vz * dt;
       p.material.opacity = Math.max(0, u.life / 0.7);
       if (u.life <= 0) { this.scene.remove(p); return false; } return true;
@@ -432,7 +442,8 @@ export class Scene {
       this.camera.position.copy(target).addScaledVector(back, d).addScaledVector(right, sh);
       this.camera.lookAt(target.clone().addScaledVector(back, -14).addScaledVector(right, sh));
       // Fade the cat when the camera is squeezed right up against it.
-      me.mesh.traverse(o => { if (o.isMesh && o.material !== OUTLINE) { o.material.transparent = d < 1.6; o.material.opacity = d < 1.6 ? 0.35 : 1; } });
+      const close = d < 1.6;
+      if (me.close !== close) { me.close = close; me.mesh.userData.body.traverse(o => { if (o.isMesh && o.material !== OUTLINE) { o.material = o.material.clone(); o.material.transparent = close; o.material.opacity = close ? 0.35 : 1; } }); }
     }
     this.renderer.render(this.scene, this.camera);
   }

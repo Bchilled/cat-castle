@@ -859,7 +859,7 @@ export class Sim {
       } else if (tr.kind === 'zapper' && tr.cd === 0) {
         const cx = (tr.x0 + tr.x1) / 2, cz = (tr.z0 + tr.z1) / 2;
         const vs = this.mice.filter(m => !m.dead && Math.hypot(m.x - cx, m.z - cz) < def.radius && m.y < 1);
-        if (vs.length) { tr.cd = def.cooldown * mods.trapCd; this.emit({ t: 'zap', id: tr.id }); for (const m of vs) this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); }
+        if (vs.length) { tr.cd = def.cooldown * mods.trapCd; this.emit({ t: 'zap', id: tr.id, hits: vs.slice(0, 6).map(m => [m.x, m.z]) }); for (const m of vs) this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); }
       } else if (tr.kind === 'gluepad') {
         if (tr.charges <= 0) { tr.rechargeT -= DT; if (tr.rechargeT <= 0) tr.charges = def.charges; continue; }
         for (const m of this.mice) {

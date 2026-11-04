@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.4.1';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
 // is what lets a future multiplayer host run the one true copy of the game.
@@ -106,13 +106,13 @@ export const MICE = {
 // Costs are sardines. Selling refunds the full price (barricades: by health left).
 export const TRAPS = {
   barricade: { name: 'Barricade',     cost: 20,  surface: 'floor',   size: [2, 2], hp: 120 },
-  mousetrap: { name: 'Mousetrap',     cost: 25,  surface: 'floor',   size: [1, 1], damage: 60, cooldown: 1.4, pathCost: 3 },
-  flipper:   { name: 'Floor flipper', cost: 60,  surface: 'floor',   size: [2, 2], cooldown: 2.5, launchH: 11, launchV: 14, launchDamage: 10, pathCost: 2 },
-  grinder:   { name: 'Wall grinder',  cost: 80,  surface: 'wall',    size: [2, 1], dps: 45, pathCost: 4 },
-  zapper:    { name: 'Bug zapper',    cost: 90,  surface: 'ceiling', size: [1, 1], damage: 30, cooldown: 1.2, radius: 1.3, pathCost: 4 },
-  gluepad:   { name: 'Glue pad',      cost: 30,  surface: 'floor',   size: [2, 2], stickSecs: 2.5, charges: 6, recharge: 6, pathCost: 3 },
-  tacks:     { name: 'Tack strip',    cost: 35,  surface: 'floor',   size: [1, 2], damage: 3, tick: 0.4, pathCost: 3 },
-  hairdryer: { name: 'Hairdryer',     cost: 70,  surface: 'wall',    size: [2, 1], cooldown: 2.4, reach: 3.5, push: 8, pathCost: 2 },
+  mousetrap: { name: 'Mousetrap',     cost: 25,  surface: 'floor',   size: [1, 1], damage: 60, cooldown: 1.4, pathCost: 0 },
+  flipper:   { name: 'Floor flipper', cost: 60,  surface: 'floor',   size: [2, 2], cooldown: 2.5, launchH: 11, launchV: 14, launchDamage: 10, pathCost: 0 },
+  grinder:   { name: 'Wall grinder',  cost: 80,  surface: 'wall',    size: [2, 1], dps: 45, pathCost: 0 },
+  zapper:    { name: 'Bug zapper',    cost: 90,  surface: 'ceiling', size: [1, 1], damage: 30, cooldown: 1.2, radius: 2.4, pathCost: 0 },
+  gluepad:   { name: 'Glue pad',      cost: 30,  surface: 'floor',   size: [2, 2], stickSecs: 2.5, charges: 6, recharge: 6, pathCost: 0 },
+  tacks:     { name: 'Tack strip',    cost: 35,  surface: 'floor',   size: [1, 2], damage: 3, tick: 0.4, pathCost: 0 },
+  hairdryer: { name: 'Hairdryer',     cost: 70,  surface: 'wall',    size: [2, 1], cooldown: 2.4, reach: 3.5, push: 8, pathCost: 0 },
 };
 // Trap bar order = keys 1..8.
 export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'hairdryer'];

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 — 2026-11-03
+Fixed
+- White stripes in front of the cat: leftover claw-scratch streaks were being forced visible every frame by the camera-fade code. Streaks removed; fade now only touches the body. `src/render/models.js` catRig; `src/render/scene.js` camera block.
+- Traps were scaring mice off their route (every trap added path cost), so in wide lanes mice just walked around them and ceiling traps rarely fired. Only barricades and the gate shape the route now. `src/config.js` TRAPS (pathCost 0).
+- Bug zapper reach 1.3 → 2.4 and draws lightning down to each mouse it hits. `src/config.js`; `src/sim/sim.js` stepTraps; `src/render/scene.js` onEvent.
+Changed
+- Fred is smaller and leaner (85% size, slimmer body) to read as the fast, agile one. `src/render/models.js` makeFred.
+
 ## 0.4.0 — 2026-11-03
 New, much bigger Map 1 built on trap-defense level-design lessons (our own layout).
 
