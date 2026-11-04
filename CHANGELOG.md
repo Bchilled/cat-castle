@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.2.0 — 2026-11-03
+Mouse-scale rebuild: Map 1 is now the castle entrance hall, seen at real size by cats and mice.
+
+Added
+- Entrance hall map from Brent's sketch: mice squeeze under the great front door (Y), cross the doormat and flagstones, cross a rainwater drain on a yardstick, chew through a book wedged in the furniture line, then weave between a side table, blanket chest, coal scuttle, suit of armour and long bench to the gap under the inner door (X). Half-tile grid so traps fit in quarters and sit flush against furniture. Tables, benches and an old boot are overhangs you walk under (ceiling traps hang there) and stand on. Climbing crates. Three cheese stashes. `src/sim/map.js` lines 1–143.
+- Two playable cats: Fred (fast, agile, double jump + wall kick) and Puddin (big long-haired calico, tanky, slow, no double jump, pounce that stuns). `src/config.js` lines 21–75; `src/render/models.js` lines 36–132.
+- Every third claw hit is a bite; hairball ranged attack (right click) with splash + slow; Puddin's pounce (Shift); energy pool that powers them; ability cooldowns. `src/sim/sim.js` lines 344–428, 520–546.
+- Three new traps: glue pad, tack strip, hairdryer (blows mice back, combos with the drain). Trap footprints in half-tiles, R rotates any trap, wall/ceiling traps snap to the surface you aim at. `src/config.js` lines 92–104; `src/sim/sim.js` lines 165–253, 548–628; `src/render/models.js` lines 134–208.
+- Swarms of tiny weak pups mixed into every wave. `src/sim/waves.js` lines 7–30; `src/config.js` lines 77–86.
+- Roguelike trinkets: rare drops (bosses always) that stack for the run, including cooldown reducers. `src/config.js` lines 108–118; `src/sim/sim.js` lines 255–305.
+- Harsher flippers and physics splats: mice hit hard by landings or furniture take damage and leave splat marks. `src/sim/sim.js` lines 470–495.
+- Placement that would seal every route is refused ("Leave them a way through"); mice still chew barricades when that's cheaper. `src/sim/sim.js` lines 196–206.
+- HUD: whisker crosshair (left whiskers health, right whiskers energy), ability cooldown icons with bite pips, square radar top right, trinket icons, 8-slot trap bar, controls panel bottom right (H hides). `src/ui/hud.js` lines 1–133; `index.html` lines 1–124.
+- Rendering: furniture models, drain and yardstick, doors with daylight gap and glowing exit, ceiling beams far overhead, wall lights, instanced mice (hundreds on screen), claw swipe and bite animations, boss HP bars, decals, low close camera with wall pull-in. `src/render/scene.js` lines 1–419.
+- Input: left click claw, right click hairball or place trap, Shift pounce, 1–8 traps, R rotate, wide look up/down, crosshair raycast onto floors, walls and ceilings. `src/main.js` lines 1–137.
+
+Changed
+- Currency is sardines (cheese trades for sardines at a stash). Traps sell for full price; chewed barricades refund by health left. Barricade is a solid 1-unit wooden toy block.
+- Claw damage +50%, Fred runs faster. Pitch range widened.
+- Flow fields now run on the fine grid with a separate route for big bosses (can't fit under low benches or through one-cell gaps). `src/sim/path.js` lines 1–104.
+- Tests rewritten for the new map and features (30 checks). `tests/sim-test.mjs` lines 1–146.
+
+Fixed
+- Claw swipe showed behind the cat; now paws lash forward with scratch streaks in front.
+- Couldn't look up to place ceiling traps.
+- Kitchen exit was invisible and sat in an outer wall; now a glowing gap under the inner door, marked on the radar.
+
+Removed
+- Outdoor castle map, stone gate, castle walls/towers (stairs to towers are moot: you climb furniture instead).
+
 ## 0.1.0 — 2026-11-03
 First playable prototype.
 

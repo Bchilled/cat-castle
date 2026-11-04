@@ -2,70 +2,95 @@
 
 import { DT, TRAPS, TRAP_ORDER } from './config.js';
 import { Sim } from './sim/sim.js';
-import { DIRS4 } from './sim/map.js';
+import { W, CELL } from './sim/map.js';
 import { LocalTransport } from './net/local.js';
 import { Scene } from './render/scene.js';
 import { Hud } from './ui/hud.js';
 
 const LOCAL_ID = 'p1';
 
-// Saved progress between runs (paw prints + yarn). Why localStorage: no
-// server needed yet; wrapped in try/catch because private windows can block it.
+// Saved progress between runs (paw prints + yarn). Why localStorage: no server
+// needed yet; wrapped in try/catch because private windows can block it.
 function loadProfile() { try { return JSON.parse(localStorage.getItem('catcastle.profile')) || { paws: 0, yarn: 0 }; } catch { return { paws: 0, yarn: 0 }; } }
 function saveProfile(p) { try { localStorage.setItem('catcastle.profile', JSON.stringify(p)); } catch { /* ignore */ } }
 
-const menu = document.getElementById('menu');
 const profile = loadProfile();
 document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn`;
+let chosenCat = 'fred';
+document.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => {
+  chosenCat = b.dataset.cat;
+  document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('picked', x === b));
+}));
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => start(b.dataset.mode)));
 
 function start(mode) {
-  menu.classList.remove('show');
+  document.getElementById('menu').classList.remove('show');
   const sim = new Sim({ mode, seed: (Date.now() & 0xffff) | 1 });
-  sim.addPlayer(LOCAL_ID, 'Fred');
+  sim.addPlayer(LOCAL_ID, chosenCat);
   const net = new LocalTransport(sim);
   const canvas = document.getElementById('game');
   const scene = new Scene(canvas, sim);
-  const hud = new Hud();
+  const hud = new Hud(sim);
 
   // ---------- input ----------
   const keys = new Set();
-  let yaw = Math.PI, pitch = 0.35, mouseDown = false, jumpQueued = false;
-  let selected = null, flipRot = 0;
+  let yaw = Math.PI, pitch = 0.25;
+  let clawHeld = false, jumpQ = false, fireQ = false, pounceQ = false;
+  let selected = null, rot = 0, aim = null;
   canvas.addEventListener('click', () => { if (document.pointerLockElement !== canvas) canvas.requestPointerLock(); });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('mousemove', e => {
     if (document.pointerLockElement !== canvas) return;
     yaw -= e.movementX * 0.0025;
-    pitch = Math.max(-0.2, Math.min(1.1, pitch + e.movementY * 0.0025));
+    // Wide pitch range so you can look up at table undersides for ceiling traps.
+    pitch = Math.max(-1.25, Math.min(1.2, pitch + e.movementY * 0.0025));
   });
   canvas.addEventListener('mousedown', e => {
-    if (document.pointerLockElement !== canvas || e.button !== 0) return;
-    if (selected) {
-      const tile = scene.aimTile();
-      if (tile >= 0) net.send({ type: 'place', id: LOCAL_ID, trap: selected, tile, dir: flipperDir() });
-    } else mouseDown = true;
+    if (document.pointerLockElement !== canvas) return;
+    if (e.button === 0) clawHeld = true;                       // left: always claw/bite
+    if (e.button === 2) {                                       // right: place trap, else hairball
+      if (selected) placeSelected(); else fireQ = true;
+    }
   });
-  document.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
+  document.addEventListener('mouseup', e => { if (e.button === 0) clawHeld = false; });
   document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === ' ') e.preventDefault();
     if (e.repeat) return;
-    const k = e.key.toLowerCase(); keys.add(k);
-    if (k === ' ') { jumpQueued = true; e.preventDefault(); }
-    const slot = TRAP_ORDER.find(t => TRAPS[t].key === k);
-    if (slot) selected = selected === slot ? null : slot;
+    keys.add(k);
+    if (k === ' ') jumpQ = true;
+    if (k === 'shift') pounceQ = true;
+    const n = parseInt(k, 10);
+    if (n >= 1 && n <= TRAP_ORDER.length) { const t = TRAP_ORDER[n - 1]; selected = selected === t ? null : t; }
     if (k === 'q') selected = null;
-    if (k === 'r') flipRot = (flipRot + 1) % 4;
+    if (k === 'r') rot = (rot + 1) % 4;
     if (k === 'e') net.send({ type: 'sellCheese', id: LOCAL_ID });
-    if (k === 'x') { const t = scene.aimTile(); if (t >= 0) net.send({ type: 'sellTrap', id: LOCAL_ID, tile: t }); }
+    if (k === 'x' && aim && aim.cell >= 0) net.send({ type: 'sellTrap', id: LOCAL_ID, cell: aim.cell, layer: aim.surface === 'top' ? 'floor' : aim.surface });
     if (k === 'g') net.send({ type: 'startWave', id: LOCAL_ID });
+    if (k === 'h') document.getElementById('controls').classList.toggle('hidden');
   });
   document.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 
-  // Flipper launch direction: the cardinal direction you're facing, plus R turns.
-  function flipperDir() {
-    const fx = Math.sin(yaw), fz = Math.cos(yaw);
-    const order = [0, 2, 1, 3];   // +x, +z, -x, -z (clockwise seen from above)
-    let base = Math.abs(fx) > Math.abs(fz) ? (fx > 0 ? 0 : 1) : (fz > 0 ? 2 : 3);
-    return order[(order.indexOf(base) + flipRot) % 4];
+  // Turn the crosshair hit into a trap anchor + footprint.
+  function placement() {
+    if (!selected || !aim) return null;
+    const def = TRAPS[selected];
+    if (aim.surface !== def.surface) return { ok: false, cells: aim.cell >= 0 ? sim.footprint(selected, aim.cell % W, (aim.cell / W) | 0, rot, aim.wallDir) : null, ax: 0, az: 0, wallDir: aim.wallDir };
+    let [w, d] = def.size; if (def.surface !== 'wall' && rot % 2) [w, d] = [d, w];
+    let ax, az;
+    if (def.surface === 'wall') {
+      const alongZ = aim.wallDir === 0 || aim.wallDir === 1;
+      ax = alongZ ? aim.cell % W : Math.round(aim.point.x / CELL - w / 2);
+      az = alongZ ? Math.round(aim.point.z / CELL - w / 2) : (aim.cell / W) | 0;
+    } else {
+      ax = Math.round(aim.point.x / CELL - w / 2); az = Math.round(aim.point.z / CELL - d / 2);
+    }
+    const res = sim.canPlace(selected, ax, az, rot, aim.wallDir);
+    return { ok: res === true && sim.sardines >= def.cost, cells: sim.footprint(selected, ax, az, rot, aim.wallDir), ax, az, wallDir: aim.wallDir };
+  }
+  function placeSelected() {
+    const p = placement(); if (!p || !p.cells) return;
+    net.send({ type: 'place', id: LOCAL_ID, trap: selected, ax: p.ax, az: p.az, rot, wallDir: p.wallDir });
   }
 
   function sendInput() {
@@ -74,20 +99,22 @@ function start(mode) {
     // forward = (sin yaw, cos yaw); right = (-cos yaw, sin yaw)
     let mx = Math.sin(yaw) * f - Math.cos(yaw) * r, mz = Math.cos(yaw) * f + Math.sin(yaw) * r;
     const len = Math.hypot(mx, mz); if (len > 1) { mx /= len; mz /= len; }
-    net.send({ type: 'input', id: LOCAL_ID, mx, mz, yaw, jump: jumpQueued, claw: mouseDown && !selected });
-    jumpQueued = false;
+    const a = aim ? { x: aim.point.x, y: aim.point.y, z: aim.point.z } : null;
+    net.send({ type: 'input', id: LOCAL_ID, mx, mz, yaw, pitch, jump: jumpQ, claw: clawHeld, fire: fireQ, pounce: pounceQ, aim: a });
+    jumpQ = fireQ = pounceQ = false;
   }
 
   // ---------- loop ----------
   let last = performance.now(), acc = 0, ended = false;
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now; acc += dt;
+    aim = scene.aim();
     while (acc >= DT) {
       sendInput(); sim.step(); acc -= DT;
       for (const e of sim.events) {
         scene.onEvent(e);
         if (e.t === 'msg') hud.message(e.text);
-        if (e.t === 'bark') hud.bark(e.text);
+        if (e.t === 'bark') hud.bark(e.who, e.text);
         if (e.t === 'catHurt' && e.id === LOCAL_ID) hud.flashHurt();
         if (e.t === 'end' && !ended) {
           ended = true;
@@ -99,14 +126,12 @@ function start(mode) {
       }
       sim.events.length = 0;
     }
-    const tile = selected ? scene.aimTile() : -1;
-    const valid = selected && tile >= 0 && sim.canPlace(selected, tile) && sim.coins >= TRAPS[selected].cost;
-    scene.setGhost(selected, tile, valid, flipperDir());
-    hud.update(dt, sim.hud(LOCAL_ID), selected, valid);
+    const p = placement();
+    scene.setGhost(selected, p ? p.cells : null, p ? p.ok : false, rot, p ? p.wallDir : -1);
+    hud.update(dt, sim.hud(LOCAL_ID), selected, p ? p.ok : true);
     scene.render(dt, yaw, pitch, LOCAL_ID);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
   window.__sim = sim; window.__scene = scene;   // handy for debugging in the browser console
 }
-export { DIRS4 };
