@@ -3,7 +3,7 @@
 // Plain HTML/SVG/canvas over the 3D view. Why: crisp text, cheap, easy to restyle.
 
 import { TRAPS, TRAP_ORDER, RULES, TRINKETS, CAT, MICE } from '../config.js';
-import { W, H, CELL, T, STALLS, HOLE, SPAWN, GATE } from '../sim/map.js';
+import { W, H, CELL, T, STALLS, HOLE, SPAWNS, GATE } from '../sim/map.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -89,8 +89,8 @@ export class Hud {
     if (!sim.gate.up) { c.fillStyle = TYPE_RGB[T.FLOOR]; c.fillRect(this.rx(GATE.x0), this.rz(GATE.z0), this.rx(GATE.x1) - this.rx(GATE.x0), this.rz(GATE.z1) - this.rz(GATE.z0)); }
     for (const tr of sim.traps.values()) { c.fillStyle = tr.kind === 'barricade' ? '#c4a46a' : tr.layer === 'ceiling' ? '#6fb8ff' : '#7fd06a'; c.fillRect(this.rx(tr.x0), this.rz(tr.z0), Math.max(2, this.rx(tr.x1) - this.rx(tr.x0)), Math.max(2, this.rz(tr.z1) - this.rz(tr.z0))); }
     // Mouse route.
-    const route = sim.route(); c.strokeStyle = 'rgba(180,138,255,0.7)'; c.lineWidth = 1.5; c.beginPath();
-    route.forEach(([x, z], k) => { if (k === 0) c.moveTo(this.rx(x), this.rz(z)); else c.lineTo(this.rx(x), this.rz(z)); }); c.stroke();
+    c.strokeStyle = 'rgba(180,138,255,0.75)'; c.lineWidth = 1.5;
+    for (const route of sim.routes()) { c.beginPath(); route.forEach(([x, z], k) => { if (k === 0) c.moveTo(this.rx(x), this.rz(z)); else c.lineTo(this.rx(x), this.rz(z)); }); c.stroke(); }
     c.fillStyle = '#e8c33a'; for (const t of sim.tails) c.fillRect(this.rx(t.x) - 1, this.rz(t.z) - 1, 2, 2);
     for (const m of sim.mice) {
       const d = MICE[m.type]; c.fillStyle = d.boss ? '#ff3a2a' : '#e86a4a';
@@ -105,7 +105,7 @@ export class Hud {
     }
     // Labels: exit X, spawn Y.
     c.font = 'bold 11px sans-serif'; c.fillStyle = '#ff5a3a'; c.fillText('X', this.rx((HOLE.x0 + HOLE.x1) / 2) - 4, this.rz(HOLE.z1) + 12);
-    c.fillStyle = '#b48aff'; c.fillText('Y', this.rx(SPAWN.x) - 4, this.rz(SPAWN.z) - 2);
+    c.fillStyle = '#b48aff'; SPAWNS.forEach(sp => c.fillText('Y', this.rx(sp.x) - 4, this.rz(sp.z) - 2));
   }
 
   message(text) { $('msg').textContent = text; $('msg').classList.add('show'); this.msgT = 2.5; }

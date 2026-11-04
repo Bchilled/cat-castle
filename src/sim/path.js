@@ -13,33 +13,31 @@ import { W, H, miceWalkable, BASE_COST } from './map.js';
 const NB = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
             [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
 
-// Minimal binary heap keyed on distance. Why hand-rolled: no dependencies.
+// Binary heap on typed arrays (ids + keys). Why hand-rolled: no dependencies,
+// and typed arrays keep a 46k-cell map fast enough to re-path instantly.
 class Heap {
-  constructor() { this.a = []; this.k = []; }
+  constructor(cap = 1 << 16) { this.ids = new Int32Array(cap); this.keys = new Float32Array(cap); this.n = 0; }
   push(v, key) {
-    const a = this.a, k = this.k; a.push(v); k.push(key);
-    let i = a.length - 1;
-    while (i > 0) {
-      const p = (i - 1) >> 1; if (k[p] <= k[i]) break;
-      [a[p], a[i]] = [a[i], a[p]]; [k[p], k[i]] = [k[i], k[p]]; i = p;
-    }
+    if (this.n === this.ids.length) { const a = new Int32Array(this.n * 2), b = new Float32Array(this.n * 2); a.set(this.ids); b.set(this.keys); this.ids = a; this.keys = b; }
+    const ids = this.ids, keys = this.keys; let i = this.n++;
+    while (i > 0) { const p = (i - 1) >> 1; if (keys[p] <= key) break; ids[i] = ids[p]; keys[i] = keys[p]; i = p; }
+    ids[i] = v; keys[i] = key;
   }
   pop() {
-    const a = this.a, k = this.k, top = a[0];
-    const lv = a.pop(), lk = k.pop();
-    if (a.length) {
-      a[0] = lv; k[0] = lk; let i = 0;
+    const ids = this.ids, keys = this.keys, top = ids[0], n = --this.n;
+    if (n > 0) {
+      const v = ids[n], key = keys[n]; let i = 0;
       for (;;) {
-        const l = i * 2 + 1, r = l + 1; let m = i;
-        if (l < a.length && k[l] < k[m]) m = l;
-        if (r < a.length && k[r] < k[m]) m = r;
-        if (m === i) break;
-        [a[m], a[i]] = [a[i], a[m]]; [k[m], k[i]] = [k[i], k[m]]; i = m;
+        let c = i * 2 + 1; if (c >= n) break;
+        if (c + 1 < n && keys[c + 1] < keys[c]) c++;
+        if (keys[c] >= key) break;
+        ids[i] = ids[c]; keys[i] = keys[c]; i = c;
       }
+      ids[i] = v; keys[i] = key;
     }
     return top;
   }
-  get size() { return this.a.length; }
+  get size() { return this.n; }
 }
 
 // opts: goals[] cells, pass(i) can stand here, extra(i) added cost,
@@ -52,7 +50,8 @@ export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]
   const heap = new Heap();
   for (const g of goals) { dist[g] = 0; heap.push(g, 0); }
   while (heap.size) {
-    const i = heap.pop();
+    const key = heap.keys[0], i = heap.pop();
+    if (key > dist[i]) continue;   // stale entry
     const x = i % W, z = (i / W) | 0, d = dist[i];
     // Cost is paid ENTERING cell i, so walking backwards from the goal a
     // neighbour n reaches i at cost(i).

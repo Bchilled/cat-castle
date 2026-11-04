@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 — 2026-11-03
+New, much bigger Map 1 built on trap-defense level-design lessons (our own layout).
+
+Added
+- Map is now 96 x 120 units (was 48 x 80): two entrances (stump holes Y1/Y2) on 10-wide walled forest roads, each with a hollow-log roof, meeting in a clearing (kill room) before a 14-wide log bridge over the moat; a 16-wide gatehouse hall with a 9-high roof; a big courtyard kill room with a well and raised walkways on both sides (crates to climb); three ways north (roofed colonnade with pillars, roofed passage through the guardhouse, open lane past hay bales and a cart); exit hole mid north wall. `src/sim/map.js` lines 1–171.
+- Packs alternate entrances; route preview shows both routes on the floor and radar. `src/sim/sim.js` routes(), stepPhase(), spawnMouse().
+- Roofs fade out while you or the camera are under them so you can see the fight. `src/render/scene.js` render().
+- New furniture models: well, walkways, crates, colonnade with pillars, cart. `src/render/models.js` makeFurniture().
+
+Changed
+- Pathfinding ~4x faster (typed-array heap, precomputed trap costs) and no longer re-paths on every chew, only when a blocker breaks. `src/sim/path.js` lines 16–75; `src/sim/sim.js` updateFlow().
+- Tests moved to the new map (31 checks). `tests/sim-test.mjs`.
+
+Removed
+- The narrow 4-wide tunnel map from 0.3.0.
+
 ## 0.3.0 — 2026-11-03
 Working core for one map: corridor-style castle entrance, two distinct cats, tails economy, mobs.
 

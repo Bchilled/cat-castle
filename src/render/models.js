@@ -270,6 +270,37 @@ export function makeFurniture(f) {
       }
       break;
     }
+    case 'well': {
+      const r = Math.min(w, d) / 2;
+      g.add(part(cyl(r, r, f.h, 14), 0x7a7268, 0, f.h / 2, 0));
+      g.add(part(cyl(r * 0.75, r * 0.75, 0.05, 14), 0x1a2a2a, 0, f.h + 0.01, 0, 1, 1, 1, false));   // dark water inside
+      break;
+    }
+    case 'walkway': {
+      B(0x6a6258, 0, f.h / 2, 0, w, f.h, d);
+      B(0x4a3a2a, 0, f.h + 0.03, 0, w, 0.06, d, false);    // plank deck, flush on top
+      break;
+    }
+    case 'crate': {
+      B(0x8a6a44, 0, f.h / 2, 0, w, f.h, d);
+      for (const k of [-1, 1]) B(0x5a4228, 0, f.h / 2, k * (d / 2 + 0.01), w * 1.01, 0.18, 0.02, false);
+      break;
+    }
+    case 'colonnade': {
+      // Roof slab plus the pillars the map makes solid (1x1 every 4 units on both long sides).
+      B(0x5a4a3a, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      for (let pz = 0; pz < d; pz += 4) for (const px of [0.5, w - 0.5]) {
+        B(0x7a7268, -w / 2 + px, f.bot / 2, -d / 2 + pz + 0.5, 1, f.bot, 1);
+      }
+      break;
+    }
+    case 'cart': {
+      B(0x6e4e30, 0, f.h * 0.6, 0, w, f.h * 0.8, d);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const wh = part(cyl(0.9, 0.9, 0.3, 10), 0x3a2a1a, sx * (w / 2 - 0.15), 0.9, sz * (d / 2 - 1.2)); wh.rotation.z = Math.PI / 2; g.add(wh);
+      }
+      break;
+    }
     default: B(WOOD, 0, (f.h || 1) / 2, 0, w, f.h || 1, d);
   }
   return g;

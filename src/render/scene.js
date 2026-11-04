@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import {
-  W, H, CELL, T, FURNITURE, DRAIN, BRIDGE, GATE, HOLE, SPAWN, STALLS, cellOf, WORLD_W, WORLD_H,
+  W, H, CELL, T, FURNITURE, DRAIN, BRIDGE, GATE, HOLE, SPAWNS, STALLS, cellOf, WORLD_W, WORLD_H,
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
@@ -22,7 +22,7 @@ export class Scene {
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x8fa4b0);           // overcast sky over the yard
-    this.scene.fog = new THREE.Fog(0x8fa4b0, 35, 95);
+    this.scene.fog = new THREE.Fog(0x8fa4b0, 50, 170);
     this.camera = new THREE.PerspectiveCamera(65, 1, 0.05, 250);
     this.scene.add(new THREE.HemisphereLight(0xdfe6ea, 0x4a4030, 1.5));
     const sun = new THREE.DirectionalLight(0xfff0d8, 1.3); sun.position.set(-25, 45, 30); this.scene.add(sun);
@@ -113,13 +113,17 @@ export class Scene {
       const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(7, 0), mat(0x2e4428)); crown.position.set((x + 0.5) * CELL, 24, (z + 0.5) * CELL); s.add(crown);
     }
     // Spawn: arched mouse hole in a huge stump at the road's end (Y).
-    const stump = outline(new THREE.Mesh(new THREE.CylinderGeometry(6, 6.5, 6, 12), mat(0x5a4230)), 1.01);
-    stump.position.set(SPAWN.x, 3, 86); s.add(stump);
-    this.archHole(SPAWN.x, 80.0, Math.PI, 1.2, 0x050403);
+    for (const sp of SPAWNS) {
+      const stump = outline(new THREE.Mesh(new THREE.CylinderGeometry(7, 7.5, 7, 12), mat(0x5a4230)), 1.01);
+      stump.position.set(sp.x, 3.5, WORLD_H + 7); s.add(stump);
+      this.archHole(sp.x, WORLD_H, Math.PI, 1.6, 0x050403);
+    }
 
     // Furniture, walls, guardhouse, tunnel.
+    this.roofs = [];
     for (const f of FURNITURE) {
-      s.add(makeFurniture(f));
+      const fg = makeFurniture(f); s.add(fg);
+      if (f.kind !== 'solid') this.roofs.push({ f, g: fg });
       const [x0, z0, x1, z1] = f.rect;
       if (f.kind === 'solid') this.proxy(x0, 0, z0, x1, f.h, z1);
       else this.proxy(x0, f.bot, z0, x1, f.top, z1);
@@ -139,7 +143,7 @@ export class Scene {
     s.add(gate); this.gateMesh = gate;
     this.gateProxy = this.proxy(GATE.x0, 0, GATE.z0, GATE.x1, 4.2, GATE.z1);
     // Portcullis raised into the tunnel roof (bars end at the roof line).
-    for (let k = 0; k < 7; k++) { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2, 0.12), mat(0x2a2826)); bar.position.set(GATE.x0 + 0.3 + k * 0.57, 3.2 + 1, 49.6); s.add(bar); }
+    for (let k = 0; k < 20; k++) { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.2), mat(0x2a2826)); bar.position.set(GATE.x0 + 0.4 + k * 0.8, 9 + 1.5, GATE.z1 - 0.3); s.add(bar); }
 
     // Exit X: arched mouse hole in the great hall wall, glowing.
     const hx = (HOLE.x0 + HOLE.x1) / 2;
@@ -148,8 +152,8 @@ export class Scene {
     this.exitRing = new THREE.Mesh(new THREE.RingGeometry(1.6, 1.9, 24), new THREE.MeshBasicMaterial({ color: 0xc8302a, transparent: true, opacity: 0.8 }));
     this.exitRing.rotation.x = -Math.PI / 2; this.exitRing.position.set(hx, 0.03, 2.2); s.add(this.exitRing);
     // Torches on the yard walls.
-    for (const [x, z] of [[1.1, 30], [46.9, 30], [16.9, 36], [31.1, 36], [24, 1.1]]) {
-      const l = new THREE.PointLight(0xffb060, 6, 18, 1.5); l.position.set(x, 4.5, z); s.add(l);
+    for (const [x, z] of [[2.2, 40], [93.8, 40], [39.8, 66], [56.2, 66], [48, 2.2], [27.8, 20], [68.2, 20]]) {
+      const l = new THREE.PointLight(0xffb060, 8, 26, 1.4); l.position.set(x, 6, z); s.add(l);
     }
     // Tail stashes: crate + a frame with a string to peg tails on. Fits inside its 2.2 collider.
     this.stashLines = [];
@@ -201,14 +205,14 @@ export class Scene {
     this.scene.add(this.routeMesh); this.routeRef = null;
   }
   updateRoute(now) {
-    const pts = this.sim.route();
-    if (pts !== this.routeRef) {
-      this.routeRef = pts;
+    const routes = this.sim.routes();
+    if (routes !== this.routeRef) {
+      this.routeRef = routes;
       let n = 0; const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
-      for (let k = 0; k < pts.length - 2 && n < 600; k += 3) {
+      for (const pts of routes) for (let k = 0; k < pts.length - 2 && n < 600; k += 3) {
         const [x, z] = pts[k], [x2, z2] = pts[k + 2];
         q.setFromAxisAngle(up, Math.atan2(x2 - x, z2 - z));
-        m4.compose(new THREE.Vector3(x, 0.04, z), q, new THREE.Vector3(1, 1, 1)); this.routeMesh.setMatrixAt(n++, m4);
+        m4.compose(new THREE.Vector3(x, 0.04, z), q, new THREE.Vector3(1.4, 1, 1.4)); this.routeMesh.setMatrixAt(n++, m4);
       }
       this.routeMesh.count = n; this.routeMesh.instanceMatrix.needsUpdate = true;
     }
@@ -396,6 +400,19 @@ export class Scene {
     pos.needsUpdate = true; this.water.geometry.computeVertexNormals();
     this.exitRing.material.opacity = 0.5 + Math.sin(now / 250) * 0.3;
     this.updateRoute(now);
+    // Roofs fade out from below while you're under them, so you can see the fight.
+    if (this.localCat) {
+      const p = this.localCat.mesh.position, cp = this.camera.position;
+      for (const r of this.roofs) {
+        const [x0, z0, x1, z1] = r.f.rect;
+        const under = (q) => q.x > x0 && q.x < x1 && q.z > z0 && q.z < z1 && q.y < r.f.bot + 0.5;
+        const fade = under(p) || under(cp);
+        if (r.faded !== fade) {
+          r.faded = fade;
+          r.g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = fade; o.material.opacity = fade ? 0.22 : 1; o.material.depthWrite = !fade; } });
+        }
+      }
+    }
 
     // ----- third-person camera: over the right shoulder; mouse wheel zooms -----
     const me = this.localCat;

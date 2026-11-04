@@ -7,7 +7,7 @@
 import { DT, GRAVITY, RULES, CAT, CATS, MICE, TRAPS, GATE as GATE_CFG, TRINKETS } from '../config.js';
 import {
   W, H, CELL, T, idx, cellOf, cellCenter, buildMap, floorish, miceWalkable, goalCells,
-  GATE, SPAWN, CAT_SPAWN, STALLS, DIRS4,
+  GATE, SPAWNS, CAT_SPAWN, STALLS, DIRS4, WORLD_W, WORLD_H,
 } from './map.js';
 import { computeFlow, nextCell, nearestReachable } from './path.js';
 import { buildWave, ratePaws } from './waves.js';
@@ -69,7 +69,9 @@ export class Sim {
     this.barkCooldown = 0;
     this.tailAcc = 0;
     this.inputs = new Map();
-    this.spawnCell = cellOf(SPAWN.x, SPAWN.z - 0.3);
+    this.spawnCells = SPAWNS.map(p => cellOf(p.x, p.z - 0.3));
+    this.spawnCell = this.spawnCells[0];
+    this.door = 0;                     // which entrance the next pack uses
     this.flowDirty = true;
     this.updateFlow();
   }
@@ -172,25 +174,39 @@ export class Sim {
   }
   passSmall = (i) => miceWalkable(this.map.type[i]);
   passBig = (i) => this.map.bigOk[i] === 1 || this.map.type[i] === T.HOLE || this.map.type[i] === T.GATE;
-  isBlocker = (i) => (this.map.type[i] === T.GATE && this.gate.up) || !!this.isBarricade(i);
+  isBlocker = (i) => (this.map.type[i] === T.GATE && this.gate.up) || this.occBarricade(i);
+  occBarricade(i) { const id = this.occ.floor[i]; return id ? this.traps.get(id).kind === 'barricade' : false; }
   updateFlow() {
-    const base = { goals: this.goals, extra: (i) => this.extraCost(i), blocked: this.isBlocker };
+    // Precompute per-cell trap cost + blocker flags once (much faster than
+    // looking traps up inside the pathfinder for 46k cells).
+    const N = W * H, extra = new Float32Array(N), blk = new Uint8Array(N);
+    for (const tr of this.traps.values()) for (const i of tr.cells) {
+      extra[i] += tr.kind === 'barricade' ? 10 + tr.hp / 4 : (TRAPS[tr.kind].pathCost || 0);
+      if (tr.kind === 'barricade') blk[i] = 1;
+    }
+    if (this.gate.up) for (let i = 0; i < N; i++) if (this.map.type[i] === T.GATE) { extra[i] += 10 + this.gate.hp / 4; blk[i] = 1; }
+    this.blk = blk;
+    const base = { goals: this.goals, extra: (i) => extra[i], blocked: (i) => blk[i] === 1 };
     this.flow = computeFlow(this.map, { ...base, pass: this.passSmall });
     this.flowBig = computeFlow(this.map, { ...base, pass: this.passBig });
     this.flowDirty = false; this.routeCache = null;
   }
-  // The route mice will take right now, from Y to X, as world points.
+  // The routes mice will take right now, one per entrance, as world points.
   // Drawn on the floor and the radar so you can see the invisible pathing.
-  route() {
+  routes() {
     if (this.routeCache) return this.routeCache;
-    const pts = []; let i = this.spawnCell;
-    for (let k = 0; k < 4000 && i >= 0; k++) {
-      pts.push(cellCenter(i));
-      if (this.map.type[i] === T.HOLE) break;
-      i = nextCell(this.map, this.flow, i, this.passSmall, this.isBlocker);
-    }
-    return (this.routeCache = pts);
+    this.routeCache = this.spawnCells.map(start => {
+      const pts = []; let i = start;
+      for (let k = 0; k < 6000 && i >= 0; k++) {
+        pts.push(cellCenter(i));
+        if (this.map.type[i] === T.HOLE) break;
+        i = nextCell(this.map, this.flow, i, this.passSmall, this.isBlocker);
+      }
+      return pts;
+    });
+    return this.routeCache;
   }
+  route() { return this.routes()[0]; }
 
   // ---------- traps ----------
   footprint(kind, ax, az, rot, wallDir) {
@@ -224,8 +240,8 @@ export class Sim {
       for (const m of this.mice) if (m.state === 'walk' && cells.includes(cellOf(m.x, m.z))) return false;
       // Always leave the mice an open route (they can still chew through).
       const extraWall = new Set(cells);
-      const test = computeFlow(this.map, { goals: this.goals, pass: this.passSmall, wall: (i) => extraWall.has(i) || !!this.isBarricade(i) });
-      if (!(test[this.spawnCell] < Infinity)) return 'seal';
+      const test = computeFlow(this.map, { goals: this.goals, pass: this.passSmall, wall: (i) => extraWall.has(i) || this.occBarricade(i) });
+      if (this.spawnCells.some(c => !(test[c] < Infinity))) return 'seal';
     }
     return true;
   }
@@ -270,7 +286,7 @@ export class Sim {
     let i = cellOf(x, z);
     if (i >= 0 && this.isWater(i) && !stranded) return null;            // sinks
     if (i < 0 || !(this.flow[i] < Infinity) || stranded) {
-      i = nearestReachable(this.flow, i < 0 ? cellOf(Math.max(1, Math.min(47, x)), Math.max(1, Math.min(79, z))) : i);
+      i = nearestReachable(this.flow, i < 0 ? cellOf(Math.max(1, Math.min(WORLD_W - 1, x)), Math.max(1, Math.min(WORLD_H - 1, z))) : i);
       if (i < 0) return null;
       [x, z] = cellCenter(i);
     }
@@ -333,7 +349,10 @@ export class Sim {
     const s = this.spawn;
     if (s.queue.length) {
       s.t -= DT;
-      while (s.queue.length && s.t <= 0) { const e = s.queue.shift(); this.spawnMouse(e.type, s.hpMul, e.pack); s.t += e.gap; }
+      while (s.queue.length && s.t <= 0) {
+        const e = s.queue.shift(); this.spawnMouse(e.type, s.hpMul, e.pack, this.door); s.t += e.gap;
+        if (e.gap > 0.1) this.door = (this.door + 1) % SPAWNS.length;   // next pack uses the other entrance
+      }
     } else if (this.mice.length === 0 && this.shots.length === 0) {
       if (this.mode === 'normal' && this.wave >= RULES.winWave) {
         this.phase = 'won';
@@ -346,7 +365,8 @@ export class Sim {
     }
   }
 
-  spawnMouse(type, hpMul, packSize = 1) {
+  spawnMouse(type, hpMul, packSize = 1, door = 0) {
+    const SPAWN = SPAWNS[door % SPAWNS.length];
     const d = MICE[type];
     const hp = Math.max(1, Math.round(d.hp * hpMul));
     // Random variation so no two look alike (size, shade); packs spawn in a clump.
@@ -738,6 +758,7 @@ export class Sim {
       m.attackT -= DT;
       if (m.attackT <= 0) {
         m.attackT = 1.0;
+        // Re-path only when a blocker breaks (re-pathing on every bite would lag).
         if (this.map.type[n] === T.GATE && this.gate.up) {
           this.gate.hp -= d.gateDmg; this.emit({ t: 'gateHit' });
           if (this.gate.hp <= 0) this.breakGate();
@@ -745,7 +766,6 @@ export class Sim {
           const b = this.isBarricade(n);
           if (b) { b.hp -= d.gateDmg; this.emit({ t: 'barricadeHit', id: b.id }); if (b.hp <= 0) this.removeTrap(b); }
         }
-        this.flowDirty = true;
       }
       return;
     }

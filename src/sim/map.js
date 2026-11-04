@@ -1,66 +1,84 @@
-// map.js — Map 1: the castle entrance, at mouse scale, built as walled lanes.
-// Layout (top-down, +z runs south toward the forest):
-//   Y  arched mouse hole in a tree stump at the bottom of the forest.
-//      A walled forest road (roots, rocks, trunks) winds north; one stretch
-//      runs through a hollow log (roofed).
-//      The moat: real water, crossed on a fallen branch.
-//      The castle wall, with a wooden board jammed in the portcullis gap (gate).
-//      The gatehouse tunnel: stone walls both sides, stone roof overhead.
-//      The guard yard: the route splits around the guardhouse — left lane runs
-//      under a long bench (roofed) with barrels as its outer wall, right lane
-//      runs between the guardhouse and a row of hay bales.
-//      Both lanes meet under a stone arch at the top and reach
-//   X  an arched mouse hole in the great hall wall.
-// Every stretch has walls on both sides and most have a roof, so floor, wall
-// and ceiling traps all have places to go. Barrels and bales are cat walkways.
+// map.js — Map 1: the castle entrance, at mouse scale.
+// Built on trap-defense level-design lessons (our own layout):
+//   • several entrances whose lanes merge and split, so you choose where to fight
+//   • wide lanes (10–16 units) with room for 2–3 traps side by side plus a cat
+//   • high ceilings (7–9 units) over covered stretches so the camera fits
+//   • open "kill rooms" between corridors where barricades can maze the mice
+//   • raised ledges beside the lanes for the cats to fight from
 //
-// Grid: each cell is half a world unit, so traps fit in quarters and sit flush
-// against walls. 1 world unit ≈ 30 cm.
+// Layout (top-down, +z runs south toward the forest):
+//   Y1, Y2  two mouse holes in stumps at the forest edge (west and east)
+//   Two walled forest roads that meet in a clearing (kill room 1)
+//   The moat, crossed on a wide fallen log
+//   The gatehouse: a 16-wide covered hall through the curtain wall (gate = jammed board)
+//   The courtyard (kill room 2) with a well in the middle and raised walkways on both sides
+//   Three ways north: west colonnade (roofed), central passage through the guardhouse
+//   (roofed), east lane between the guardhouse and hay bales (open)
+//   X  the mouse hole into the great hall, in the middle of the north wall
+//
+// Grid: each cell is half a world unit. 1 world unit ≈ 30 cm; a cat is about 1 unit.
 
 export const CELL = 0.5;
-export const WORLD_W = 48, WORLD_H = 80;
-export const W = WORLD_W / CELL, H = WORLD_H / CELL;     // 96 x 160 cells
+export const WORLD_W = 96, WORLD_H = 120;
+export const W = WORLD_W / CELL, H = WORLD_H / CELL;     // 192 x 240 cells
 
 export const T = { FLOOR: 0, ROAD: 1, WATER: 2, BRIDGE: 3, SOLID: 4, GATE: 5, HOLE: 6, STALL: 7 };
 
 // kind 'solid' = block (climbable if low), 'over' = table/bench you walk under
-// (legs at the corners), 'roof' = ceiling slab with no legs (tunnel/arch/log).
+// (legs at the corners), 'roof' = ceiling slab with no legs.
 export const FURNITURE = [
-  // Outer stone walls of the yard.
-  { name: 'West wall',   kind: 'solid', rect: [0, 0, 1, 44],   h: 14, look: 'stone' },
-  { name: 'East wall',   kind: 'solid', rect: [47, 0, 48, 44], h: 14, look: 'stone' },
-  { name: 'Hall wall',   kind: 'solid', rect: [1, 0, 47, 1],   h: 14, look: 'hallwall' },
-  // Castle front wall + gatehouse masonry (the tunnel runs through it).
-  { name: 'Curtain wall W', kind: 'solid', rect: [0, 44, 22, 50],  h: 14, look: 'stone' },
-  { name: 'Curtain wall E', kind: 'solid', rect: [26, 44, 48, 50], h: 14, look: 'stone' },
-  { name: 'Gatehouse W',    kind: 'solid', rect: [17, 31, 22, 44], h: 12, look: 'stone' },
-  { name: 'Gatehouse E',    kind: 'solid', rect: [26, 31, 31, 44], h: 12, look: 'stone' },
-  { name: 'Tunnel roof',    kind: 'roof',  rect: [22, 31, 26, 50], bot: 3.2, top: 12, look: 'tunnelroof' },
-  // Guard yard.
-  { name: 'Guardhouse',  kind: 'solid', rect: [16, 10, 32, 24], h: 6,   look: 'guardhouse' },
-  { name: 'Barrels',     kind: 'solid', rect: [1, 6, 8, 28],    h: 2.6, look: 'barrels' },
-  { name: 'Hay bales',   kind: 'solid', rect: [40, 6, 47, 28],  h: 2.2, look: 'bales' },
-  { name: 'Long bench',  kind: 'over',  rect: [8.5, 11, 15.5, 23], bot: 1.3, top: 1.6, look: 'bench' },
-  { name: 'Stone arch',  kind: 'roof',  rect: [4, 1, 22, 6],    bot: 3.0, top: 4.0, look: 'arch' },
-  { name: 'Yard wall W', kind: 'solid', rect: [1, 28, 17, 31],  h: 5, look: 'stone' },
-  { name: 'Yard wall E', kind: 'solid', rect: [31, 28, 47, 31], h: 5, look: 'stone' },
-  // Forest: hollow log over part of the road.
-  { name: 'Hollow log',  kind: 'roof',  rect: [21, 58, 27, 64], bot: 2.2, top: 3.0, look: 'log' },   // tall enough for bosses
+  // Outer walls of the castle grounds.
+  { name: 'West wall', kind: 'solid', rect: [0, 0, 2, 84],   h: 16, look: 'stone' },
+  { name: 'East wall', kind: 'solid', rect: [94, 0, 96, 84], h: 16, look: 'stone' },
+  { name: 'Hall wall', kind: 'solid', rect: [2, 0, 94, 2],   h: 16, look: 'hallwall' },
+  // Curtain wall with the gatehouse gap.
+  { name: 'Curtain wall W', kind: 'solid', rect: [0, 76, 40, 84],  h: 16, look: 'stone' },
+  { name: 'Curtain wall E', kind: 'solid', rect: [56, 76, 96, 84], h: 16, look: 'stone' },
+  // Gatehouse hall: thick walls each side, high stone roof (camera fits under).
+  { name: 'Gatehouse W', kind: 'solid', rect: [28, 58, 40, 76], h: 14, look: 'stone' },
+  { name: 'Gatehouse E', kind: 'solid', rect: [56, 58, 68, 76], h: 14, look: 'stone' },
+  { name: 'Gatehouse roof', kind: 'roof', rect: [40, 58, 56, 84], bot: 9, top: 14, look: 'tunnelroof' },
+  // Courtyard: walls that shape it, a well in the middle, raised walkways each side.
+  { name: 'Yard wall SW', kind: 'solid', rect: [2, 56, 28, 58], h: 6, look: 'stone' },
+  { name: 'Yard wall SE', kind: 'solid', rect: [68, 56, 94, 58], h: 6, look: 'stone' },
+  { name: 'Well', kind: 'solid', rect: [44, 38, 52, 46], h: 3.2, look: 'well' },
+  { name: 'West walkway', kind: 'solid', rect: [2, 30, 8, 56], h: 3.0, look: 'walkway' },
+  { name: 'East walkway', kind: 'solid', rect: [88, 30, 94, 56], h: 3.0, look: 'walkway' },
+  { name: 'Crate', kind: 'solid', rect: [8, 50, 10, 52], h: 1.4, look: 'crate' },     // step up to the walkways
+  { name: 'Crate', kind: 'solid', rect: [86, 50, 88, 52], h: 1.4, look: 'crate' },
+  { name: 'Crate', kind: 'solid', rect: [52, 44, 54, 46], h: 1.4, look: 'crate' },     // step up onto the well
+  // Guardhouse with a roofed passage through the middle; colonnade west, bales east.
+  { name: 'Guardhouse W', kind: 'solid', rect: [30, 10, 44, 30], h: 9, look: 'guardhouse' },
+  { name: 'Guardhouse E', kind: 'solid', rect: [52, 10, 66, 30], h: 9, look: 'guardhouse' },
+  { name: 'Guard passage', kind: 'roof', rect: [44, 10, 52, 30], bot: 7, top: 9, look: 'tunnelroof' },
+  { name: 'Colonnade roof', kind: 'over', rect: [10, 8, 26, 30], bot: 7, top: 7.6, look: 'colonnade' },
+  { name: 'Barrels', kind: 'solid', rect: [2, 8, 10, 30], h: 3.0, look: 'barrels' },
+  { name: 'Hay bales', kind: 'solid', rect: [84, 8, 94, 30], h: 2.6, look: 'bales' },
+  { name: 'Cart', kind: 'solid', rect: [72, 14, 78, 22], h: 2.2, look: 'cart' },        // splits the east lane
+  // Forest: a hollow log over each road.
+  { name: 'Hollow log', kind: 'roof', rect: [16, 102, 26, 110], bot: 4, top: 5, look: 'log' },
+  { name: 'Hollow log', kind: 'roof', rect: [70, 102, 80, 110], bot: 4, top: 5, look: 'log' },
 ];
 
-export const DRAIN = { x0: 0, x1: 48, z0: 50, z1: 56 };          // the moat
-export const BRIDGE = { x0: 22, x1: 26, z0: 49.5, z1: 56.5 };     // fallen branch
-export const GATE = { x0: 22, x1: 26, z0: 49, z1: 50 };           // board jammed in the portcullis gap
-export const HOLE = { x0: 9, x1: 12, z0: 1, z1: 1.5 };             // arched mouse hole into the great hall (X)
-export const ROAD_PTS = [[36, 80], [36, 72], [24, 66], [24, 56]];  // forest road centreline
-export const ROAD_HALF = 3;                                        // road half-width
-export const SPAWN = { x: 36, z: 78.8 };                          // arched hole in a tree stump (Y)
-export const CAT_SPAWN = { x: 14, z: 7 };
+export const DRAIN = { x0: 0, x1: 96, z0: 84, z1: 92 };            // the moat
+export const BRIDGE = { x0: 41, x1: 55, z0: 83.5, z1: 92.5 };       // wide fallen log
+export const GATE = { x0: 40, x1: 56, z0: 83, z1: 84 };             // board jammed across the gatehouse mouth
+export const HOLE = { x0: 46, x1: 50, z0: 2, z1: 2.5 };              // mouse hole into the great hall (X)
+export const CLEARING = { x0: 28, x1: 68, z0: 92, z1: 102 };         // kill room 1, in front of the bridge
+// Forest roads (centrelines), 10 wide: from each stump to the clearing.
+export const ROADS = [
+  [[20, 120], [20, 108], [30, 98]],
+  [[76, 120], [76, 108], [66, 98]],
+];
+export const ROAD_HALF = 5;
+export const SPAWNS = [{ x: 20, z: 118.8 }, { x: 76, z: 118.8 }];   // Y1, Y2
+export const SPAWN = SPAWNS[0];
+export const CAT_SPAWN = { x: 48, z: 8 };
 // Tail stashes (trophy lines): sell points.
 export const STALLS = [
-  { name: 'Hall stash',   rect: [17, 2, 19, 4],     sell: [17.5, 5.2] },
-  { name: 'Tunnel stash', rect: [33, 25, 35, 27],   sell: [33.5, 27.8] },
-  { name: 'Road stash',   rect: [27, 57, 28.5, 58.5], sell: [26.2, 58] },
+  { name: 'Hall stash',      rect: [54, 3, 57, 5],    sell: [55.5, 6.5] },
+  { name: 'Courtyard stash', rect: [70, 50, 73, 53],  sell: [71.5, 48.5] },
+  { name: 'Clearing stash',  rect: [64, 98, 67, 101], sell: [62.5, 99.5] },
 ];
 
 export const idx = (x, z) => z * W + x;
@@ -83,21 +101,21 @@ export function buildMap() {
   const solid = new Float32Array(N);
   const slabBot = new Float32Array(N), slabTop = new Float32Array(N);
   const furn = new Int16Array(N).fill(-1);
-  const forest = new Uint8Array(N);   // which solid cells are forest (for drawing trees/rocks)
+  const forest = new Uint8Array(N);
   const eachCell = ([x0, z0, x1, z1], fn) => {
     for (let z = Math.round(z0 / CELL); z < Math.round(z1 / CELL); z++)
       for (let x = Math.round(x0 / CELL); x < Math.round(x1 / CELL); x++)
         if (x >= 0 && z >= 0 && x < W && z < H) fn(z * W + x, x, z);
   };
-  // Forest zone: solid everywhere except the road.
+  // Forest zone: solid except roads and the clearing.
   for (let z = Math.round(DRAIN.z1 / CELL); z < H; z++) for (let x = 0; x < W; x++) {
     const i = z * W + x, cx = (x + 0.5) * CELL, cz = (z + 0.5) * CELL;
-    let onRoad = false;
-    for (let s = 0; s < ROAD_PTS.length - 1; s++) {
-      const [ax, az] = ROAD_PTS[s], [bx, bz] = ROAD_PTS[s + 1];
-      if (distToSeg(cx, cz, ax, az, bx, bz) < ROAD_HALF) { onRoad = true; break; }
+    let open = cx >= CLEARING.x0 && cx < CLEARING.x1 && cz >= CLEARING.z0 && cz < CLEARING.z1;
+    for (const road of ROADS) for (let s = 0; s < road.length - 1 && !open; s++) {
+      const [ax, az] = road[s], [bx, bz] = road[s + 1];
+      if (distToSeg(cx, cz, ax, az, bx, bz) < ROAD_HALF) open = true;
     }
-    if (onRoad) type[i] = T.ROAD;
+    if (open) type[i] = T.ROAD;
     else { type[i] = T.SOLID; solid[i] = 5; forest[i] = 1; }
   }
   eachCell([DRAIN.x0, DRAIN.z0, DRAIN.x1, DRAIN.z1], i => { type[i] = T.WATER; solid[i] = 0; forest[i] = 0; });
@@ -105,20 +123,21 @@ export function buildMap() {
 
   FURNITURE.forEach((f, fi) => {
     if (f.kind === 'solid') {
-      eachCell(f.rect, i => { type[i] = T.SOLID; solid[i] = Math.max(solid[i], f.h); furn[i] = fi; });
+      eachCell(f.rect, i => { type[i] = T.SOLID; solid[i] = Math.max(solid[i], f.h); furn[i] = fi; forest[i] = 0; });
     } else {
       const [x0, z0, x1, z1] = f.rect;
       const cx0 = Math.round(x0 / CELL), cx1 = Math.round(x1 / CELL) - 1, cz0 = Math.round(z0 / CELL), cz1 = Math.round(z1 / CELL) - 1;
       eachCell(f.rect, (i, x, z) => {
         if (type[i] === T.SOLID && f.kind === 'roof') return;     // roofs don't override walls
         slabBot[i] = f.bot; slabTop[i] = f.top; furn[i] = fi;
-        if (f.kind === 'over' && (x === cx0 || x === cx1) && (z === cz0 || z === cz1)) { type[i] = T.SOLID; solid[i] = f.top; }
+        // Colonnade: pillars every 4 units along both long sides.
+        if (f.kind === 'over' && (x === cx0 || x === cx1 || x === cx0 + 1 || x === cx1 - 1) && (z - cz0) % 8 < 2) { type[i] = T.SOLID; solid[i] = f.top; }
       });
     }
   });
   eachCell([GATE.x0, GATE.z0, GATE.x1, GATE.z1], i => { type[i] = T.GATE; solid[i] = 0; });
   eachCell([HOLE.x0, HOLE.z0, HOLE.x1, HOLE.z1], i => { type[i] = T.HOLE; solid[i] = 0; });
-  STALLS.forEach(s => eachCell(s.rect, i => { type[i] = T.STALL; solid[i] = 2.2; }));   // trophy line frame: collider matches the art
+  STALLS.forEach(s => eachCell(s.rect, i => { type[i] = T.STALL; solid[i] = 2.2; }));
 
   // Trap surfaces.
   const covered = new Uint8Array(N);
