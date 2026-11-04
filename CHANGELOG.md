@@ -7,6 +7,8 @@ Fixed
 - Bug zapper reach 1.3 → 2.4 and draws lightning down to each mouse it hits. `src/config.js`; `src/sim/sim.js` stepTraps; `src/render/scene.js` onEvent.
 Changed
 - Fred is smaller and leaner (85% size, slimmer body) to read as the fast, agile one. `src/render/models.js` makeFred.
+Added (not wired in yet)
+- Procedural textures (stone blocks, cobbles, dirt, bark, plaster, slate, planks, leaves) and a world-space triplanar material for the upcoming castle art pass. `src/render/textures.js` lines 1–150.
 
 ## 0.4.0 — 2026-11-03
 New, much bigger Map 1 built on trap-defense level-design lessons (our own layout).
