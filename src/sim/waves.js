@@ -26,7 +26,7 @@ export const INTRO_TEXT = {
 const KINDS = [   // [type, weight once introduced]
   ['runner', 0.5], ['splitter', 0.35], ['tank', 0.3], ['plague', 0.25], ['fatty', 0.12],
 ];
-export function buildWave(n, rng, gateUp) {
+export function buildWave(n, rng, gateUp, opts = {}) {
   const pool = [];
   const pups = Math.min(220, 12 + n * 8);
   const others = Math.min(60, 4 + n * 2);
@@ -49,7 +49,7 @@ export function buildWave(n, rng, gateUp) {
     for (let k = 0; k < size; k++) queue.push({ type: pool.shift(), gap: k === size - 1 ? Math.max(2.2, 5 - n * 0.1) + rng() : 0.04, pack: size });
   }
   // Birds: a few per wave once introduced, slipped in mid-wave. The first ever comes alone.
-  for (const bt of ['magpie', 'crow']) {
+  for (const bt of opts.birds === false ? [] : ['magpie', 'crow']) {      // no birds indoors
     const b0 = MICE[bt].intro; if (n < b0) continue;
     const count = n === b0 ? 1 : 1 + Math.floor((n - b0) / 4);
     for (let k = 0; k < count; k++) {
@@ -84,9 +84,9 @@ export function ratePaws(lives, stats) {
 
 // What the next wave holds, for the HUD during the build phase. Uses a fixed
 // stand-in random so it never touches the game's own random sequence.
-export function previewWave(n, gateUp) {
+export function previewWave(n, gateUp, opts = {}) {
   let seed = n * 7919 + 1; const rng = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const { queue } = buildWave(n, rng, gateUp);
+  const { queue } = buildWave(n, rng, gateUp, opts);
   const counts = {};
   for (const e of queue) counts[e.type] = (counts[e.type] || 0) + 1;
   return {

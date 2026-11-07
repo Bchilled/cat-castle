@@ -504,7 +504,119 @@ export function makeFurniture(f) {
       B(DARKWOOD, 0, 2.1, d / 2 + 0, 0.3, 0.3, 0.02, false);
       break;
     }
-    default: B(WOOD, 0, (f.h || 1) / 2, 0, w, f.h || 1, d);
+    case 'house': case 'plaster': {
+      // Building backs (market, stables) and indoor walls: stone footing, plaster above,
+      // dark timber beams on the 'house' look.
+      const H = f.h;
+      TB('stone', 6, 0xc8beb0, 0, 1.5, 0, w, 3, d);
+      TB('plaster', 4, f.look === 'house' ? 0xe8dcc4 : 0xd8d0c0, 0, 3 + (H - 3) / 2, 0, w - 0.05, H - 3, d - 0.05, false);
+      if (f.look === 'house') {
+        const long = w >= d, L = long ? w : d;
+        for (let k = -L / 2 + 3; k < L / 2; k += 6) {
+          const post = long ? [k, 3 + (H - 3) / 2, 0, 0.5, H - 3, d + 0.04] : [0, 3 + (H - 3) / 2, k, w + 0.04, H - 3, 0.5];
+          B(DARKWOOD, ...post, false);
+        }
+        for (const y of [3.2, 8, H - 0.4]) if (y < H) B(DARKWOOD, 0, y, 0, w + 0.04, 0.4, d + 0.04, false);
+      }
+      break;
+    }
+    case 'stall': {
+      // Market stall counter seen from behind/below: thick plank top on four legs, with a
+      // striped cloth valance (inside the counter's own thickness).
+      TB('planks', 2.5, 0xb89068, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) TB('planks', 2, 0x8a6a48, sx * (w / 2 - 0.5), f.bot / 2, sz * (d / 2 - 0.5), 1, f.bot, 1);
+      for (let k = 0; k < Math.floor(w / 1.5); k++) for (const zz of [-d / 2 - 0.01, d / 2 + 0.01])
+        B(k % 2 ? 0xc83a2a : 0xf0e4c8, -w / 2 + 0.75 + k * 1.5, (f.bot + f.top) / 2, zz, 1.5, f.top - f.bot, 0.02, false);
+      break;
+    }
+    case 'sacks': {
+      // Burlap sacks heaped together (the food pile sits on top).
+      for (let k = 0; k < 4; k++) {
+        const sx = (k % 2 - 0.5) * w * 0.45, sz = (Math.floor(k / 2) - 0.5) * d * 0.45;
+        const sack = part(new THREE.SphereGeometry(Math.min(w, d) * 0.3, 8, 6), 0xa08a5a, sx, f.h * 0.45, sz, 1, f.h / (Math.min(w, d) * 0.6), 1); g.add(sack);
+      }
+      break;
+    }
+    case 'partition': TB('planks', 2, 0x8a6a48, 0, f.h / 2, 0, w, f.h, d); break;
+    case 'fence': {
+      const long = w >= d, L = long ? w : d;
+      for (let k = -L / 2; k <= L / 2 + 0.01; k += 3) TB('planks', 2, 0x7a5a38, long ? k : 0, f.h / 2, long ? 0 : k, long ? 0.3 : w, f.h, long ? d : 0.3);
+      for (const y of [f.h * 0.45, f.h * 0.9]) TB('planks', 2, 0x9a7a58, 0, y, 0, w, 0.15, d, false);
+      break;
+    }
+    case 'loft': {
+      // Hay loft floor over the stable aisle, on posts; hay spilling over the edge.
+      TB('planks', 3, 0x9a7a58, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      for (let pz = 0; pz < d; pz += 4) for (const px of [0.5, w - 0.5]) TB('planks', 2, 0x6e5030, -w / 2 + px, f.bot / 2, -d / 2 + pz + 0.5, 1, f.bot, 1);
+      B(0xc8a858, 0, f.top + 0.01, 0, w * 0.9, 0.02, d * 0.95, false);
+      break;
+    }
+    case 'vault': case 'beams': {
+      TB(f.look === 'vault' ? 'stone' : 'planks', 4, f.look === 'vault' ? 0x8a8278 : 0x8a7058, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d, false);
+      for (let z = -d / 2 + 3; z < d / 2; z += 6) B(f.look === 'vault' ? 0x4e4840 : DARKWOOD, 0, f.bot + 0.15, z, w, 0.3, 0.6, false);   // ribs / beams
+      break;
+    }
+    case 'winerack': {
+      TB('planks', 2, 0x4a3422, 0, f.h / 2, 0, w, f.h, d);
+      // Bottle ends poking out of both faces (inside the rack's footprint).
+      const long = w >= d, L = long ? w : d;
+      for (let k = -L / 2 + 0.6; k < L / 2; k += 0.9) for (let y = 0.6; y < f.h - 0.3; y += 0.9) for (const sgn of [-1, 1]) {
+        const b = part(new THREE.CircleGeometry(0.22, 8), (Math.round(k * 7 + y * 3) % 3) ? 0x1a3a1a : 0x3a1a1a, long ? k : sgn * (w / 2 + 0.005), y, long ? sgn * (d / 2 + 0.005) : k, 1, 1, 1, false);
+        b.rotation.y = long ? (sgn > 0 ? 0 : Math.PI) : sgn * Math.PI / 2; g.add(b);
+      }
+      break;
+    }
+    case 'cheesewheel': {
+      const r = Math.min(w, d) / 2;
+      outline(TC('plaster', 2, 0xf0c838, cyl(r, r, f.h, 24), 0, f.h / 2, 0), 1.01);
+      g.add(part(cyl(r * 0.98, r * 0.98, 0.05, 24), 0xd8a828, 0, f.h + 0.01, 0, 1, 1, 1, false));
+      for (const [a, y, rr] of [[0.3, 1, 0.35], [1.5, 2, 0.25], [2.8, 1.4, 0.4], [4.2, 0.8, 0.3], [5.4, 2.2, 0.2]]) {
+        const hole = part(new THREE.CircleGeometry(rr, 10), 0xc89a20, Math.sin(a) * (r + 0.01), y, Math.cos(a) * (r + 0.01), 1, 1, 1, false); hole.rotation.y = a; g.add(hole);
+      }
+      break;
+    }
+    case 'counter': {
+      // Kitchen counter: thick scrubbed top on chunky legs; you live underneath.
+      TB('planks', 3, 0xd8c0a0, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) TB('planks', 2, 0x8a6a48, sx * (w / 2 - 0.5), f.bot / 2, sz * (d / 2 - 0.5), 1, f.bot, 1);
+      B(DARKWOOD, 0, f.bot - 0.2, 0, w - 1, 0.25, 0.25, false);
+      break;
+    }
+    case 'oven': {
+      // Brick oven / hearth with a glowing arched mouth facing the room (+z).
+      TB('stone', 3, 0xb06a4a, 0, f.h / 2, 0, w, f.h, d);
+      const mouth = new THREE.Mesh(new THREE.CircleGeometry(Math.min(w, f.h) * 0.25, 16, 0, Math.PI), new THREE.MeshBasicMaterial({ color: 0xff7a20 }));
+      mouth.position.set(0, f.h * 0.25, d / 2 + 0.02); g.add(mouth);
+      const sq = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(w, f.h) * 0.5, f.h * 0.25), new THREE.MeshBasicMaterial({ color: 0xff7a20 }));
+      sq.position.set(0, f.h * 0.125, d / 2 + 0.02); g.add(sq);
+      break;
+    }
+    case 'basket': {
+      const r = Math.min(w, d) / 2;
+      outline(TC('planks', 1, 0xc8a060, cyl(r, r * 0.85, f.h, 12), 0, f.h / 2, 0), 1.03);
+      for (let y = 0.2; y < f.h; y += 0.3) g.add(part(cyl(r * 1.01, r * 1.01, 0.05, 12), 0x8a6a38, 0, y, 0, 1, 1, 1, false));
+      break;
+    }
+    default: TB(f.tex || 'planks', 3, f.tint || 0xb08a60, 0, (f.h || 1) / 2, 0, w, f.h || 1, d);
+  }
+  return g;
+}
+
+// Knock-over props: small human things on tables, counters and shelves. Origin = base.
+export function makeProp(kind) {
+  const g = new THREE.Group();
+  if (kind === 'pot') {
+    g.add(part(new THREE.CylinderGeometry(0.32, 0.25, 0.6, 12), 0xb8643a, 0, 0.3, 0));
+    const rim = part(new THREE.TorusGeometry(0.3, 0.05, 6, 14), 0x9a4a2a, 0, 0.6, 0); rim.rotation.x = Math.PI / 2; g.add(rim);
+  } else if (kind === 'jug') {
+    g.add(part(new THREE.SphereGeometry(0.3, 12, 8), 0xd8d0c0, 0, 0.32, 0, 1, 1.1, 1));
+    g.add(part(new THREE.CylinderGeometry(0.1, 0.14, 0.3, 10), 0xd8d0c0, 0, 0.75, 0));
+  } else if (kind === 'bucket') {
+    g.add(part(new THREE.CylinderGeometry(0.35, 0.28, 0.6, 12), 0x8a6a48, 0, 0.3, 0));
+    g.add(part(new THREE.CylinderGeometry(0.36, 0.36, 0.05, 12), 0x2e2c2a, 0, 0.5, 0, 1, 1, 1, false));
+  } else {
+    g.add(part(new THREE.CylinderGeometry(0.4, 0.32, 0.45, 12), 0xc8a060, 0, 0.22, 0));   // basket
+    for (let k = 0; k < 4; k++) g.add(part(new THREE.SphereGeometry(0.12, 6, 5), [0xc83a2a, 0xe0c040, 0x6aa040, 0xc83a2a][k], Math.cos(k * 1.6) * 0.18, 0.48, Math.sin(k * 1.6) * 0.18, 1, 1, 1, false));
   }
   return g;
 }

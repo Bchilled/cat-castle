@@ -2,7 +2,7 @@
 // Run: node tests/sim-test.mjs
 import { TRAPS, CATS, ITEMS } from '../src/config.js';
 import { Sim } from '../src/sim/sim.js';
-import { W, CELL, idx } from '../src/sim/map.js';
+import { W, CELL, idx, MAP_ORDER, MAPS, cellOf } from '../src/sim/map.js';
 import { nextCell } from '../src/sim/path.js';
 import { TICK_HZ } from '../src/config.js';
 import { buildWave } from '../src/sim/waves.js';
@@ -351,5 +351,49 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   s3.command({ type: 'item', id: 'p1', aim: { x: 63, z: 52 } });
   run(s3, 2, () => {});
   ok(Math.hypot(mm.x - 63, mm.z - 52) < 1.5 && s3.decoys[0].hp < ITEMS.squeaky.hp, 'mice go and chew the Squeaky Toy');
+}
+// 28. Every map: both entrances reach the hole (mice and bosses), lanes split, the twist works.
+for (const id of MAP_ORDER) {
+  const s = new Sim({ map: id, seed: 101 }); s.addPlayer('p1'); s.step();
+  ok(s.spawnCells.every(c => s.flow[c] < Infinity) && s.spawnCells.every(c => s.flowBig[c] < Infinity), `${id}: every entrance reaches the hole (mice and bosses)`);
+  ok(new Set(s.spawnCells.map((_, d) => [0, 1, 2, 3, 4, 5].map(() => s.chooseVia(d)).join())).size >= 1 && s.routes().length >= 2 * s.spawnCells.length, `${id}: ${s.routes().length} routes`);
+}
+// 29. Mazing: mice walk a Poison Box zig-zag rather than chewing.
+{
+  const s = new Sim({ map: 'market', seed: 102 }); s.addPlayer('p1'); s.sardines = 1e6; s.step();
+  // Centre alley (x 38–50): two staggered walls of boxes, each leaving a gap at alternate ends.
+  for (let x = 38; x < 48; x += 2) s.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(x), az: q(30) });
+  for (let x = 40; x < 50; x += 2) s.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(x), az: q(26) });
+  s.updateFlow();
+  const n = s.traps.size;
+  s.spawnMouse('mouse', 1, 1, 0); const m = s.mice[0]; m.x = 44; m.z = 36; m.via = -1;
+  const ev = run(s, 20, () => {});
+  ok(n >= 8 && !ev.some(e => e.t === 'barricadeHit'), `mice follow the maze (${n} boxes, no chewing)`);
+}
+// 30. Map twists: mud slows, fire burns, food piles toughen mice, doors swing, pots smash mice.
+{
+  const st = new Sim({ map: 'stables', seed: 103 }); st.addPlayer('p1'); const c = st.cats.get('p1'); c.x = 60; c.z = 50; st.step();
+  const x0 = c.x; for (let k = 0; k < 30; k++) { st.command({ type: 'input', id: 'p1', mx: 1, mz: 0, yaw: 0 }); st.step(); }
+  ok(c.x - x0 < CATS.fred.speed * 0.7, `mud slows a cat (${(c.x - x0).toFixed(1)} units in 1 s)`);
+  const kt = new Sim({ map: 'kitchen', seed: 104 }); kt.addPlayer('p1'); const kc = kt.cats.get('p1'); kc.x = 44; kc.z = 10.5; kt.step();
+  kt.spawnMouse('mouse', 1); const fm = kt.mice[0]; fm.x = 44.5; fm.z = 11; fm.state = 'stuck'; fm.stuckT = 99;
+  const hp0 = kc.hp; run(kt, 2, () => inp(kt, 'p1'));
+  ok(fm.dead || fm.hp < fm.maxHp - 20, 'the oven burns mice'); ok(kc.hp < hp0, 'and cats');
+  const mk = new Sim({ map: 'market', seed: 105 }); mk.addPlayer('p1'); mk.step();
+  mk.spawnMouse('mouse', 1); const gm = mk.mice[0]; gm.x = 6; gm.z = 54; const mh = gm.maxHp;
+  run(mk, 3, () => {});
+  ok(gm.gorged && gm.maxHp > mh, `food pile: mouse gorges and comes out tougher (${mh} -> ${gm.maxHp} hp)`);
+  const ps = new Sim({ map: 'passages', seed: 106 }); ps.addPlayer('p1'); ps.step();
+  const before = ps.doors.map(d => d.open).join();
+  const evd = run(ps, 20, () => {});
+  ok(evd.some(e => e.t === 'door'), 'servants open and shut the doors');
+  const en = new Sim({ map: 'entrance', seed: 107 }); en.addPlayer('p1'); const ec = en.cats.get('p1'); en.step();
+  const pot = en.props[0];   // pot near the west edge of the trestle table (63, 2.9, 40)
+  for (let k = 0; k < 4; k++) { en.spawnMouse('mouse', 1); const mm = en.mice[k]; mm.x = 60.6 + (k % 2) * 0.6; mm.z = 39.7 + (k >> 1) * 0.6; mm.state = 'stuck'; mm.stuckT = 99; }
+  ec.x = pot.x + 0.6; ec.z = pot.z; ec.y = 2.9; ec.yaw = -Math.PI / 2; ec.onGround = true;   // facing west, toward the edge
+  const eve = run(en, 2, () => inp(en, 'p1', { yaw: -Math.PI / 2 }));
+  ok(eve.some(e => e.t === 'knock'), 'a cat brushing past knocks the pot off the table');
+  const sm = eve.find(e => e.t === 'smash');
+  ok(sm && sm.hits >= 2, `it smashes onto the mice below (${sm ? sm.hits : 0} hit)`);
 }
 process.exit(fails ? 1 : 0);

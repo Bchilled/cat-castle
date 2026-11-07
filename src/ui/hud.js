@@ -67,7 +67,7 @@ export class Hud {
     const b = this.base.getContext('2d'); b.fillStyle = '#120e0b'; b.fillRect(0, 0, size, size);
     for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) {
       const i = z * W + x, t = sim.map.type[i];
-      b.fillStyle = sim.map.covered[i] ? '#3a342c' : TYPE_RGB[t]; b.fillRect(this.rox + x * this.rs, z * this.rs, this.rs + 0.5, this.rs + 0.5);
+      b.fillStyle = sim.map.mud[i] ? '#4a3a28' : sim.map.covered[i] ? '#3a342c' : TYPE_RGB[t]; b.fillRect(this.rox + x * this.rs, z * this.rs, this.rs + 0.5, this.rs + 0.5);
     }
   }
   rx(wx) { return this.rox + wx / CELL * this.rs; }
@@ -88,7 +88,7 @@ export class Hud {
     let next = '';
     if (h.phase === 'build') {
       const n = h.wave + 1;
-      if (this.previewWave !== n) { this.preview = previewWave(n, h.gateUp); this.previewWave = n; }
+      if (this.previewWave !== n) { this.preview = previewWave(n, h.gateUp, { birds: this.sim.mapDef.birds !== false }); this.previewWave = n; }
       const p = this.preview;
       next = `Wave ${n}: ~${p.total} mice` + (p.fresh.length ? ` · <b class="new">NEW: ${p.fresh.join(', ')}</b>` : '') + (p.boss ? ` · <b class="boss">BOSS: ${p.boss}</b>` : '');
     }
@@ -151,7 +151,11 @@ export class Hud {
   drawRadar() {
     const c = this.rctx, sim = this.sim;
     c.drawImage(this.base, 0, 0);
-    if (!sim.gate.up) { c.fillStyle = TYPE_RGB[T.FLOOR]; c.fillRect(this.rx(GATE.x0), this.rz(GATE.z0), this.rx(GATE.x1) - this.rx(GATE.x0), this.rz(GATE.z1) - this.rz(GATE.z0)); }
+    // Map features: doors (shut = dark), fires, food piles.
+    sim.doors.forEach(d => { const [x0, z0, x1, z1] = d.rect; c.fillStyle = d.open ? TYPE_RGB[T.FLOOR] : '#8a5a2a'; c.fillRect(this.rx(x0), this.rz(z0), Math.max(2, this.rx(x1) - this.rx(x0)), Math.max(2, this.rz(z1) - this.rz(z0))); });
+    c.fillStyle = '#ff7a20'; for (const f of sim.mapDef.fires || []) { c.beginPath(); c.arc(this.rx(f.x), this.rz(f.z), 3, 0, 7); c.fill(); }
+    c.fillStyle = '#e8c040'; for (const f of sim.foods) if (f.left > 0) { c.beginPath(); c.arc(this.rx(f.x), this.rz(f.z), 2.5, 0, 7); c.fill(); }
+    if (GATE && !sim.gate.up) { c.fillStyle = TYPE_RGB[T.FLOOR]; c.fillRect(this.rx(GATE.x0), this.rz(GATE.z0), this.rx(GATE.x1) - this.rx(GATE.x0), this.rz(GATE.z1) - this.rz(GATE.z0)); }
     for (const tr of sim.traps.values()) { c.fillStyle = tr.kind === 'barricade' ? '#c4a46a' : tr.layer === 'ceiling' ? '#6fb8ff' : '#7fd06a'; c.fillRect(this.rx(tr.x0), this.rz(tr.z0), Math.max(2, this.rx(tr.x1) - this.rx(tr.x0)), Math.max(2, this.rz(tr.z1) - this.rz(tr.z0))); }
     // Mouse route.
     c.strokeStyle = 'rgba(180,138,255,0.75)'; c.lineWidth = 1.5;

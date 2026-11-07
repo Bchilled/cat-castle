@@ -99,6 +99,9 @@
   #loadout .lh { display: inline-block; margin: 0 6px 0 12px; color: var(--accent); font-weight: bold; font-size: 13px; }
   .lt { font-size: 12px; padding: 4px 8px; margin: 2px; opacity: .55; } .lt.on { opacity: 1; outline: 2px solid var(--accent); }
   #loadhint { font-size: 12px; margin: 4px 0 0; }
+  #maps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; max-width: 1040px; margin: 12px auto 0; }
+  .mp { text-align: left; padding: 6px 8px; opacity: .6; font-size: 12px; } .mp b { display: block; font-size: 13px; color: var(--accent); }
+  .mp small { display: block; color: var(--dim); font-size: 11px; line-height: 1.3; margin-top: 2px; } .mp.on { opacity: 1; outline: 2px solid var(--accent); }
   #catdetail h2 { margin: 2px 0; color: var(--accent); } #catdetail p { margin: 4px 0 8px; color: var(--dim); }
   #catdetail .ab-row { font-size: 13px; margin: 3px 0; } #catdetail .ab-row b { color: var(--ink); } #catdetail .ab-row i { color: var(--accent); font-style: normal; }
   #catdetail .stats { font-size: 12px; color: var(--dim); margin-top: 6px; }
@@ -152,6 +155,7 @@
     <div class="cats" id="cats"></div>
     <div class="detail"><canvas id="catview" width="300" height="200"></canvas><div id="catdetail"></div></div>
   </div>
+  <div id="maps"></div>
   <div id="loadout"></div>
   <div class="modes">
     <button class="play" data-mode="normal">Castle entrance · 24 waves</button>

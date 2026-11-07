@@ -70,17 +70,23 @@ export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]
 }
 
 // Pick the neighbour a mouse on cell i should head to next.
-export function nextCell(map, dist, i, pass, blocked) {
+// Pick the neighbour a mouse on cell i should head to next: the one that makes the
+// cheapest total (its distance + the cost of stepping into it). Counting the step cost
+// matters: a Poison Box cell's own distance can be low, but stepping into it is dear,
+// so mice walk round a maze instead of trying to chew through it.
+export function nextCell(map, dist, i, pass, blocked, extra = () => 0) {
+  if (!(dist[i] > 0)) return -1;
   const x = i % W, z = (i / W) | 0;
   const open = (j) => pass(j) && !blocked(j);
-  let best = -1, bd = dist[i];
-  for (const [dx, dz] of NB) {
+  let best = -1, bd = Infinity;
+  for (const [dx, dz, mul] of NB) {
     const nx = x + dx, nz = z + dz;
     if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
     const n = nz * W + nx;
-    if (!pass(n)) continue;
+    if (!pass(n) || !(dist[n] < Infinity)) continue;
     if (dx && dz && (!open(z * W + nx) || !open(nz * W + x))) continue;
-    if (dist[n] < bd) { bd = dist[n]; best = n; }
+    const sc = dist[n] + ((BASE_COST[map.type[n]] || 1) + extra(n)) * (mul || 1);
+    if (sc < bd) { bd = sc; best = n; }
   }
   return best;
 }

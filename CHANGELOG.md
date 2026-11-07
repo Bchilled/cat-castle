@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.10.0 — 2026-11-07
+Six maps: the journey from the castle entrance to the kitchen (pick any on the menu; winning a map offers "Onward" to the next)
+- 1 Castle Entrance (as before) — now with pots, jugs and baskets to knock over.
+- 2 Market Back Alleys — three alleys behind the stalls, crossings under the stall counters. Twist: food piles; mice stop to gorge and come out 30% tougher until the pile is eaten. Pots on the counters to knock onto them.
+- 3 Stables and Yard — a long aisle under the hay loft with horse pens, a muddy yard. Twist: mud slows mice and cats; troughs drown mice.
+- 4 Cellar and Storerooms — wine-rack corridors under a stone vault (ceiling traps anywhere) and a giant cheese wheel mice gorge on. Twist: it's dark (your cat carries a little glow; sniff with F). No birds underground.
+- 5 Servants' Passages — a grid of narrow roofed passages. Twist: servants open and shut four doors on timers, rerouting the mice mid-wave (a door never shuts on anyone; there's always a way through).
+- 6 The Kitchen — under the counters and the island to the pantry. Twist: three entrances; the ovens and hearth burn mice and cats.
+- Maps further along are tougher (+8% mouse health per map).
+`src/sim/map.js` (MAPS registry, useMap, shell walls, generalised buildMap: troughs, mud, doors); `src/render/scene.js` (per-map lighting, floors, water, mud, fire, food piles, doors, cellar lantern); `src/render/models.js` (house, plaster, stall, sacks, partition, fence, loft, vault, beams, wine rack, cheese wheel, counter, oven, basket looks); `src/main.js` + `index.html` (map picker, Onward button); `src/ui/hud.js` (radar shows doors, fires, food, mud).
+Mazing
+- Poison Boxes now act as walls to the mice's pathfinding (cost 5000 per cell), so you can build proper zig-zag mazes and corridors; mice walk the maze rather than chew. The no-sealing rule still applies. Fixed the route step choosing a box cell just because its own distance was low: `src/sim/path.js` nextCell now counts the cost of stepping in.
+Knock-over props
+- Pots, jugs, baskets and buckets sit on tables, counters, benches and walkways. Brush past one and your cat swats it the way it's facing; it skids along the surface and off the edge. Dropped onto mice it smashes them (25 + 6 per unit fallen) and leaves a spill that slows them for 8 s. They're back in place every wave. `src/sim/sim.js` stepMapFeatures; `src/render/models.js` makeProp.
+Tests: 100 checks, all passing (every map: both/all entrances reach the hole for mice and bosses; maze is walked not chewed; mud, fire, food, doors and pot smashes all work).
+
 ## 0.9.0 — 2026-11-07
 New cat
 - Mimo: frisky brown-grey mackerel tabby (neutered, still thinks he's a lion). Pebble Flick (x2 damage to ranged mice: Plague Rats, Siege Mice), Lion Roar (everything within 6.5 takes +35% damage for 6 s; birds get knocked out of the sky), Sky Swipe (E: springs at the nearest bird), Double Jump, Bird Hunter (x3 damage to birds). Voice lines, model, winking portrait. `src/config.js`; `src/sim/sim.js` (firePebble, roar, swatBirds); `src/render/models.js` makeMimo; `src/ui/portraits.js`.

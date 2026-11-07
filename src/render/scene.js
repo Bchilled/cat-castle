@@ -5,11 +5,11 @@
 
 import * as THREE from 'three';
 import {
-  W, H, CELL, T, FURNITURE, DRAIN, BRIDGE, GATE, HOLE, SPAWNS, cellOf, WORLD_W, WORLD_H,
+  W, H, CELL, T, FURNITURE, DRAIN, BRIDGE, GATE, HOLE, SPAWNS, cellOf, WORLD_W, WORLD_H, MAP,
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
-import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird } from './models.js';
+import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp } from './models.js';
 import { tmat } from './textures.js';
 
 const MAX_MICE = 800;
@@ -22,11 +22,16 @@ export class Scene {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x8fa4b0);           // overcast sky over the yard
-    this.scene.fog = new THREE.Fog(0x8fa4b0, 50, 170);
+    // Lighting per map: daylight outside, dim indoors, near-black in the cellar
+    // (the cat carries a little glow there so you can see your own paws).
+    const dark = !!MAP.dark, indoor = MAP.birds === false || dark;
+    const sky = dark ? 0x0a0806 : indoor ? 0x2a2420 : 0x8fa4b0;
+    this.scene.background = new THREE.Color(sky);
+    this.scene.fog = new THREE.Fog(sky, dark ? 12 : indoor ? 35 : 50, dark ? 48 : indoor ? 120 : 170);
     this.camera = new THREE.PerspectiveCamera(65, 1, 0.05, 250);
-    this.scene.add(new THREE.HemisphereLight(0xdfe6ea, 0x4a4030, 1.5));
-    const sun = new THREE.DirectionalLight(0xfff0d8, 1.3); sun.position.set(-25, 45, 30); this.scene.add(sun);
+    this.scene.add(new THREE.HemisphereLight(0xdfe6ea, 0x4a4030, dark ? 0.25 : indoor ? 0.9 : 1.5));
+    const sun = new THREE.DirectionalLight(0xfff0d8, dark ? 0.1 : indoor ? 0.6 : 1.3); sun.position.set(-25, 45, 30); this.scene.add(sun);
+    if (dark) { this.lantern = new THREE.PointLight(0xffd8a0, 14, 22, 1.4); this.scene.add(this.lantern); }
     this.camDist = null;                                            // set per cat on first frame; wheel zooms
 
     this.cats = new Map(); this.trapMeshes = new Map(); this.tailMeshes = new Map(); this.lootMeshes = new Map();
@@ -68,7 +73,9 @@ export class Scene {
     const m4 = new THREE.Matrix4(), c = new THREE.Color();
     function i(x, z) { return z * W + x; }
     const isDirt = ([x, z, t]) => t === T.ROAD || !!map.forest[i(x, z)];
-    for (const [dirt, tex, scale, tint] of [[false, 'cobbles', 3, 0xc8c0b4], [true, 'dirt', 4, 0xd8ccb8]]) {
+    const FLOORS = { cobbles: ['cobbles', 3, 0xc8c0b4], dirt: ['dirt', 4, 0xd8ccb8], stone: ['stone', 4, 0xb8b0a4], planks: ['planks', 2.5, 0xb89a78] };
+    const fl = FLOORS[MAP.floor] || FLOORS.cobbles;
+    for (const [dirt, tex, scale, tint] of [[false, ...fl], [true, 'dirt', 4, 0xd8ccb8]]) {
       const list = ground.filter(g => isDirt(g) === dirt);
       const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.3, 1), tmat(tex, scale, tint), list.length);
       list.forEach(([x, z], k) => {
@@ -78,11 +85,14 @@ export class Scene {
       });
       s.add(inst);
     }
-    const under = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W + 200, WORLD_H + 200), mat(0x3a4a2a));
+    const indoor = MAP.birds === false || !!MAP.dark;
+    const under = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W + 200, WORLD_H + 200), mat(indoor ? 0x1a1612 : 0x3a4a2a));
     under.rotation.x = -Math.PI / 2; under.position.set(WORLD_W / 2, -0.31, WORLD_H / 2); s.add(under);
     this.proxy(0, -0.3, 0, WORLD_W, 0, WORLD_H);
 
-    // The moat: real water, sunk below the banks, gently moving.
+    // Water: the moat (entrance) and troughs (stables) — sunk below the floor, gently moving.
+    this.waters = [];
+    for (const DRAIN of [...(MAP.drain ? [MAP.drain] : []), ...(MAP.waters || [])]) {
     const dw = DRAIN.x1 - DRAIN.x0, dd = DRAIN.z1 - DRAIN.z0, dcx = (DRAIN.x0 + DRAIN.x1) / 2, dcz = (DRAIN.z0 + DRAIN.z1) / 2;
     const bed = new THREE.Mesh(new THREE.BoxGeometry(dw, 0.2, dd), mat(0x1a2a2a)); bed.position.set(dcx, -1.4, dcz); s.add(bed);
     for (const k of [-1, 1]) { const bank = new THREE.Mesh(new THREE.BoxGeometry(dw, 1.4, 0.2), mat(0x4e463c)); bank.position.set(dcx, -0.7, dcz + k * dd / 2); s.add(bank); }
@@ -90,10 +100,22 @@ export class Scene {
     this.water = new THREE.Mesh(wgeo, new THREE.MeshLambertMaterial({ color: 0x2f6f9a, transparent: true, opacity: 0.88, flatShading: true }));
     this.water.rotation.x = -Math.PI / 2; this.water.position.set(dcx, -0.45, dcz); s.add(this.water);
     this.waterBase = Float32Array.from(wgeo.attributes.position.array);
+    this.waters.push({ mesh: this.water, base: this.waterBase });
+    if (DRAIN !== MAP.drain) for (const [ox, oz, sx, sz] of [[0, -dd / 2, dw + 0.4, 0.2], [0, dd / 2, dw + 0.4, 0.2], [-dw / 2, 0, 0.2, dd], [dw / 2, 0, 0.2, dd]]) {
+      const rim = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.12, sz), tmat('planks', 2, 0x8a6a48)); rim.position.set(dcx + ox, 0.06, dcz + oz); s.add(rim);   // trough rim, flush
+    }
+    }
+    // Mud (stables): a dark, wet layer over the dirt.
+    for (const mr of MAP.muds || []) {
+      const mud = new THREE.Mesh(new THREE.PlaneGeometry(mr.x1 - mr.x0, mr.z1 - mr.z0), tmat('dirt', 3, 0x5a4028)); mud.material.transparent = true; mud.material.opacity = 0.85;
+      mud.rotation.x = -Math.PI / 2; mud.position.set((mr.x0 + mr.x1) / 2, 0.015, (mr.z0 + mr.z1) / 2); s.add(mud);
+    }
+    if (BRIDGE) {
     // Fallen branch across the moat (the mouse-sized bridge).
     const bw = BRIDGE.x1 - BRIDGE.x0, bd = BRIDGE.z1 - BRIDGE.z0;
     const branch = outline(new THREE.Mesh(new THREE.CylinderGeometry(bw / 2, bw / 2 * 0.85, bd, 12), tmat('bark', 3, 0xc0a890)), 1.01);
     branch.rotation.x = Math.PI / 2; branch.scale.set(1, 1, 0.5); branch.position.set((BRIDGE.x0 + BRIDGE.x1) / 2, -bw / 4 + 0.02, (BRIDGE.z0 + BRIDGE.z1) / 2); s.add(branch);
+    }
 
     // Forest: a dense hedge of roots, rocks and bushes along the road (that's
     // the lane wall), with tall trunks further back. All on solid forest cells.
@@ -118,10 +140,12 @@ export class Scene {
       trunk.position.set((x + 0.5) * CELL, 11, (z + 0.5) * CELL); s.add(trunk);
       const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(7, 0), mat(0x2e4428)); crown.position.set((x + 0.5) * CELL, 24, (z + 0.5) * CELL); s.add(crown);
     }
-    // Spawn: arched mouse hole in a huge stump at the road's end (Y).
+    // Spawn: arched mouse hole — in a huge stump at the road's end outside, in the wall indoors.
     for (const sp of SPAWNS) {
-      const stump = outline(new THREE.Mesh(new THREE.CylinderGeometry(7, 7.5, 7, 16), tmat('bark', 4, 0xc0a890)), 1.01);
-      stump.position.set(sp.x, 3.5, WORLD_H + 7); s.add(stump);
+      if (MAP.roads) {
+        const stump = outline(new THREE.Mesh(new THREE.CylinderGeometry(7, 7.5, 7, 16), tmat('bark', 4, 0xc0a890)), 1.01);
+        stump.position.set(sp.x, 3.5, WORLD_H + 7); s.add(stump);
+      }
       this.archHole(sp.x, WORLD_H, Math.PI, 1.6, 0x050403);
     }
 
@@ -138,7 +162,8 @@ export class Scene {
     // One proxy per solid forest cell next to the road is enough.
     for (const [x, z] of edge) this.proxy(x * CELL, 0, z * CELL, (x + 1) * CELL, 5, (z + 1) * CELL);
 
-    // Gate: a wooden board jammed in the portcullis gap, with a cat-sized hole.
+    // Gate: a wooden board jammed in the portcullis gap, with a cat-sized hole (entrance map only).
+    if (GATE) {
     const gw = GATE.x1 - GATE.x0, gd = GATE.z1 - GATE.z0, gx = (GATE.x0 + GATE.x1) / 2, gz = (GATE.z0 + GATE.z1) / 2;
     const gate = new THREE.Group(); gate.position.set(gx, 0, gz);
     for (const side of [-1, 1]) {
@@ -150,6 +175,7 @@ export class Scene {
     this.gateProxy = this.proxy(GATE.x0, 0, GATE.z0, GATE.x1, 4.2, GATE.z1);
     // Portcullis raised into the tunnel roof (bars end at the roof line).
     for (let k = 0; k < 20; k++) { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.2), mat(0x2a2826)); bar.position.set(GATE.x0 + 0.4 + k * 0.8, 9 + 1.5, GATE.z1 - 0.3); s.add(bar); }
+    }
 
     // Exit X: arched mouse hole in the great hall wall, glowing.
     const hx = (HOLE.x0 + HOLE.x1) / 2;
@@ -159,7 +185,7 @@ export class Scene {
     this.exitRing.rotation.x = -Math.PI / 2; this.exitRing.position.set(hx, 0.03, 2.2); s.add(this.exitRing);
     // Wall torches at human height (2.4 m) in iron sconces: [x, z, face normal x, z].
     this.flames = [];
-    for (const [x, z, nx, nz] of [[2, 40, 1, 0], [94, 40, -1, 0], [40, 66, 1, 0], [56, 66, -1, 0], [42, 2, 0, 1], [54, 2, 0, 1], [30, 20, -1, 0], [66, 20, 1, 0]]) {
+    for (const [x, z, nx, nz] of MAP.torches || []) {
       const g = new THREE.Group(); g.position.set(x, 8, z); g.rotation.y = Math.atan2(nx, nz); s.add(g);
       g.add(part3(new THREE.BoxGeometry(0.5, 0.8, 0.12), 0x26221e, 0, 0, 0.06));
       const stick = part3(new THREE.CylinderGeometry(0.12, 0.08, 1.2, 6), 0x5a3a20, 0, 0.3, 0.45); stick.rotation.x = 0.35; g.add(stick);
@@ -172,6 +198,51 @@ export class Scene {
   }
 
   // Dark arched hole facing +z (rotY 0) or -z (rotY PI), flush with a wall face.
+  // ---------- map features (built once, animated every frame) ----------
+  buildMapFeatures() {
+    const s = this.scene;
+    // Timed doors: plank doors that slide up into the ceiling when open.
+    this.doorMeshes = (MAP.doors || []).map(d => {
+      const [x0, z0, x1, z1] = d.rect, m = outline(new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 6, z1 - z0), tmat('planks', 2, 0x9a7a58)), 1.01);
+      m.position.set((x0 + x1) / 2, 3, (z0 + z1) / 2); s.add(m); return m;
+    });
+    // Fires: flames, a glow and embers in front of the ovens and hearth.
+    this.fireFx = (MAP.fires || []).map(f => {
+      const g = new THREE.Group(); g.position.set(f.x, 0, f.z); s.add(g);
+      for (let k = 0; k < 5; k++) {
+        const fl = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.2, 6), new THREE.MeshBasicMaterial({ color: k % 2 ? 0xffa030 : 0xff5a1a, transparent: true, opacity: 0.85 }));
+        fl.position.set(Math.cos(k * 1.26) * f.r * 0.4, 0.6, Math.sin(k * 1.26) * f.r * 0.4); g.add(fl);
+      }
+      const glow = new THREE.Mesh(new THREE.CircleGeometry(f.r, 24), new THREE.MeshBasicMaterial({ color: 0xff6a20, transparent: true, opacity: 0.25, depthWrite: false }));
+      glow.rotation.x = -Math.PI / 2; glow.position.y = 0.03; g.add(glow);
+      const l = new THREE.PointLight(0xff7a30, 18, 14, 1.4); l.position.y = 1.5; g.add(l);
+      return { g, f };
+    });
+    // Food piles: produce heaped on the sacks; the heap shrinks as mice eat it.
+    this.foodFx = this.sim.foods.map(f => {
+      const g = new THREE.Group(); g.position.set(f.x, 0.8, f.z); s.add(g);
+      const col = /cheese/i.test(f.name) ? 0xf0c838 : /bread|oat/i.test(f.name) ? 0xc89a5a : /cabbage|veg/i.test(f.name) ? 0x6aa040 : 0xc83a2a;
+      if (!/wheel/i.test(f.name)) for (let k = 0; k < 9; k++) {
+        const a = k * 2.4, r = 0.35 + (k % 3) * 0.3;
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), mat(col)); ball.position.set(Math.cos(a) * r, 0.15 + (k % 2) * 0.2, Math.sin(a) * r); g.add(ball);
+      }
+      return { g, f };
+    });
+    this.propMeshes = new Map();
+  }
+  drawMapFeatures(dt, now) {
+    if (!this.doorMeshes) this.buildMapFeatures();
+    this.sim.doors.forEach((d, k) => { const m = this.doorMeshes[k]; const ty = d.open ? 9.3 : 3;   // open: tucked up above the ceiling m.position.y += (ty - m.position.y) * Math.min(1, dt * 6); });
+    for (const { g } of this.fireFx) g.children.forEach((c, k) => { if (c.geometry && c.geometry.type === 'ConeGeometry') c.scale.y = 0.8 + Math.sin(now / 70 + k * 1.9) * 0.3; });
+    if (Math.random() < dt * 8) for (const { f } of this.fireFx) this.spawnParticles(f.x + (Math.random() - 0.5) * f.r, 0.5, f.z + (Math.random() - 0.5) * f.r, 0xff8a30, 1, 2, 0.05);
+    for (const { g, f } of this.foodFx) { const k = Math.max(0, f.left / f.amount); g.scale.setScalar(Math.max(0.01, k)); g.visible = k > 0; }
+    // Knock-over props: pots, jugs, baskets, buckets.
+    this.syncSimple(this.sim.props, this.propMeshes, (p) => makeProp(p.kind), (g, p) => {
+      g.position.set(p.x, p.y, p.z); g.rotation.z = p.state === 'up' ? 0 : Math.min(Math.PI / 2, p.tilt);
+    });
+    if (this.lantern) { const c = this.sim.cats.values().next().value; if (c) this.lantern.position.set(c.x, c.y + 2.5, c.z); }
+  }
+
   archHole(x, z, rotY, r, color) {
     const g = new THREE.Group(); g.position.set(x, 0, z + (rotY ? -0.01 : 0.01)); g.rotation.y = rotY;
     const m = new THREE.MeshBasicMaterial({ color });
@@ -382,6 +453,8 @@ export class Scene {
       case 'hairSplat': this.spawnParticles(e.x, e.y + 0.1, e.z, 0x6a7a3a, 14, 4); this.decal(e.x, e.z, 0x5a6a2a, 0.9, Math.max(0.02, e.y + 0.02)); break;
       case 'wallkick': this.spawnParticles(e.x, e.y + 0.5, e.z, 0xd8d0c0, 6, 2); break;
       case 'item': this.itemFx(e); break;
+      case 'smash': this.spawnParticles(e.x, e.y + 0.3, e.z, 0xb86a3a, 16, 4, 0.08); this.shake = Math.max(this.shake, 0.15); break;
+      case 'gorged': this.spawnParticles(e.x, 0.6, e.z, 0xe8c040, 4, 1.5, 0.05); break;
       case 'dash': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.2, cat.z, 0xd8d0c0, 10, 3); break; }
       case 'sit': this.ring(e.x, e.z, e.r, 0xd8d0c0, 0.4, false, true); this.spawnParticles(e.x, 0.2, e.z, 0xd8d0c0, 20, 5, 0.1); this.shake = Math.max(this.shake, 0.3); break;
       case 'tinker': this.ring(e.x, e.z, e.r, 0x6fd8ff, 0.6, false, true); break;
@@ -483,9 +556,14 @@ export class Scene {
     // Item effects: the laser dot, flea clouds, squeaky toys.
     this.syncSimple(sim.zones, this.zoneMeshes, (z) => {
       if (z.kind === 'laser') { const m = new THREE.Mesh(new THREE.CircleGeometry(0.25, 12), new THREE.MeshBasicMaterial({ color: 0xff2020 })); m.rotation.x = -Math.PI / 2; return m; }
+      if (z.kind === 'spill') {   // what came out of the pot: water, milk, oil, grain
+        const col = { pot: 0x3a6a8a, jug: 0xe8e4d8, basket: 0xc8a050, bucket: 0x3a6a8a }[z.what] || 0x3a6a8a;
+        const m = new THREE.Mesh(new THREE.CircleGeometry(z.r, 20), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.userData.spill = true; return m;
+      }
       const m = new THREE.Mesh(new THREE.SphereGeometry(z.r, 16, 10), new THREE.MeshBasicMaterial({ color: 0x8a7a3a, transparent: true, opacity: 0.25, depthWrite: false })); m.scale.y = 0.35; return m;
     }, (g, z) => {
       if (z.kind === 'laser') g.position.set(z.x + Math.sin(now / 160) * 0.8, 0.06, z.z + Math.cos(now / 130) * 0.8);   // the dot dances about
+      else if (g.userData.spill) { g.position.set(z.x, this.sim.groundAt(cellOf(z.x, z.z), 5, 0.3, true) + 0.03, z.z); g.material.opacity = Math.min(0.55, z.t / 3); }
       else { g.position.set(z.x, 0.3, z.z); g.material.opacity = 0.18 + Math.sin(now / 90) * 0.06; if (Math.random() < 0.3) this.spawnParticles(z.x + (Math.random() - 0.5) * z.r * 1.5, 0.4, z.z + (Math.random() - 0.5) * z.r * 1.5, 0x3a3a1a, 1, 1, 0.03); }
     });
     this.syncSimple(sim.decoys, this.decoyMeshes, () => {
@@ -551,9 +629,13 @@ export class Scene {
       if (u.life <= 0) { this.scene.remove(p); return false; } return true;
     });
     this.decals = this.decals.filter(d => { d.userData.life -= dt; d.material.opacity = Math.min(0.7, d.userData.life / 3); if (d.userData.life <= 0) { this.scene.remove(d); return false; } return true; });
-    const pos = this.water.geometry.attributes.position, base = this.waterBase, t = now / 600;
-    for (let v = 0; v < pos.count; v++) { const x = base[v * 3], y = base[v * 3 + 1]; pos.array[v * 3 + 2] = Math.sin(x * 0.6 + t) * 0.06 + Math.cos(y * 0.9 + t * 1.3) * 0.05; }
-    pos.needsUpdate = true; this.water.geometry.computeVertexNormals();
+    const t = now / 600;
+    for (const wtr of this.waters) {
+      const pos = wtr.mesh.geometry.attributes.position, base = wtr.base;
+      for (let v = 0; v < pos.count; v++) { const x = base[v * 3], y = base[v * 3 + 1]; pos.array[v * 3 + 2] = Math.sin(x * 0.6 + t) * 0.06 + Math.cos(y * 0.9 + t * 1.3) * 0.05; }
+      pos.needsUpdate = true; wtr.mesh.geometry.computeVertexNormals();
+    }
+    this.drawMapFeatures(dt, now);
     this.exitRing.material.opacity = 0.5 + Math.sin(now / 250) * 0.3;
     this.flames.forEach((f, k) => { const n = Math.sin(now / 90 + k * 1.7) * 0.5 + Math.sin(now / 37 + k) * 0.5; f.scale.set(1 + n * 0.12, 1 + n * 0.25, 1 + n * 0.12); });
     this.updateRoute(now);

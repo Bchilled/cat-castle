@@ -5,6 +5,7 @@ import { CAT_INFO, abilityRows } from './ui/catinfo.js';
 import { portraitURL } from './ui/portraits.js';
 import { Sfx } from './audio/sfx.js';
 import { Sim } from './sim/sim.js';
+import { MAPS, MAP_ORDER } from './sim/map.js';
 import { W, CELL } from './sim/map.js';
 import { LocalTransport } from './net/local.js';
 import { Scene } from './render/scene.js';
@@ -98,6 +99,14 @@ function drawLoadout() {
   document.querySelectorAll('[data-item]').forEach(b => b.onclick = () => { chosenItem = b.dataset.item; save('catcastle.item', chosenItem); sfx.play('click'); drawLoadout(); });
 }
 drawLoadout();
+// Map select: the six stretches of the journey, entrance to kitchen.
+let chosenMap = MAPS[load('catcastle.map', 'entrance')] ? load('catcastle.map', 'entrance') : 'entrance';
+function drawMaps() {
+  document.getElementById('maps').innerHTML = MAP_ORDER.map((k, i) => `<button class="mp ${k === chosenMap ? 'on' : ''}" data-map="${k}"><b>${i + 1}. ${MAPS[k].name}</b><small>${MAPS[k].twist}</small></button>`).join('');
+  document.querySelectorAll('[data-map]').forEach(b => b.onclick = () => { chosenMap = b.dataset.map; save('catcastle.map', chosenMap); sfx.play('click'); drawMaps(); });
+}
+drawMaps();
+if (new URLSearchParams(location.search).has('go')) setTimeout(() => { previewOn = false; history.replaceState(null, '', location.pathname); start('normal'); }, 0);
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
   if (loadout.length < 1) { sfx.play('deny'); return; }
   previewOn = false; start(b.dataset.mode);
@@ -106,7 +115,7 @@ document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click'
 function start(mode) {
   document.getElementById('menu').classList.remove('show');
   sfx.unlock(); sfx.setMusic('build');
-  const sim = new Sim({ mode, seed: (Date.now() & 0xffff) | 1 });
+  const sim = new Sim({ mode, seed: (Date.now() & 0xffff) | 1, map: chosenMap });
   sim.addPlayer(LOCAL_ID, chosenCat, { loadout, item: chosenItem });
   const net = new LocalTransport(sim);
   const canvas = document.getElementById('game');
@@ -274,6 +283,14 @@ function start(mode) {
           profile.yarn += sim.yarn; saveProfile(profile);
           document.exitPointerLock?.();
           hud.showEnd(e.won, e.rating, sim, profile);
+          // Won a map: offer the next stretch of the journey.
+          const nextMap = MAP_ORDER[MAP_ORDER.indexOf(chosenMap) + 1];
+          const endEl = document.getElementById('end');
+          if (e.won && nextMap) {
+            const b = document.createElement('button'); b.className = 'play'; b.textContent = `Onward: ${MAPS[nextMap].name}`;
+            b.onclick = () => { save('catcastle.map', nextMap); location.href = location.pathname + '?go=1'; };
+            endEl.prepend(b);
+          }
         }
       }
       sim.events.length = 0;
