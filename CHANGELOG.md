@@ -15,7 +15,7 @@ Mice
 Puddin
 - Pounce: radius 1.6 → 2.6, stun 1.8 → 3.0 s, damage 40 → 50; shockwave ring on landing; stunned mice show circling stars that shrink as the stun runs out. `src/config.js` 71-73; `src/sim/sim.js` 640-641; `src/render/scene.js` 194-195, 529-552.
 Tests
-- New checks for tile traps, grinder reach, lane spread, three-way routes, aggro bites, spit, splitter, intros, boss stomp, pounce stun timer (42 checks). `tests/sim-test.mjs`.
+- New checks for tile traps, grinder reach, lane spread, three-way routes, aggro bites, spit, splitter, intros, boss stomp, pounce stun timer (46 checks, all passing). `tests/sim-test.mjs`.
 
 ## 0.4.3 — 2026-11-07
 Fixed
