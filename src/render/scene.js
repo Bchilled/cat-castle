@@ -232,7 +232,8 @@ export class Scene {
   }
   drawMapFeatures(dt, now) {
     if (!this.doorMeshes) this.buildMapFeatures();
-    this.sim.doors.forEach((d, k) => { const m = this.doorMeshes[k]; const ty = d.open ? 9.3 : 3;   // open: tucked up above the ceiling m.position.y += (ty - m.position.y) * Math.min(1, dt * 6); });
+    // Doors slide up when open (tucked above the passage ceiling) and drop to the floor when shut.
+    this.sim.doors.forEach((d, k) => { const m = this.doorMeshes[k]; const ty = d.open ? 9.3 : 3; m.position.y += (ty - m.position.y) * Math.min(1, dt * 6); });
     for (const { g } of this.fireFx) g.children.forEach((c, k) => { if (c.geometry && c.geometry.type === 'ConeGeometry') c.scale.y = 0.8 + Math.sin(now / 70 + k * 1.9) * 0.3; });
     if (Math.random() < dt * 8) for (const { f } of this.fireFx) this.spawnParticles(f.x + (Math.random() - 0.5) * f.r, 0.5, f.z + (Math.random() - 0.5) * f.r, 0xff8a30, 1, 2, 0.05);
     for (const { g, f } of this.foodFx) { const k = Math.max(0, f.left / f.amount); g.scale.setScalar(Math.max(0.01, k)); g.visible = k > 0; }

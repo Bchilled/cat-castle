@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1 — 2026-11-07
+Fixed
+- The game wouldn't load (v0.10.0): a comment had swallowed the end of the door-animation line. `src/render/scene.js` drawMapFeatures (~line 235).
+
 ## 0.10.0 — 2026-11-07
 Six maps: the journey from the castle entrance to the kitchen (pick any on the menu; winning a map offers "Onward" to the next)
 - 1 Castle Entrance (as before) — now with pots, jugs and baskets to knock over.
