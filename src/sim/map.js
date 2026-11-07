@@ -90,12 +90,6 @@ export const VIAS = [
   { name: 'Guard passage', x: 48, z: 20, weight: 1 },
   { name: 'East lane',     x: 76, z: 7,  weight: 1 },
 ];
-// Tail stashes (trophy lines): sell points.
-export const STALLS = [
-  { name: 'Hall stash',      rect: [54, 3, 57, 5],    sell: [55.5, 6.5] },
-  { name: 'Courtyard stash', rect: [70, 50, 73, 53],  sell: [71.5, 48.5] },
-  { name: 'Clearing stash',  rect: [64, 98, 67, 101], sell: [62.5, 99.5] },
-];
 
 export const idx = (x, z) => z * W + x;
 export const cellOf = (wx, wz) => {
@@ -157,7 +151,6 @@ export function buildMap() {
   });
   eachCell([GATE.x0, GATE.z0, GATE.x1, GATE.z1], i => { type[i] = T.GATE; solid[i] = 0; });
   eachCell([HOLE.x0, HOLE.z0, HOLE.x1, HOLE.z1], i => { type[i] = T.HOLE; solid[i] = 0; });
-  STALLS.forEach(s => eachCell(s.rect, i => { type[i] = T.STALL; solid[i] = 2.2; }));
 
   // Trap surfaces.
   const covered = new Uint8Array(N);

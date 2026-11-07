@@ -65,6 +65,7 @@ Physical, fire, ice, water, wind, earth, electric, psychic, poison, physics, hol
   - earth + physics = knock-down
 
 ## E. Items (like Orcs Must Die's weavers and items)
+Started in v0.9.0: every cat equips one (Laser Pointer, Yarn Bola, Catnip Bomb, Flea Bomb, Fish-Oil Tonic, Squeaky Toy). More to come:
 Equippable actives with cooldowns, for example:
 - Laser pointer (lures mice)
 - Yarn bola (tangles a pack)
@@ -81,4 +82,4 @@ Equippable actives with cooldowns, for example:
 ## Open questions for Brent
 1. Which of A–F comes first? Suggested order: A (climbing and infesting, because everything else sits on it), then C (shop and upgrades), with B, D and E filling in alongside.
 2. ~~Humans: hazards or scenery?~~ Decided: out of zone, scenery in the lit areas; we play in the shadows.
-3. How many traps can you bring into a map (Orcs Must Die uses a limited loadout)?
+3. ~~Loadout size?~~ Decided: 8 traps of your choosing + 1 item per cat (in from v0.9.0).

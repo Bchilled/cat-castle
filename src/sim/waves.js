@@ -8,6 +8,8 @@ import { MICE } from '../config.js';
 
 // What each new kind does — shown when it first appears.
 export const INTRO_TEXT = {
+  magpie: 'steals your Cheese Chunks and dropped tails. Shoot it down.',
+  crow: 'carries mice over your traps and drops them near the hole. Kill it in the air and they fall to their deaths.',
   miniboss: 'huge, fast, and it STOMPS. Red ring on the floor = get out.',
   bigboss: 'the King Rat himself. Bigger stomp. Bring everything.',
   runner: 'quick and flimsy. Glue Traps and Snappers love it.',
@@ -45,6 +47,15 @@ export function buildWave(n, rng, gateUp) {
     if (rng() < 0.12) { queue.push({ type: pool.shift(), gap: 0.8 + rng() * 1.2, pack: 1 }); continue; }   // straggler
     const size = Math.min(pool.length, 6 + Math.floor(rng() * 10));
     for (let k = 0; k < size; k++) queue.push({ type: pool.shift(), gap: k === size - 1 ? Math.max(2.2, 5 - n * 0.1) + rng() : 0.04, pack: size });
+  }
+  // Birds: a few per wave once introduced, slipped in mid-wave. The first ever comes alone.
+  for (const bt of ['magpie', 'crow']) {
+    const b0 = MICE[bt].intro; if (n < b0) continue;
+    const count = n === b0 ? 1 : 1 + Math.floor((n - b0) / 4);
+    for (let k = 0; k < count; k++) {
+      const at = Math.min(queue.length, Math.floor(queue.length * (0.2 + 0.6 * rng())));
+      queue.splice(n === b0 ? 0 : at, 0, { type: bt, gap: n === b0 ? 6 : 0.3, pack: 1, intro: n === b0 && k === 0 });
+    }
   }
   // Bosses come last with an escort mob right behind them.
   const boss = n % 12 === 0 ? 'bigboss' : n % 6 === 0 ? 'miniboss' : null;

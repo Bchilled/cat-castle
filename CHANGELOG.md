@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.0 — 2026-11-07
+New cat
+- Mimo: frisky brown-grey mackerel tabby (neutered, still thinks he's a lion). Pebble Flick (x2 damage to ranged mice: Plague Rats, Siege Mice), Lion Roar (everything within 6.5 takes +35% damage for 6 s; birds get knocked out of the sky), Sky Swipe (E: springs at the nearest bird), Double Jump, Bird Hunter (x3 damage to birds). Voice lines, model, winking portrait. `src/config.js`; `src/sim/sim.js` (firePebble, roar, swatBirds); `src/render/models.js` makeMimo; `src/ui/portraits.js`.
+Birds (new enemy)
+- Magpies (from wave 8) steal Cheese Chunks or peck a cat and steal 15 Paw Points. Crows (from wave 10) carry 3 mice over your traps and drop them near the hole; shoot a crow down in the air and its mice fall and splat. Any projectile or melee can hit them; Bug Zappers fry low-flying birds. Shown on the radar as chevrons (red = carrying mice). `src/sim/sim.js` spawnBird/stepBirds/damageBird; `src/sim/waves.js`; `src/render/models.js` makeBird; `src/render/scene.js`; `src/ui/hud.js`.
+Every cat: attack + 2 abilities + jump, and its own numbers
+- New E ability for every cat: Fred Alley Dash, Puddin Big Sit, Scary Cat Leap Back (moved from Shift), Nebbie Tinker (resets nearby traps, +25% damage), Casper Show Off (pulls every mouse to him, takes less damage), Meow Meow Groom (heals the most-hurt cat nearby), Mimo Sky Swipe. `src/config.js` ABILITY2; `src/sim/sim.js` ability2 + ab_*.
+- Each cat now has its own health, max energy and energy recharge rate. `src/config.js` CATS.
+- Collar colours: each cat wears its own collar colour, picked to contrast its fur (Fred blue, Puddin purple, Scary Cat lime, Nebbie pink, Casper red, Meow Meow orange, Mimo cyan): on the model, the portrait, the HUD badge and the radar marker. `src/config.js`; `src/render/models.js` makeCat; `src/ui/portraits.js`; `src/ui/hud.js`.
+Loadout and items
+- Pick 8 traps to bring (from 9) and 1 item on the menu; remembered between visits. Only traps you brought can be placed. `src/main.js`; `src/sim/sim.js` placeTrap.
+- Items (Q): Laser Pointer (mice chase the dot), Yarn Bola (ties up mice where it lands), Catnip Bomb (cats buffed, mice confused), Flea Bomb (damage cloud), Fish-Oil Tonic (heal half), Squeaky Toy (mice attack it instead of moving on). `src/config.js` ITEMS; `src/sim/sim.js` useItem/stepZones; `src/render/scene.js`.
+Economy
+- Tails and stashes removed. Every kill pays Paw Points straight away (Pinkie 2, House Mouse 5, Sewer Rat 12, Fat Rat 25, Rat Captain 150, King Rat 400, birds 10–15). "Sardines" renamed Paw Points everywhere. Rusty Bell now +25% Paw Points per kill; Mouldy Rind now +50% wave-clear bonus. `src/config.js`; `src/sim/sim.js` killMouse; `src/sim/map.js` (stashes gone); `src/render/scene.js`; `index.html`.
+UI
+- Ability bar: Left click / Right click / E / Space / Q item for every cat, with energy costs and cooldowns. Cat select is a 4-wide portrait grid; detail shows health, energy and recharge. Controls panel tucks away when wave 1 starts (H brings it back). Trap costs show a paw icon. Menu scrolls on short screens.
+Tests: 80 checks, all passing.
+
 ## 0.8.0 — 2026-11-07
 Added
 - Poison Box replaces the Toy Block barricade: a crate of rat poison. Mice route around it if they possibly can; if forced to chew through, the poison hurts them every second they chew (bosses take 40%). `src/config.js` 217; `src/sim/sim.js` 1060-1066, 1197; `src/render/models.js` 209-221.

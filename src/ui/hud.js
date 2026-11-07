@@ -3,8 +3,8 @@
 // Plain HTML/SVG/canvas over the 3D view. Why: crisp text, cheap, easy to restyle.
 
 import * as THREE from 'three';
-import { TRAPS, TRAP_ORDER, RULES, TRINKETS, CAT, MICE } from '../config.js';
-import { W, H, CELL, T, STALLS, HOLE, SPAWNS, GATE } from '../sim/map.js';
+import { TRAPS, TRAP_ORDER, RULES, TRINKETS, CAT, MICE, CATS, ITEMS } from '../config.js';
+import { W, H, CELL, T, HOLE, SPAWNS, GATE } from '../sim/map.js';
 import { previewWave } from '../sim/waves.js';
 import { makeTrap } from '../render/models.js';
 
@@ -50,10 +50,10 @@ function whiskerSvg() {
 const TYPE_RGB = { [T.FLOOR]: '#5a544c', [T.ROAD]: '#5a4630', [T.WATER]: '#2f6f9a', [T.BRIDGE]: '#7a5a38', [T.SOLID]: '#1e1a16', [T.GATE]: '#7a5a38', [T.HOLE]: '#d8402a', [T.STALL]: '#c8a030' };
 
 export class Hud {
-  constructor(sim) {
+  constructor(sim, loadout = TRAP_ORDER.slice(0, 8)) {
     this.sim = sim; this.msgT = 0; this.subT = 0;
     const icons = trapIcons();
-    $('trapbar').innerHTML = TRAP_ORDER.map((k, i) =>
+    $('trapbar').innerHTML = loadout.map((k, i) =>
       `<div class="slot" data-k="${k}"><span class="key">${i + 1}</span>${icons[k] ? `<img src="${icons[k]}" alt="">` : ''}<span class="nm">${TRAPS[k].name}</span><span class="cost">${TRAPS[k].cost}</span></div>`).join('');
     this.preview = null; this.previewWave = -1; this.lastTk = '';
     $('crosshair').innerHTML = whiskerSvg();
@@ -78,7 +78,6 @@ export class Hud {
     $('sardines').textContent = h.sardines;
     $('yarn').textContent = h.yarn;
     $('kills').textContent = this.sim.stats.kills;
-    $('tails').textContent = `${h.tails}/${RULES.tailCarryCap}`;
     $('catname').textContent = h.name;
     $('wave').textContent = h.wave ? `Wave ${h.wave}${h.mode === 'normal' ? ' / ' + RULES.winWave : ''}` : 'Get ready';
     let status = '';
@@ -103,28 +102,25 @@ export class Hud {
     for (const p of this.wen) p.style.strokeDasharray = `${Math.max(0, h.energy) * 100} 100`;
     $('crosshair').classList.toggle('bad', !!sel && !aimValid);
     // Ability panel, per cat.
-    const info = CAT_INFO[h.kind] || CAT_INFO.fred, ab = info.abil;
-    $('ab-pri-name').textContent = ab[0][1];
+    // Boxes: left click, right click, E, Space, Q (item). Same layout for every cat.
+    const info = CAT_INFO[h.kind] || CAT_INFO.fred;
+    $('ab-pri-name').textContent = info.pri[0];
     $('ab-pri-note').textContent = h.kind === 'puddin' ? (h.eatCd > 0 ? `eat in ${Math.ceil(h.eatCd * CAT.eatCooldown)}s` : 'kill = eat + heal')
-      : h.kind === 'casper' ? `rage +${Math.round(h.rage * 100)}% dmg` : ab[0][2].split(',')[0];
-    $('ab-sec-name').textContent = ab[1][1];
+      : h.kind === 'casper' ? `rage +${Math.round(h.rage * 100)}% dmg` : info.pri[1].split(',')[0];
+    $('ab-sec-name').textContent = info.sec[0];
     $('ab-sec-note').textContent = `${h.secCost} energy`;
-    setCd($('ab-sec'), h.secCd, h.energy * CAT.maxEnergy >= h.secCost);
-    $('ab-jump-k').textContent = ab[2][0];
-    $('ab-jump-name').textContent = ab[2][1];
-    $('ab-jump-note').textContent = h.napping ? 'napping… +HP' : ab[2][2].split(',')[0];
+    setCd($('ab-sec'), h.secCd, h.energyAbs >= h.secCost);
+    $('ab-alt-name').textContent = info.e[0];
+    $('ab-alt-note').textContent = h.altCost ? `${h.altCost} energy` : 'free';
+    setCd($('ab-alt'), h.altCd, h.energyAbs >= h.altCost);
+    $('ab-jump-name').textContent = info.jump[0];
+    $('ab-jump-note').textContent = h.napping ? 'napping… +HP' : info.passive ? info.passive[0] + ': ' + info.passive[1].split(';')[0] : info.jump[1];
     $('ab-charge').parentElement.style.display = h.kind === 'puddin' || h.kind === 'casper' ? '' : 'none';
     $('ab-charge').style.width = `${Math.round((h.kind === 'casper' ? h.rage : h.charge) * 100)}%`;
     $('ab-charge').style.background = h.kind === 'casper' ? '#e0402a' : '';
-    // Fourth box: Shift ability or passive.
-    const alt = ab[3];
-    $('ab-alt').style.display = alt ? '' : 'none';
-    if (alt) {
-      $('ab-alt-k').textContent = alt[0]; $('ab-alt-name').textContent = alt[1];
-      $('ab-alt-note').textContent = alt[0] === 'Shift' ? (h.altCd > 0 ? `${Math.ceil(h.altCd * CAT.leapBackCooldown)}s` : 'ready') : alt[2].split(';')[0];
-      setCd($('ab-alt'), alt[0] === 'Shift' ? h.altCd : 0, true);
-    }
-    if (this.portraitKind !== h.kind) { this.portraitKind = h.kind; $('me-face').src = portraitURL(h.kind); }
+    $('ab-item').style.display = h.item ? '' : 'none';
+    if (h.item) { $('ab-item-name').textContent = ITEMS[h.item].name; $('ab-item-note').textContent = h.itemCd > 0 ? `${Math.ceil(h.itemCd * ITEMS[h.item].cd)}s` : 'ready'; setCd($('ab-item'), h.itemCd, true); }
+    if (this.portraitKind !== h.kind) { this.portraitKind = h.kind; $('me-face').src = portraitURL(h.kind); $('me-face').style.outline = `3px solid ${(CATS[h.kind] || CATS.fred).collar}`; }
     $('me').classList.toggle('buffed', h.buffT > 0);
     // Trap info card while a trap is in hand.
     if (sel) {
@@ -145,8 +141,7 @@ export class Hud {
     }
     let prompt = '';
     if (!h.alive) prompt = `Respawning in ${Math.ceil(h.respawnT)}…`;
-    else if (h.nearStall && h.tails > 0) prompt = `E — trade ${h.tails} tails for sardines`;
-    else if (sel) prompt = `Right click to place · R rotate · X sell · Q put away`;
+    else if (sel) prompt = `Right click to place · R rotate · X sell · press the number again to put it away`;
     $('prompt').textContent = prompt;
     this.msgT -= dt; if (this.msgT <= 0) $('msg').classList.remove('show');
     this.subT -= dt; if (this.subT <= 0) $('sub').classList.remove('show');
@@ -161,17 +156,23 @@ export class Hud {
     // Mouse route.
     c.strokeStyle = 'rgba(180,138,255,0.75)'; c.lineWidth = 1.5;
     for (const route of sim.routes()) { c.beginPath(); route.forEach(([x, z], k) => { if (k === 0) c.moveTo(this.rx(x), this.rz(z)); else c.lineTo(this.rx(x), this.rz(z)); }); c.stroke(); }
-    c.fillStyle = '#e8c33a'; for (const t of sim.tails) c.fillRect(this.rx(t.x) - 1, this.rz(t.z) - 1, 2, 2);
     for (const m of sim.mice) {
       const d = MICE[m.type]; c.fillStyle = d.boss ? '#ff3a2a' : '#e86a4a';
       const r = d.boss ? 4 : d.size > 0.5 ? 2 : 1.3;
       c.beginPath(); c.arc(this.rx(m.x), this.rz(m.z), r, 0, 7); c.fill();
     }
+    // Birds: small white chevrons (crows carrying mice in red).
+    for (const b of sim.birds) {
+      const x = this.rx(b.x), z = this.rz(b.z);
+      c.strokeStyle = b.carry ? '#ff5a3a' : '#f0f0f0'; c.lineWidth = 1.6;
+      c.beginPath(); c.moveTo(x - 4, z - 2); c.lineTo(x, z + 1); c.lineTo(x + 4, z - 2); c.stroke();
+    }
     for (const cat of sim.cats.values()) {
       if (!cat.alive) continue;
       const x = this.rx(cat.x), z = this.rz(cat.z), a = cat.yaw;
-      c.fillStyle = cat.kind === 'puddin' ? '#f0e8da' : '#f08a30';
-      c.beginPath(); c.moveTo(x + Math.sin(a) * 6, z + Math.cos(a) * 6); c.lineTo(x + Math.sin(a + 2.5) * 4, z + Math.cos(a + 2.5) * 4); c.lineTo(x + Math.sin(a - 2.5) * 4, z + Math.cos(a - 2.5) * 4); c.fill();
+      // Each cat's marker is its collar colour, outlined so it pops on any floor.
+      c.fillStyle = cat.def.collar || '#f08a30'; c.strokeStyle = '#000'; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(x + Math.sin(a) * 7, z + Math.cos(a) * 7); c.lineTo(x + Math.sin(a + 2.5) * 5, z + Math.cos(a + 2.5) * 5); c.lineTo(x + Math.sin(a - 2.5) * 5, z + Math.cos(a - 2.5) * 5); c.closePath(); c.stroke(); c.fill();
     }
     // Labels: exit X, spawn Y.
     c.font = 'bold 11px sans-serif'; c.fillStyle = '#ff5a3a'; c.fillText('X', this.rx((HOLE.x0 + HOLE.x1) / 2) - 4, this.rz(HOLE.z1) + 12);

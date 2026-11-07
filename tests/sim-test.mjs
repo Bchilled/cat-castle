@@ -1,8 +1,8 @@
 // Headless rules tests: runs the sim with no graphics.
 // Run: node tests/sim-test.mjs
-import { TRAPS } from '../src/config.js';
+import { TRAPS, CATS, ITEMS } from '../src/config.js';
 import { Sim } from '../src/sim/sim.js';
-import { W, CELL, idx, STALLS } from '../src/sim/map.js';
+import { W, CELL, idx } from '../src/sim/map.js';
 import { nextCell } from '../src/sim/path.js';
 import { TICK_HZ } from '../src/config.js';
 import { buildWave } from '../src/sim/waves.js';
@@ -92,16 +92,14 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   ok(!c.alive && s8.lives === 17, `walking off the branch drowns the cat (lives ${s8.lives})`);
 }
 
-// 8. Fred's pellets kill with bleed; tails drop, get picked up and traded.
+// 8. Fred's pellets kill with bleed; the kill pays Paw Points straight away.
 {
   const s9 = new Sim({ seed: 2 }); const c = s9.addPlayer('p1', 'fred'); c.x = 60; c.z = 40;
   s9.spawnMouse('mouse', 1); const m = s9.mice[0]; m.x = 60; m.z = 45; m.state = 'stuck'; m.stuckT = 99;
+  const b = s9.sardines;
   run(s9, 3, () => inp(s9, 'p1', { primary: true, aim: { x: m.x, y: 0.2, z: m.z } }));
   ok(m.dead, 'pellets kill a mouse');
-  if (s9.tails[0]) { c.x = s9.tails[0].x; c.z = s9.tails[0].z; s9.step(); }
-  ok(c.tails >= 1, `tail picked up (${c.tails})`);
-  c.x = STALLS[1].sell[0]; c.z = STALLS[1].sell[1]; const b = s9.sardines; s9.command({ type: 'sellTails', id: 'p1' });
-  ok(s9.sardines > b, `tails traded for sardines (${b} -> ${s9.sardines})`);
+  ok(s9.sardines === b + 5, `kill pays 5 Paw Points (${b} -> ${s9.sardines})`);
 }
 
 // 9. Puddin's bite: a killing bite eats the mouse (heals, no tail).
@@ -109,7 +107,7 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   const s10 = new Sim({ seed: 2 }); const p = s10.addPlayer('p1', 'puddin'); p.x = 60; p.z = 40; p.hp = 100;
   s10.spawnMouse('mouse', 1); const m = s10.mice[0]; m.x = 60; m.z = 40.9; m.state = 'stuck'; m.stuckT = 99;
   const ev = run(s10, 2, () => inp(s10, 'p1', { primary: true }));
-  ok(ev.some(e => e.t === 'eat') && p.hp > 100 && s10.tails.length === 0, `bite eats the mouse and heals (hp ${p.hp.toFixed(0)})`);
+  ok(ev.some(e => e.t === 'eat') && p.hp > 100, `bite eats the mouse and heals (hp ${p.hp.toFixed(0)})`);
 }
 
 // 10. Hairball fires even with no aim point, splashes and slows; pounce stuns.
@@ -310,5 +308,48 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   run(s2, 2.5, () => {});
   ok(Math.hypot(mm.x - 63, mm.z - 51) < 2, `mouse walked over to the cheese (${Math.hypot(mm.x - 63, mm.z - 51).toFixed(1)} away)`);
   ok(bait.charges < TRAPS.bait.nibbles, 'and is nibbling it');
+}
+// 26. Mimo: roar makes mice take more damage; pebbles hit ranged mice harder; birds.
+{
+  const s = new Sim({ seed: 81 }); s.addPlayer('p1', 'mimo'); const cat = s.cats.get('p1'); cat.x = 48; cat.z = 48;
+  s.spawnMouse('mouse', 1); const m = s.mice[0]; m.x = 49; m.z = 49;
+  s.buildMouseGrid(); s.roar(cat);
+  const hp0 = m.hp; s.damageMouse(m, 10, 'trap');
+  ok(Math.abs((hp0 - m.hp) - 13.5) < 0.01, `roared mouse takes +35% (${(hp0 - m.hp).toFixed(1)} from 10)`);
+  const b = s.spawnBird('crow', 1); b.x = 48; b.y = 7; b.z = 50; b.state = 'in';
+  for (let k = 0; k < 2; k++) s.damageBird(b, 30);
+  ok(b.dead && s.mice.filter(q2 => q2.type === 'mouse').length >= 4, 'a crow shot down drops its 3 mice');
+  run(s, 2, () => {});
+  ok(s.mice.filter(q2 => q2.type === 'mouse' && !q2.dead).length <= 1, 'mice dropped from 7 high splat');
+  const s2 = new Sim({ seed: 82 }); s2.addPlayer('p1', 'mimo'); s2.gate.up = false; s2.flowDirty = true; s2.step();
+  const cr = s2.spawnBird('crow', 1);
+  run(s2, 30, () => {});
+  ok(s2.mice.length > 0 || s2.lives < 20, 'an unhunted crow drops mice past the defences');
+}
+// 27. Second abilities (E) on every cat; unique energy; items.
+{
+  const kinds = ['fred', 'puddin', 'scary', 'nebbie', 'casper', 'meow', 'mimo'];
+  const energies = new Set(kinds.map(k => CATS[k].maxEnergy)), regens = new Set(kinds.map(k => CATS[k].energyRegen)), hps = new Set(kinds.map(k => CATS[k].maxHp));
+  ok(energies.size === 7 && regens.size === 7 && hps.size === 7, 'every cat has its own health, energy and recharge');
+  for (const k of kinds) {
+    const s = new Sim({ seed: 90 }); s.addPlayer('p1', k); const c = s.cats.get('p1'); c.x = 58; c.z = 52; c.yaw = 0; s.step();
+    s.sardines = 999; s.command({ type: 'place', id: 'p1', trap: 'mousetrap', ax: q(60), az: q(54) });
+    if (k === 'nebbie') { const t = [...s.traps.values()][0]; if (t) t.cd = 3; }
+    if (k === 'meow') c.hp = 40;
+    const e0 = c.energy;
+    s.command({ type: 'input', id: 'p1', mx: 0, mz: 0, yaw: 0, alt: true }); s.step();
+    ok(c.altT > 0 && (c.energy < e0 || k === 'scary'), `${k}: E ability fires and goes on cooldown`);
+  }
+  const s = new Sim({ seed: 91 }); s.addPlayer('p1', 'fred', { item: 'bola', loadout: ['mousetrap'] }); const c = s.cats.get('p1');
+  for (let k = 0; k < 4; k++) { s.spawnMouse('mouse', 1); const m = s.mice[k]; m.x = 60 + k * 0.4; m.z = 50; }
+  s.command({ type: 'item', id: 'p1', aim: { x: 60.6, z: 50 } });
+  ok(s.mice.every(m => m.state === 'stuck') && c.itemT > 0, 'Yarn Bola ties up every mouse it lands on');
+  s.sardines = 999; s.command({ type: 'place', id: 'p1', trap: 'flipper', ax: q(70), az: q(40) });
+  ok(![...s.traps.values()].some(t => t.kind === 'flipper'), 'cannot place a trap you did not bring');
+  const s3 = new Sim({ seed: 92 }); s3.addPlayer('p1', 'fred', { item: 'squeaky' }); s3.gate.up = false; s3.flowDirty = true;
+  s3.spawnMouse('mouse', 1); const mm = s3.mice[0]; mm.x = 60; mm.z = 52;
+  s3.command({ type: 'item', id: 'p1', aim: { x: 63, z: 52 } });
+  run(s3, 2, () => {});
+  ok(Math.hypot(mm.x - 63, mm.z - 52) < 1.5 && s3.decoys[0].hp < ITEMS.squeaky.hp, 'mice go and chew the Squeaky Toy');
 }
 process.exit(fails ? 1 : 0);

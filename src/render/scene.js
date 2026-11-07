@@ -5,11 +5,11 @@
 
 import * as THREE from 'three';
 import {
-  W, H, CELL, T, FURNITURE, DRAIN, BRIDGE, GATE, HOLE, SPAWNS, STALLS, cellOf, WORLD_W, WORLD_H,
+  W, H, CELL, T, FURNITURE, DRAIN, BRIDGE, GATE, HOLE, SPAWNS, cellOf, WORLD_W, WORLD_H,
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
-import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture } from './models.js';
+import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird } from './models.js';
 import { tmat } from './textures.js';
 
 const MAX_MICE = 800;
@@ -30,7 +30,7 @@ export class Scene {
     this.camDist = null;                                            // set per cat on first frame; wheel zooms
 
     this.cats = new Map(); this.trapMeshes = new Map(); this.tailMeshes = new Map(); this.lootMeshes = new Map();
-    this.shotMeshes = new Map(); this.globMeshes = new Map(); this.rings = []; this.shake = 0; this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map();
+    this.shotMeshes = new Map(); this.globMeshes = new Map(); this.birdMeshes = new Map(); this.zoneMeshes = new Map(); this.decoyMeshes = new Map(); this.rings = []; this.shake = 0; this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map();
     this.particles = []; this.decals = [];
     this.aimProxies = new THREE.Group();
     this.buildWorld();
@@ -168,18 +168,6 @@ export class Scene {
       const l = new THREE.PointLight(0xffb060, 10, 30, 1.4); l.position.set(x + nx * 1, 9, z + nz * 1); s.add(l);
     }
     function part3(geo, color, x, y, z) { const m = new THREE.Mesh(geo, mat(color)); m.position.set(x, y, z); return m; }
-    // Tail stashes: crate + a frame with a string to peg tails on. Fits inside its 2.2 collider.
-    this.stashLines = [];
-    for (const st of STALLS) {
-      const [x0, z0, x1, z1] = st.rect, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0;
-      const g = new THREE.Group(); g.position.set(cx, 0, cz); s.add(g);
-      g.add(outline(new THREE.Mesh(new THREE.BoxGeometry(w, 0.9, z1 - z0), mat(0x8a6a44)))); g.children[0].position.y = 0.45;
-      for (const k of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.3, 0.1), mat(0x3a2a1a)); post.position.set(k * (w / 2 - 0.1), 1.55, 0); g.add(post); }
-      const line = new THREE.Mesh(new THREE.BoxGeometry(w - 0.2, 0.03, 0.03), mat(0xd8d0c0)); line.position.y = 2.15; g.add(line);
-      const pegs = new THREE.Group(); g.add(pegs); this.stashLines.push({ pegs, w, n: 0 });
-      const ring = new THREE.Mesh(new THREE.RingGeometry(1.9, 2.05, 24), new THREE.MeshBasicMaterial({ color: 0xe0b030, transparent: true, opacity: 0.35 }));
-      ring.rotation.x = -Math.PI / 2; ring.position.set(st.sell[0], 0.04, st.sell[1]); s.add(ring);
-    }
     this.aimProxies.updateMatrixWorld(true);
   }
 
@@ -308,6 +296,13 @@ export class Scene {
     this.scentMesh.count = n; this.scentMesh.instanceMatrix.needsUpdate = true; this.scentMesh.instanceColor.needsUpdate = true;
   }
 
+  // Burst of colour where an item goes off.
+  itemFx(e) {
+    const col = { laser: 0xff2020, bola: 0xe0a0c0, catnip: 0x8ae06a, flea: 0x6a5a2a, tonic: 0x6ad0ff, squeaky: 0xffd020 }[e.item] || 0xffffff;
+    if (e.r) this.ring(e.x, e.z, e.r, col, 0.5, false, true);
+    this.spawnParticles(e.x, 0.5, e.z, col, 12, 3, 0.06);
+  }
+
   // Flat ring on the floor: warn = pulsing danger zone; grow = shockwave expanding to r.
   ring(x, z, r, color, life, warn = false, grow = false, y = 0) {
     const m = new THREE.Mesh(new THREE.RingGeometry(warn ? 0 : r * 0.85, r, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
@@ -360,7 +355,11 @@ export class Scene {
         this.spawnParticles((GATE.x0 + GATE.x1) / 2, 2, (GATE.z0 + GATE.z1) / 2, 0x7a5a38, 40, 6, 0.15);
         break;
       }
-      case 'spit': case 'bite': case 'whisker': case 'burr': { const c = this.cats.get(e.id); if (c) { c.atkT = 0.14; c.side ^= 1; } break; }
+      case 'roar': this.ring(e.x, e.z, e.r, 0xff9a2a, 0.6, false, true); this.shake = Math.max(this.shake, 0.35); break;
+      case 'birdKill': this.spawnParticles(e.x, e.y, e.z, 0x1a1a22, 16, 4, 0.08); this.spawnParticles(e.x, e.y, e.z, 0xf0f0f0, 6, 3, 0.06); break;
+      case 'steal': this.spawnParticles(e.x, 0.6, e.z, 0xf0c838, 8, 2, 0.06); break;
+      case 'birdDrop': this.spawnParticles(e.x, 1, e.z, 0x8a8580, 6, 2, 0.06); break;
+      case 'spit': case 'bite': case 'whisker': case 'burr': case 'pebble': { const c = this.cats.get(e.id); if (c) { c.atkT = 0.14; c.side ^= 1; } break; }
       case 'claw': { const c = this.cats.get(e.id); if (c) { c.clawT = 0.15; c.side ^= 1; } const cat = this.sim.cats.get(e.id); if (cat && e.hits) this.spawnParticles(cat.x + Math.sin(cat.yaw), cat.y + 0.4, cat.z + Math.cos(cat.yaw), 0xffffff, 3, 3, 0.05); break; }
       case 'whip': {
         const c = this.cats.get(e.id), cat = this.sim.cats.get(e.id); if (c) c.whipT = 0.25;
@@ -382,17 +381,17 @@ export class Scene {
       case 'pelletHit': this.spawnParticles(e.x, e.y + 0.1, e.z, e.mouse ? 0x8a1c14 : 0x8a8a6a, 4, 2, 0.05); break;
       case 'hairSplat': this.spawnParticles(e.x, e.y + 0.1, e.z, 0x6a7a3a, 14, 4); this.decal(e.x, e.z, 0x5a6a2a, 0.9, Math.max(0.02, e.y + 0.02)); break;
       case 'wallkick': this.spawnParticles(e.x, e.y + 0.5, e.z, 0xd8d0c0, 6, 2); break;
-      case 'stash': this.addStashTails(e.stall, e.n); break;
+      case 'item': this.itemFx(e); break;
+      case 'dash': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.2, cat.z, 0xd8d0c0, 10, 3); break; }
+      case 'sit': this.ring(e.x, e.z, e.r, 0xd8d0c0, 0.4, false, true); this.spawnParticles(e.x, 0.2, e.z, 0xd8d0c0, 20, 5, 0.1); this.shake = Math.max(this.shake, 0.3); break;
+      case 'tinker': this.ring(e.x, e.z, e.r, 0x6fd8ff, 0.6, false, true); break;
+      case 'showoff': this.ring(e.x, e.z, e.r, 0xff3a2a, 0.6, false, true); break;
+      case 'groom': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.6, cat.z, 0x9af08a, 14, 2, 0.06); break; }
+      case 'skyswipe': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.2, cat.z, 0xd8d0c0, 8, 3); break; }
+      case 'points': if (Math.random() < 0.35) this.spawnParticles(e.x, 0.6, e.z, 0xffd060, 2, 1.5, 0.05); break;
     }
   }
-  // Peg traded tails onto the stash's line so the haul visibly grows.
-  addStashTails(si, n) {
-    const L = this.stashLines[si]; if (!L) return;
-    for (let k = 0; k < Math.min(n, 30) && L.n < 24; k++, L.n++) {
-      const t = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.03, 0.5, 4), mat(0xc9a3a0));
-      t.position.set(-L.w / 2 + 0.2 + (L.n % 12) * ((L.w - 0.4) / 11), 1.9 - Math.floor(L.n / 12) * 0.05, (L.n % 2) * 0.05); L.pegs.add(t);
-    }
-  }
+
 
   // Crosshair ray: what surface are we pointing at? Always returns a point
   // (far along the ray if nothing is hit) so ranged attacks never fizzle.
@@ -481,10 +480,34 @@ export class Scene {
     }, (g, t) => { g.position.set(t.x, t.y, t.z); g.children[0].rotation.y += dt; g.scale.setScalar(1 + Math.min(t.amount, 10) * 0.08); });
     this.syncSimple(sim.loot, this.lootMeshes, (l) => makeTrinket(TRINKETS[l.key].tier), (g, l) => { g.position.set(l.x, l.y + Math.sin(now / 250 + l.id) * 0.08, l.z); g.rotation.y += dt * 3; });
     this.syncSimple(sim.shots, this.shotMeshes, () => outline(new THREE.Mesh(new THREE.DodecahedronGeometry(0.4, 0), mat(0x6f6a62))), (g, s) => { g.position.set(s.x, s.y, s.z); g.rotation.x += dt * 8; });
+    // Item effects: the laser dot, flea clouds, squeaky toys.
+    this.syncSimple(sim.zones, this.zoneMeshes, (z) => {
+      if (z.kind === 'laser') { const m = new THREE.Mesh(new THREE.CircleGeometry(0.25, 12), new THREE.MeshBasicMaterial({ color: 0xff2020 })); m.rotation.x = -Math.PI / 2; return m; }
+      const m = new THREE.Mesh(new THREE.SphereGeometry(z.r, 16, 10), new THREE.MeshBasicMaterial({ color: 0x8a7a3a, transparent: true, opacity: 0.25, depthWrite: false })); m.scale.y = 0.35; return m;
+    }, (g, z) => {
+      if (z.kind === 'laser') g.position.set(z.x + Math.sin(now / 160) * 0.8, 0.06, z.z + Math.cos(now / 130) * 0.8);   // the dot dances about
+      else { g.position.set(z.x, 0.3, z.z); g.material.opacity = 0.18 + Math.sin(now / 90) * 0.06; if (Math.random() < 0.3) this.spawnParticles(z.x + (Math.random() - 0.5) * z.r * 1.5, 0.4, z.z + (Math.random() - 0.5) * z.r * 1.5, 0x3a3a1a, 1, 1, 0.03); }
+    });
+    this.syncSimple(sim.decoys, this.decoyMeshes, () => {
+      // Squeaky toy: a bright rubber mouse.
+      const g = new THREE.Group();
+      g.add(outline(new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), mat(0xffd020)))); g.children[0].scale.set(1, 0.8, 1.4); g.children[0].position.y = 0.25;
+      for (const k of [-1, 1]) { const ear = new THREE.Mesh(new THREE.CircleGeometry(0.12, 8), mat(0xff6a8a)); ear.position.set(k * 0.15, 0.48, 0.2); g.add(ear); }
+      return g;
+    }, (g, d) => { g.position.set(d.x, 0, d.z); g.scale.setScalar(0.9 + Math.max(0, Math.sin(now / 120)) * 0.15); });
+    // Birds: flapping, tumbling when roared at, carrying mice underneath (crows).
+    this.syncSimple(sim.birds, this.birdMeshes, (b) => makeBird(b.type), (g, b) => {
+      g.position.set(b.x, b.y, b.z); g.rotation.y = b.yaw;
+      const flap = b.stunT > 0 ? 0.2 : Math.sin(now / (b.state === 'act' ? 60 : 110) + b.id) * 0.9;
+      g.userData.wings[0].rotation.z = flap; g.userData.wings[1].rotation.z = -flap;
+      g.rotation.z = b.stunT > 0 ? now / 80 : 0;
+      g.userData.cargo.visible = b.carry > 0;
+    });
     this.syncSimple(sim.globs, this.globMeshes, () => new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: 0x9adf3a })), (g, b) => { g.position.set(b.x, b.y, b.z); });
     this.syncSimple(sim.missiles, this.missileMeshes, (b) => b.kind === 'pellet' ? new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 0), mat(0x8a8a5a))
       : b.kind === 'whisker' ? new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.7), new THREE.MeshBasicMaterial({ color: 0xffffff }))
       : b.kind === 'burr' ? new THREE.Mesh(new THREE.OctahedronGeometry(0.1, 1), mat(0x7a5a2a))
+      : b.kind === 'pebble' ? new THREE.Mesh(new THREE.DodecahedronGeometry(0.09, 0), mat(0x9a948a))
       : outline(new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), mat(0x6a7a3a))), (g, b) => {
         g.position.set(b.x, b.y, b.z);
         if (b.kind === 'whisker') g.rotation.set(0, Math.atan2(b.vx, b.vz), 0); else g.rotation.y += dt * 10;   // needles fly point-first

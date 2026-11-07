@@ -1,3 +1,4 @@
+import { CATS } from '../config.js';
 // portraits.js — hand-drawn cartoon portraits of the cats, as inline SVG.
 // Why SVG: crisp at any size (menu cards, HUD badge, subtitle icon), tiny, and
 // no image files to host. Each portrait is built from the same face kit
@@ -70,6 +71,9 @@ function portrait(c) {
   ${c.mouth}
   ${whiskers(c.whiskerLen, c.whiskerDroop, c.whiskerCol)}
   ${c.extra || ''}
+  ${c.collar ? `<path d="M58 186 Q100 204 142 186" fill="none" stroke="${INK}" stroke-width="15" stroke-linecap="round"/>
+  <path d="M58 186 Q100 204 142 186" fill="none" stroke="${c.collar}" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="100" cy="199" r="7" fill="#e0c040" ${L(3)}/>` : ''}
 </svg>`;
 }
 
@@ -78,9 +82,12 @@ const HEAD_FLUFF = 'M100 58 C130 56 160 70 170 96 L182 104 L172 112 L184 124 L17
 const HEAD_GAUNT = 'M100 64 C136 62 158 82 160 112 C162 138 146 152 132 162 L124 176 L112 166 L100 178 L88 166 L76 176 L68 162 C54 152 38 138 40 112 C42 82 64 62 100 64 Z';
 const HEAD_SLEEK = 'M100 60 C138 60 162 84 162 116 C162 150 132 172 100 174 C68 172 38 150 38 116 C38 84 62 60 100 60 Z';
 
+// Each portrait wears the cat's collar colour (the same colour marks the cat on the radar).
+const P = (kind, c) => portrait({ ...c, collar: CATS[kind].collar });
+
 export const PORTRAITS = {
   // Fred: scruffy ginger tabby, chewed ear, snaggle tooth, cocky sneer.
-  fred: portrait({
+  fred: P('fred', {
     bg: ['#e8a050', '#7a3a14'], fur: '#d9772f', muzzle: '#f2e8d8', nose: '#c4706a',
     earL: { fill: '#d9772f', inner: '#e8a8a0' }, earR: { fill: '#d9772f', inner: '#e8a8a0', torn: true },
     head: HEAD_ROUND, eye: { iris: '#e8c820', lid: 0.35, tilt: 1 }, browL: 0.45, browR: 0.25, browY: 2,
@@ -91,7 +98,7 @@ export const PORTRAITS = {
     whiskerLen: 44, whiskerDroop: 2, extra: `<path d="M78 200 L82 182 L90 190 L96 176 L104 188 L110 176 L116 190 L122 200 Z" fill="#f2e8d8" ${L(3)}/>`,
   }),
   // Puddin: huge fluffy calico, lazy half-shut eyes, smug little smile, big ruff.
-  puddin: portrait({
+  puddin: P('puddin', {
     bg: ['#d8e8b0', '#4a6a2a'], fur: '#f3ede0', muzzle: '#fffaf0', nose: '#e0a0a0', bodyW: 70, chest: 20,
     earL: { fill: '#d97a34', inner: '#f0b8b0' }, earR: { fill: '#2e2622', inner: '#c89898' },
     head: HEAD_FLUFF, eye: { iris: '#86b83a', lid: 0.6, tilt: -0.3, pupil: 'round' }, browL: -0.15, browR: -0.15, browY: 2,
@@ -101,7 +108,7 @@ export const PORTRAITS = {
     whiskerLen: 48, whiskerDroop: 4,
   }),
   // Scary Cat: scrawny black cat, torn ears, scar, huge staring eyes, fangs, spiky fur.
-  scary: portrait({
+  scary: P('scary', {
     bg: ['#5a4a7a', '#120e1a'], fur: '#222026', muzzle: '#38333c', nose: '#6a5a62',
     earL: { fill: '#222026', inner: '#5a4048', torn: true, tall: 1.15 }, earR: { fill: '#222026', inner: '#5a4048', torn: true, tall: 1.1 },
     head: HEAD_GAUNT, eye: { iris: '#c8e030', tilt: 0.6, pupil: 'pin', size: 1.12 }, browL: 0.55, browR: 0.6, browY: -4,
@@ -114,17 +121,17 @@ export const PORTRAITS = {
     whiskerLen: 40, whiskerDroop: -3, whiskerCol: '#bbb',
   }),
   // Nebbie: sleek grey, clever blue eyes, one eyebrow raised, knowing smirk, collar.
-  nebbie: portrait({
+  nebbie: P('nebbie', {
     bg: ['#a8d8f0', '#2a4a6a'], fur: '#8d949c', muzzle: '#e6e9ec', nose: '#d89aa0', bodyW: 44,
     earL: { fill: '#8d949c', inner: '#e8b8c0', tall: 1.12 }, earR: { fill: '#8d949c', inner: '#e8b8c0', tall: 1.12 },
     head: HEAD_SLEEK, eye: { iris: '#3ab0f0', lid: 0.15, pupil: 'slit' }, browL: 0.15, browR: -0.35, browY: -2,
     markings: `<path d="M84 66 L88 80 M100 62 L100 78 M116 66 L112 80" stroke="#6d747c" stroke-width="5" stroke-linecap="round"/>`,
     mouth: `<path d="M86 146 Q96 152 100 146 Q108 154 118 144" fill="none" ${L(4)}/>`,
     whiskerLen: 62, whiskerDroop: 0,
-    extra: `<path d="M64 180 Q100 196 136 180" fill="none" stroke="#2a6ab0" stroke-width="10" ${''}/><circle cx="100" cy="194" r="8" fill="#d8d8e0" ${L(3)}/>`,
+
   }),
   // Casper: pure-white pedigree, odd eyes (blue + gold), furious brows, fangs bared, gold collar with a ruby.
-  casper: portrait({
+  casper: P('casper', {
     bg: ['#f0a0a0', '#7a1a1a'], fur: '#f7f5f1', muzzle: '#ffffff', nose: '#f0a8b0', bodyW: 60, chest: 12,
     earL: { fill: '#f7f5f1', inner: '#f4c4c8' }, earR: { fill: '#f7f5f1', inner: '#f4c4c8' },
     head: HEAD_FLUFF, eye: { iris: '#3a90f0', tilt: 1.2, pupil: 'slit' }, browL: 0.65, browR: 0.65, browY: 0,
@@ -133,10 +140,10 @@ export const PORTRAITS = {
       <path d="M86 147 L89 159 L93 148 Z M107 148 L111 159 L114 147 Z" fill="#fff" ${L(2)}/>`,
     whiskerLen: 50, whiskerDroop: -2, whiskerCol: '#d8d8d8',
     extra: `<circle cx="128" cy="112" r="12" fill="#e0b020"/><ellipse cx="128" cy="112" rx="3.2" ry="10" fill="${INK}"/><circle cx="132" cy="107" r="3" fill="#fff"/>
-      <path d="M60 182 Q100 198 140 182" fill="none" stroke="#d8a820" stroke-width="10"/><path d="M100 186 L108 196 L100 204 L92 196 Z" fill="#d02030" ${L(3)}/>`,
+`,
   }),
   // Meow Meow: grey tabby with a white beard and chest, big friendly amber eyes, happy smile, leaf behind her ear.
-  meow: portrait({
+  meow: P('meow', {
     bg: ['#c8e8a0', '#3a6a3a'], fur: '#86827e', muzzle: '#f6f4f0', nose: '#d89090', bodyW: 50, chest: 14, muzzleW: 36,
     earL: { fill: '#86827e', inner: '#e8b8b0' }, earR: { fill: '#86827e', inner: '#e8b8b0' },
     head: HEAD_ROUND, eye: { iris: '#e0a030', tilt: -0.6, pupil: 'round', size: 1.1 }, browL: -0.12, browR: -0.12, browY: -9,
@@ -147,6 +154,19 @@ export const PORTRAITS = {
     whiskerLen: 46, whiskerDroop: 1,
     extra: `<path d="M52 194 Q100 168 148 194" fill="#f6f4f0"/>
       <path d="M44 40 Q30 52 40 70 Q56 58 44 40 Z" fill="#6aaa3a" ${L(3)}/><path d="M44 42 L41 66" stroke="#3a6a2a" stroke-width="2"/>`,
+  }),
+  // Mimo: frisky brown-grey mackerel tabby. "M" on the forehead, cheeky wink, eyebrow up, grin.
+  mimo: P('mimo', {
+    bg: ['#f0c8a0', '#6a3a2a'], fur: '#8c7e6a', muzzle: '#ece4d4', nose: '#c88a80', bodyW: 54, chest: 10,
+    earL: { fill: '#8c7e6a', inner: '#e0b0a0' }, earR: { fill: '#8c7e6a', inner: '#e0b0a0' },
+    head: HEAD_ROUND, eye: { iris: '#b8d030', tilt: 0, pupil: 'slit', size: 1.05 }, browL: -0.1, browR: -0.45, browY: -6,
+    markings: `<path d="M80 84 L88 68 L100 80 L112 68 L120 84" fill="none" stroke="#3a3028" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M38 108 L56 112 M36 122 L54 122 M162 108 L144 112 M164 122 L146 122" stroke="#3a3028" stroke-width="6" stroke-linecap="round"/>
+      <path d="M64 58 C70 62 74 64 80 64 M136 58 C130 62 126 64 120 64" stroke="#3a3028" stroke-width="5" stroke-linecap="round" fill="none"/>`,
+    mouth: `<path d="M82 144 Q100 162 120 142" fill="none" ${L(4)}/><path d="M112 150 Q116 160 108 158" fill="#d86a70" ${L(2.5)}/>`,
+    whiskerLen: 48, whiskerDroop: 0,
+    // Winking: his left eye is a happy closed curve.
+    extra: `<ellipse cx="72" cy="110" rx="25" ry="20" fill="#8c7e6a"/><path d="M52 114 Q72 98 92 114" fill="none" ${L(5)}/>`,
   }),
 };
 

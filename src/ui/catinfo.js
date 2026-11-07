@@ -1,35 +1,58 @@
-// catinfo.js — the words for each cat: role, blurb, ability names and notes.
-// Used by the cat-select menu and the in-game ability panel.
+// catinfo.js — the words for each cat: role, blurb, and the name + one-line note for
+// each of their moves. Every cat has the same layout: left-click attack, right-click
+// ability, E ability, a jump, and (some) a passive. Used by the menu and the HUD.
 
 export const CAT_INFO = {
   fred: {
     role: 'Ranged · fast · fragile',
     blurb: 'Scruffy ginger alley tom with a mouth on him.',
-    abil: [['Left click', 'Spitball', 'rapid fire, makes them bleed'], ['Right click', 'Hairball', 'arcing splash, slows'], ['Space', 'Double Jump', 'plus two wall kicks']],
+    pri: ['Spitball', 'rapid single shots, each one bleeds'], sec: ['Hairball', 'arcing splash, slows'],
+    e: ['Alley Dash', 'dart forward slashing all you pass'], jump: ['Double Jump', 'plus two wall kicks'],
   },
   puddin: {
     role: 'Melee tank · slow',
     blurb: 'Enormous long-haired calico. Posh, lazy, always hungry.',
-    abil: [['Left click', 'Chomp', 'a killing bite eats the mouse and heals'], ['Right click', 'Pounce', 'leap in, splat and stun'], ['Space', 'Belly Flop', 'hold to charge, flings mice']],
+    pri: ['Chomp', 'one heavy bite; a kill eats and heals'], sec: ['Pounce', 'leap in, splat and stun'],
+    e: ['Big Sit', 'flatten and pin mice, take half damage'], jump: ['Belly Flop', 'hold to charge, flings mice'],
   },
   scary: {
     role: 'Reach melee · crowd control · fragile',
     blurb: 'Scrawny, beat-up black cat. Bad luck on four legs.',
-    abil: [['Left click', 'Tail Whip', 'long, narrow, hits 4 in a line'], ['Right click', 'Hiss', 'arches up, mice scatter in fear'], ['Space', 'High Jump', 'jumps higher than anyone'], ['Shift', 'Leap Back', 'backflip out of trouble']],
+    pri: ['Tail Whip', 'one long lash, hits 4 in a line'], sec: ['Hiss', 'arches up, mice scatter in fear'],
+    e: ['Leap Back', 'backflip out of trouble'], jump: ['High Jump', 'jumps higher than anyone'],
   },
   nebbie: {
     role: 'Ranged support · evasive',
     blurb: 'Sleek, clever grey cat. Always three moves ahead.',
-    abil: [['Left click', 'Whisker Darts', 'fast, pierce through 3 mice'], ['Right click', 'Purr', 'heals over time + buffs cats nearby'], ['Space', 'Long Jump', 'low and far'], ['Passive', 'Dodge', '30% of hits miss her']],
+    pri: ['Whisker Darts', 'single darts that pierce 3 mice'], sec: ['Purr', 'heals over time + buffs cats nearby'],
+    e: ['Tinker', 'resets nearby traps, +25% damage'], jump: ['Long Jump', 'low and far'],
+    passive: ['Dodge', '30% of hits miss her'],
   },
   casper: {
     role: 'Brawler · tank · draws aggro',
     blurb: 'Pure-white pedigree show cat with a terrifying temper.',
-    abil: [['Left click', 'Claws', 'fast swipes, every hit builds rage'], ['Right click', 'Frenzy', '3 s of all-round fury'], ['Space ×2', 'Leap Strike', 'jump, then leap forward and smash'], ['Passive', 'Rage', 'up to +100% damage; mice target him first']],
+    pri: ['Claws', 'flurry of swipes, every hit builds rage'], sec: ['Frenzy', '3 s of all-round fury'],
+    e: ['Show Off', 'every mouse nearby comes for him; takes less'], jump: ['Leap Strike', 'jump, then Space again to smash'],
+    passive: ['Rage', 'up to +100% damage; mice target him first'],
   },
   meow: {
     role: 'Control support · fast',
     blurb: 'Friendly grey outdoor cat with a white beard. Kills you nicely.',
-    abil: [['Left click', 'Sticky Burrs', 'slows, 4 hits = asleep'], ['Right click', 'Big Yawn', 'mice nearby nod off, cats get buffed'], ['Space', 'Triple Jump', 'three jumps, runs fast'], ['Passive', 'Catnap', 'stand still: nap + heal']],
+    pri: ['Sticky Burrs', 'single burrs; slow, 4 hits = asleep'], sec: ['Big Yawn', 'mice nearby nod off, cats get buffed'],
+    e: ['Groom', 'heal the most-hurt cat nearby 30%'], jump: ['Triple Jump', 'three jumps, runs fast'],
+    passive: ['Catnap', 'stand still: nap and heal'],
   },
+  mimo: {
+    role: 'Ranged hunter · debuffer',
+    blurb: "Frisky tabby tom. Neutered. Still thinks he's a lion.",
+    pri: ['Pebble Flick', 'single pebbles, x2 vs ranged mice'], sec: ['Lion Roar', 'everything nearby takes +35%, birds drop'],
+    e: ['Sky Swipe', 'spring at the nearest bird'], jump: ['Double Jump', 'two jumps'],
+    passive: ['Bird Hunter', 'x3 damage to birds'],
+  },
+};
+
+// Rows for the menu's detail panel: [key, name, note].
+export const abilityRows = (k) => {
+  const c = CAT_INFO[k];
+  return [['Left click', ...c.pri], ['Right click', ...c.sec], ['E', ...c.e], ['Space', ...c.jump], ...(c.passive ? [['Passive', ...c.passive]] : [])];
 };

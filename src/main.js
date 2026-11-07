@@ -1,7 +1,7 @@
 // main.js — wires input -> commands -> sim (fixed tick) -> renderer + HUD.
 
-import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER } from './config.js';
-import { CAT_INFO } from './ui/catinfo.js';
+import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE } from './config.js';
+import { CAT_INFO, abilityRows } from './ui/catinfo.js';
 import { portraitURL } from './ui/portraits.js';
 import { Sfx } from './audio/sfx.js';
 import { Sim } from './sim/sim.js';
@@ -35,7 +35,9 @@ const TIPS = [
   'Trap lamps: green = ready, red = resetting.',
   'Bug Zappers hang under anything with a roof: the guard passage, the colonnade, the table, the bench.',
   'Packs of mice choose between three lanes north of the courtyard. Block one and they take another.',
-  'Tails are worth sardines at any stash. Die carrying them and they drop where you fell.',
+  'Every kill pays Paw Points on the spot. Kill plenty, build more.',
+  'Bring 8 traps and 1 item. Pick them under the cats on this screen.',
+  'Q uses your item. E is your second ability.',
   'Fred can kick off walls twice before he has to land.',
 ];
 { let k = Math.floor(Math.random() * TIPS.length); const show = () => { const el = document.getElementById('tip'); if (el) el.textContent = 'Tip: ' + TIPS[k++ % TIPS.length]; }; show(); setInterval(show, 6000); }
@@ -70,23 +72,46 @@ function pickCat(k) {
   document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('picked', x.dataset.cat === k));
   const d = CATS[k], info = CAT_INFO[k];
   document.getElementById('catdetail').innerHTML = `<h2>${d.name}</h2><p>${info.blurb}</p>` +
-    info.abil.map(([key, name, note]) => `<div class="ab-row"><i>${key}</i> <b>${name}</b> — ${note}</div>`).join('') +
-    `<div class="stats">Health ${d.maxHp} · Speed ${d.speed}</div>`;
+    abilityRows(k).map(([key, name, note]) => `<div class="ab-row"><i>${key}</i> <b>${name}</b> — ${note}</div>`).join('') +
+    `<div class="stats">Health ${d.maxHp} · Energy ${d.maxEnergy} (+${d.energyRegen}/s) · Speed ${d.speed}</div>`;
   pv.show(k);
 }
 document.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => { sfx.unlock(); sfx.play('click'); pickCat(b.dataset.cat); }));
 pickCat(chosenCat);
-document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { previewOn = false; start(b.dataset.mode); }));
+// Loadout: pick 8 traps to bring, and 1 item. Remembered between visits.
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
+let loadout = load('catcastle.loadout', TRAP_ORDER.slice(0, LOADOUT_SIZE)).filter(k => TRAPS[k]);
+let chosenItem = ITEMS[load('catcastle.item', 'laser')] ? load('catcastle.item', 'laser') : 'laser';
+function drawLoadout() {
+  document.getElementById('loadout').innerHTML = `<div class="lh">Traps <b>${loadout.length}/${LOADOUT_SIZE}</b></div>` +
+    TRAP_ORDER.map(k => `<button class="lt ${loadout.includes(k) ? 'on' : ''}" data-trap="${k}" title="${TRAPS[k].desc}">${TRAPS[k].name}</button>`).join('') +
+    `<div class="lh">Item (Q)</div>` + ITEM_ORDER.map(k => `<button class="lt ${chosenItem === k ? 'on' : ''}" data-item="${k}" title="${ITEMS[k].desc}">${ITEMS[k].name}</button>`).join('') +
+    `<p class="dim" id="loadhint">${ITEMS[chosenItem].desc}</p>`;
+  document.querySelectorAll('[data-trap]').forEach(b => b.onclick = () => {
+    const k = b.dataset.trap;
+    if (loadout.includes(k)) loadout = loadout.filter(x => x !== k);
+    else if (loadout.length < LOADOUT_SIZE) loadout = TRAP_ORDER.filter(x => loadout.includes(x) || x === k);
+    else { sfx.play('deny'); return; }
+    save('catcastle.loadout', loadout); sfx.play('click'); drawLoadout();
+  });
+  document.querySelectorAll('[data-item]').forEach(b => b.onclick = () => { chosenItem = b.dataset.item; save('catcastle.item', chosenItem); sfx.play('click'); drawLoadout(); });
+}
+drawLoadout();
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+  if (loadout.length < 1) { sfx.play('deny'); return; }
+  previewOn = false; start(b.dataset.mode);
+}));
 
 function start(mode) {
   document.getElementById('menu').classList.remove('show');
   sfx.unlock(); sfx.setMusic('build');
   const sim = new Sim({ mode, seed: (Date.now() & 0xffff) | 1 });
-  sim.addPlayer(LOCAL_ID, chosenCat);
+  sim.addPlayer(LOCAL_ID, chosenCat, { loadout, item: chosenItem });
   const net = new LocalTransport(sim);
   const canvas = document.getElementById('game');
   const scene = new Scene(canvas, sim);
-  const hud = new Hud(sim);
+  const hud = new Hud(sim, loadout);
 
   // ---------- input ----------
   const keys = new Set();
@@ -133,14 +158,13 @@ function start(mode) {
     if (e.repeat) return;
     keys.add(k);
     if (k === ' ') { jumpQ = true; jumpHeld = true; }
-    if (e.key === 'Shift' && !e.repeat) altQ = true;   // Scary Cat: leap back
+    if (k === 'e' || e.key === 'Shift') altQ = true;   // E: second ability
     if (k === 'f') { scene.sniff = true; document.body.classList.add('sniffing'); }   // hold F: sense of smell
     const n = parseInt(k, 10);
-    if (n >= 1 && n <= TRAP_ORDER.length) { const t = TRAP_ORDER[n - 1]; selected = selected === t ? null : t; sfx.play('click'); }
+    if (n >= 1 && n <= loadout.length) { const t = loadout[n - 1]; selected = selected === t ? null : t; sfx.play('click'); }   // press again to put it away
     if (k === 'm') { sfx.toggleMute(); showMute(); }
-    if (k === 'q') selected = null;
+    if (k === 'q') net.send({ type: 'item', id: LOCAL_ID, aim: aim && aim.point ? { x: aim.point.x, y: aim.point.y, z: aim.point.z } : null });   // Q: use your item
     if (k === 'r') rot = (rot + 1) % 4;
-    if (k === 'e') net.send({ type: 'sellTails', id: LOCAL_ID });
     if (k === 'x' && aim && aim.cell >= 0 && aim.surface !== 'none') net.send({ type: 'sellTrap', id: LOCAL_ID, cell: aim.cell, layer: aim.surface === 'top' ? 'floor' : aim.surface });
     if (k === 'g') net.send({ type: 'startWave', id: LOCAL_ID });
     if (k === 'h') document.getElementById('controls').classList.toggle('hidden');
@@ -218,9 +242,9 @@ function start(mode) {
       case 'catHurt': if (e.id === LOCAL_ID) sfx.play('catHurt'); else sfx.play('catHurt', x, z); break;
       case 'catDeath': sfx.play('catDeath', x, z); break;
       case 'pickup': sfx.play('pickup'); break;
-      case 'stash': sfx.play('stash'); break;
+      case 'item': sfx.play('item_' + e.item, e.x, e.z); break;
       case 'trinket': sfx.play('trinket'); break;
-      case 'waveStart': sfx.play('waveStart', undefined, undefined, { boss: e.boss }); break;
+      case 'waveStart': sfx.play('waveStart', undefined, undefined, { boss: e.boss }); if (e.wave === 1) document.getElementById('controls').classList.add('hidden'); break;   // tuck the controls away once play starts (H brings them back)
       case 'waveClear': sfx.play('waveClear'); break;
       case 'msg': if (e.text.startsWith('NEW:')) sfx.play('intro'); break;
       case 'end': sfx.play(e.won ? 'win' : 'lose'); sfx.setMusic('menu'); break;

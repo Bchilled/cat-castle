@@ -29,7 +29,7 @@
   #bossbar { top: 78px; left: 50%; transform: translateX(-50%); width: 420px; text-align: center; font-size: 14px; font-weight: bold; color: #ff8a6a; letter-spacing: 1px; }
   #bossbar .bar { height: 10px; margin-top: 3px; background: #2a1410; border: 1px solid #0e0b09; } #bosshp { display: block; height: 100%; background: linear-gradient(#e0402a, #9a1a10); width: 100%; transition: width .15s; }
   #trapinfo { left: 10px; bottom: 128px; width: 300px; font-size: 13px; }
-  #trapinfo b { font-size: 16px; color: var(--accent); } #trapinfo .cost { color: var(--dim); } #trapinfo .cost::before { content: "\1F41F  "; font-size: 11px; }
+  #trapinfo b { font-size: 16px; color: var(--accent); } #trapinfo .cost { color: var(--dim); } #trapinfo .cost::before { content: "\1F43E  "; font-size: 11px; }
   #trapinfo small { display: block; color: var(--dim); } #trapinfo p { margin: 4px 0 0; color: var(--ink); }
   #me { bottom: 92px; left: 10px; font-size: 15px; }
   #muted { position: fixed; top: 52px; left: 10px; font-size: 12px; color: var(--dim); display: none; }
@@ -66,7 +66,7 @@
   .slot img { display: block; width: 64px; height: 48px; margin: 0 auto -2px; }
   .slot .key { position: absolute; top: 1px; left: 5px; font-size: 16px; font-weight: bold; color: var(--accent); text-shadow: 0 1px 2px #000; }
   .slot .nm, .slot .cost { display: block; }
-  .slot .cost { color: var(--dim); } .slot .cost::before { content: "\1F41F  "; font-size: 10px; }
+  .slot .cost { color: var(--dim); } .slot .cost::before { content: "\1F43E  "; font-size: 10px; }
   .slot.sel { border-color: var(--accent); background: rgba(80,58,24,.92); } .slot.poor .cost { color: var(--bad); }
   /* Controls panel */
   #controls { right: 10px; bottom: 92px; font-size: 12px; line-height: 1.55; color: var(--dim); }
@@ -78,7 +78,7 @@
   .show { opacity: 1 !important; }
   #hurt { position: fixed; inset: 0; pointer-events: none; }
   #hurt.go { animation: hurt .4s; } @keyframes hurt { 0% { box-shadow: inset 0 0 140px rgba(200,30,20,.7);} 100% { box-shadow: inset 0 0 120px rgba(200,30,20,0);} }
-  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; background: #1a140f; text-align: center; padding: 20px; }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: safe center; flex-direction: column; background: #1a140f; text-align: center; padding: 20px; overflow-y: auto; }
   .screen.show { display: flex; }
   .screen h1 { font-size: 46px; margin: 0 0 6px; color: var(--accent); letter-spacing: 1px; }
   .screen h2 { font-size: 18px; margin: 18px 0 4px; color: var(--ink); }
@@ -89,12 +89,16 @@
   .title { font-size: 72px; font-weight: bold; color: var(--accent); letter-spacing: 2px; text-shadow: 0 4px 0 #3a2210, 0 8px 24px #000; }
   .tag { font-size: 18px; margin: 4px 0 22px; }
   .pick { display: flex; gap: 18px; align-items: stretch; }
-  .cats { display: grid; grid-template-columns: repeat(3, 150px); gap: 10px; }
-  .catpick { width: 150px; text-align: center; padding: 6px 6px 8px; }
-  .catpick img { display: block; width: 136px; height: 136px; border-radius: 14px; }
+  .cats { display: grid; grid-template-columns: repeat(4, 128px); gap: 8px; }
+  .catpick { width: 128px; text-align: center; padding: 5px 5px 7px; }
+  .catpick img { display: block; width: 116px; height: 116px; border-radius: 12px; }
   .catpick b { display: block; font-size: 17px; margin-top: 4px; } .catpick small { display: block; color: var(--dim); font-size: 11px; }
   .detail { width: 330px; text-align: left; padding: 12px; background: var(--bg); border: 2px solid #0e0b09; border-radius: 8px; }
   .detail canvas { display: block; margin: 0 auto; }
+  #loadout { max-width: 820px; margin: 10px auto 0; text-align: center; }
+  #loadout .lh { display: inline-block; margin: 0 6px 0 12px; color: var(--accent); font-weight: bold; font-size: 13px; }
+  .lt { font-size: 12px; padding: 4px 8px; margin: 2px; opacity: .55; } .lt.on { opacity: 1; outline: 2px solid var(--accent); }
+  #loadhint { font-size: 12px; margin: 4px 0 0; }
   #catdetail h2 { margin: 2px 0; color: var(--accent); } #catdetail p { margin: 4px 0 8px; color: var(--dim); }
   #catdetail .ab-row { font-size: 13px; margin: 3px 0; } #catdetail .ab-row b { color: var(--ink); } #catdetail .ab-row i { color: var(--accent); font-style: normal; }
   #catdetail .stats { font-size: 12px; color: var(--dim); margin-top: 6px; }
@@ -111,28 +115,29 @@
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="top" class="panel">Lives <b id="lives">20</b> Sardines <b id="sardines">0</b> Yarn <b id="yarn">0</b> Kills <b id="kills">0</b></div>
+<div id="top" class="panel">Lives <b id="lives">20</b> Paw Points <b id="sardines">0</b> Yarn <b id="yarn">0</b> Kills <b id="kills">0</b></div>
 <div id="muted">Sound off (M)</div>
 <div id="wavebox" class="panel"><div id="wave"></div><div id="status"></div></div>
 <div id="next" class="panel" style="display:none"></div>
 <div id="bossbar" class="panel" style="display:none"><span id="bossname"></span><div class="bar"><i id="bosshp"></i></div></div>
 <div id="trapinfo" class="panel" style="display:none"></div>
 <div id="radarbox" class="panel"><canvas id="radar" width="200" height="200"></canvas><div id="trinkets"></div></div>
-<div id="me" class="panel"><img id="me-face" alt=""><span id="catname"></span> · Tails <b id="tails">0</b></div>
+<div id="me" class="panel"><img id="me-face" alt=""><span id="catname"></span></div>
 <div id="crosshair"></div>
 <div id="abilities">
   <div class="ab"><span class="k">Left click</span><span id="ab-pri-name"></span><small id="ab-pri-note"></small></div>
   <div class="ab" id="ab-sec"><span class="k">Right click</span><span id="ab-sec-name"></span><small id="ab-sec-note"></small></div>
-  <div class="ab"><span class="k" id="ab-jump-k">Space</span><span id="ab-jump-name"></span><small id="ab-jump-note"></small><div class="charge"><i id="ab-charge"></i></div></div>
-  <div class="ab" id="ab-alt" style="display:none"><span class="k" id="ab-alt-k">Shift</span><span id="ab-alt-name"></span><small id="ab-alt-note"></small></div>
+  <div class="ab" id="ab-alt"><span class="k">E</span><span id="ab-alt-name"></span><small id="ab-alt-note"></small></div>
+  <div class="ab"><span class="k">Space</span><span id="ab-jump-name"></span><small id="ab-jump-note"></small><div class="charge"><i id="ab-charge"></i></div></div>
+  <div class="ab" id="ab-item"><span class="k">Q item</span><span id="ab-item-name"></span><small id="ab-item-note"></small></div>
 </div>
 <div id="trapbar"></div>
 <div id="controls" class="panel">
   <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom<br>
   <b>Left click</b> attack (hold) · <b>Right click</b> ability, or place the held trap<br>
-  <b>Space</b> jump (each cat's is different) · <b>Shift</b> Scary Cat's leap back<br>
-  <b>1–8</b> pick trap · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away<br>
-  <b>E</b> trade tails at a stash · <b>G</b> next wave · <b>F</b> (hold) sniff out mice<br>
+  <b>E</b> second ability · <b>Space</b> jump · <b>Q</b> use item<br>
+  <b>1–8</b> pick trap (again to put away) · <b>R</b> rotate · <b>X</b> sell<br>
+  <b>G</b> next wave · <b>F</b> (hold) sniff out mice<br>
   <b>M</b> sound on/off · <b>Esc</b> pause · <b>H</b> hide this
 </div>
 <div id="prompt"></div>
@@ -142,11 +147,12 @@
 
 <div id="menu" class="screen show">
   <div class="title">Nine Lives Keep</div>
-  <p class="tag">Six mean cats. One castle. Far too many mice.</p>
+  <p class="tag">Seven mean cats. One castle. Far too many mice.</p>
   <div class="pick">
     <div class="cats" id="cats"></div>
-    <div class="detail"><canvas id="catview" width="300" height="220"></canvas><div id="catdetail"></div></div>
+    <div class="detail"><canvas id="catview" width="300" height="200"></canvas><div id="catdetail"></div></div>
   </div>
+  <div id="loadout"></div>
   <div class="modes">
     <button class="play" data-mode="normal">Castle entrance · 24 waves</button>
     <button data-mode="endless">Endless</button>
@@ -163,7 +169,7 @@
   <button id="mute">Mute</button>
   <div class="keys">
     <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom · <b>Left click</b> attack · <b>Right click</b> ability / place trap<br>
-    <b>Space</b> jump · <b>1–8</b> traps · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away · <b>E</b> trade tails · <b>G</b> next wave · <b>F</b> sniff · <b>M</b> mute
+    <b>Space</b> jump · <b>1–8</b> traps · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away · <b>E</b> ability · <b>Q</b> item · <b>G</b> next wave · <b>F</b> sniff · <b>M</b> mute
   </div>
   <button id="quit">Quit to menu</button>
 </div>

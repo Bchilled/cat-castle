@@ -139,7 +139,7 @@ export class Sfx {
 }
 
 // Rate limits: [max plays, per seconds]. Unlisted sounds: 6 per 0.1 s.
-const LIMITS = { claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25] };
+const LIMITS = { toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25] };
 
 // Each sound: (sfx, output node, random, options).
 const SOUNDS = {
@@ -185,6 +185,27 @@ const SOUNDS = {
   burr: (a, o) => { a.tone(o, { f: 500, f2: 260, dur: 0.06, vol: 0.18 }); },
   yawn: (a, o) => { a.tone(o, { type: 'triangle', f: 520, f2: 180, dur: 1.2, vol: 0.25, att: 0.2, vib: 8 }); a.noise(o, { dur: 1.0, vol: 0.12, type: 'lowpass', f: 900, f2: 300, att: 0.2 });
     [784, 659, 523].forEach((f, k) => a.tone(o, { f, t: 0.6 + k * 0.15, dur: 0.4, vol: 0.06 })); },
+  pebble: (a, o, R) => { a.tone(o, { type: 'triangle', f: 900 + R() * 300, f2: 500, dur: 0.05, vol: 0.12 }); },
+  roar: (a, o) => { a.tone(o, { type: 'sawtooth', f: 160, f2: 70, dur: 1.1, vol: 0.45, att: 0.05, vib: 14 }); a.tone(o, { type: 'sawtooth', f: 240, f2: 110, dur: 0.9, vol: 0.2, att: 0.05, vib: 20 });
+    a.noise(o, { dur: 1.0, vol: 0.45, type: 'lowpass', f: 900, f2: 200, att: 0.05 }); },
+  birdIn: (a, o, R, { kind }) => { const f = kind === 'crow' ? 700 : 1400; for (let k = 0; k < 2; k++) a.tone(o, { type: 'sawtooth', f, f2: f * 0.7, t: k * 0.22, dur: 0.16, vol: 0.12 }); },
+  birdKill: (a, o) => { a.noise(o, { dur: 0.3, vol: 0.4, f: 2000, f2: 600, q: 1 }); a.tone(o, { type: 'sawtooth', f: 900, f2: 300, dur: 0.25, vol: 0.12 }); },
+  steal: (a, o) => { a.tone(o, { type: 'square', f: 1600, f2: 2200, dur: 0.12, vol: 0.08 }); a.tone(o, { type: 'square', f: 1800, f2: 2400, t: 0.14, dur: 0.12, vol: 0.08 }); },
+  birdDrop: (a, o, R) => { for (let k = 0; k < 3; k++) a.tone(o, { f: 2000 + R() * 800, f2: 1200, t: k * 0.06, dur: 0.08, vol: 0.12 }); },
+  dash: (a, o) => { a.noise(o, { dur: 0.22, vol: 0.35, f: 600, f2: 3000, q: 1 }); },
+  sit: (a, o) => { a.tone(o, { f: 90, f2: 35, dur: 0.5, vol: 0.9 }); a.noise(o, { dur: 0.4, vol: 0.5, type: 'lowpass', f: 500, f2: 120 }); },
+  tinker: (a, o) => { [1200, 1600, 2000, 2400].forEach((f, k) => a.tone(o, { type: 'square', f, t: k * 0.05, dur: 0.06, vol: 0.06 })); a.noise(o, { t: 0.2, dur: 0.1, vol: 0.2, f: 4000, q: 4 }); },
+  showoff: (a, o) => { a.tone(o, { type: 'sawtooth', f: 300, f2: 600, dur: 0.4, vol: 0.2, vib: 20 }); a.tone(o, { type: 'sawtooth', f: 450, f2: 900, t: 0.1, dur: 0.4, vol: 0.12, vib: 20 }); },
+  groom: (a, o) => { for (let k = 0; k < 3; k++) a.noise(o, { t: k * 0.12, dur: 0.1, vol: 0.18, f: 3000, f2: 1500, q: 2 }); [659, 880].forEach((f, k) => a.tone(o, { f, t: 0.35 + k * 0.1, dur: 0.3, vol: 0.08 })); },
+  skyswipe: (a, o) => { a.noise(o, { dur: 0.35, vol: 0.3, f: 500, f2: 3000, q: 1 }); },
+  toySqueak: (a, o, R) => { const f = 1500 + R() * 500; a.tone(o, { f, f2: f * 1.6, dur: 0.12, vol: 0.2 }); },
+  decoyGone: (a, o) => { a.tone(o, { f: 1800, f2: 600, dur: 0.3, vol: 0.15 }); },
+  item_laser: (a, o) => { a.tone(o, { type: 'sine', f: 2400, dur: 0.25, vol: 0.06 }); },
+  item_bola: (a, o) => { a.noise(o, { dur: 0.3, vol: 0.3, f: 800, f2: 300, q: 2 }); },
+  item_catnip: (a, o) => { a.noise(o, { dur: 0.5, vol: 0.35, type: 'lowpass', f: 1500, f2: 400 }); [523, 659, 784].forEach((f, k) => a.tone(o, { f, t: k * 0.08, dur: 0.3, vol: 0.06 })); },
+  item_flea: (a, o) => { a.noise(o, { dur: 0.6, vol: 0.3, type: 'highpass', f: 5000, att: 0.05 }); },
+  item_tonic: (a, o) => { for (let k = 0; k < 4; k++) a.tone(o, { f: 300 + k * 40, f2: 200, t: k * 0.09, dur: 0.08, vol: 0.2 }); },
+  item_squeaky: (a, o) => { a.tone(o, { f: 1600, f2: 2600, dur: 0.15, vol: 0.25 }); a.tone(o, { f: 2600, f2: 1400, t: 0.15, dur: 0.15, vol: 0.2 }); },
   // Traps
   snap: (a, o) => { a.noise(o, { dur: 0.04, vol: 0.7, type: 'highpass', f: 2500 }); a.tone(o, { type: 'triangle', f: 1500, dur: 0.25, vol: 0.12 }); a.tone(o, { f: 160, f2: 60, dur: 0.1, vol: 0.4 }); },
   flip: (a, o) => { a.tone(o, { f: 180, f2: 520, dur: 0.12, vol: 0.4 }); a.tone(o, { f: 520, f2: 240, t: 0.12, dur: 0.25, vol: 0.3, vib: 25 }); },

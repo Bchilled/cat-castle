@@ -4,10 +4,10 @@
 // other cat. Players only ever talk to it through commands, and it never calls
 // Math.random (seeded RNG instead) so every run is reproducible.
 
-import { DT, GRAVITY, RULES, CAT, CATS, MICE, TRAPS, GATE as GATE_CFG, TRINKETS } from '../config.js';
+import { DT, GRAVITY, RULES, CAT, CATS, MICE, TRAPS, GATE as GATE_CFG, TRINKETS, ABILITY2, ITEMS } from '../config.js';
 import {
   W, H, CELL, T, idx, cellOf, cellCenter, buildMap, floorish, miceWalkable, goalCells,
-  GATE, SPAWNS, CAT_SPAWN, STALLS, DIRS4, WORLD_W, WORLD_H, VIAS,
+  GATE, SPAWNS, CAT_SPAWN, DIRS4, WORLD_W, WORLD_H, VIAS,
 } from './map.js';
 import { computeFlow, nextCell, nearestReachable } from './path.js';
 import { buildWave, ratePaws, INTRO_TEXT } from './waves.js';
@@ -23,7 +23,7 @@ const BARKS = {
     boss: ["That one's eaten a whole bakery.", 'Big lad. Bigger funeral.', "Oh, he's ugly. Let's make him uglier."],
     death: ["Oh, for #@!%'s sake.", 'Nine lives my #@!%.', "Right. That's personal now."],
     gate: ["Board's gone. Who wedged that, a #@!% hamster?", "They're through. Barricades, now."],
-    sell: ['Lovely bunch of tails.', 'Kerching, you mouldy beauties.'],
+    sell: ['Kerching, you mouldy beauties.', 'Paw Points! Lovely.'],
     trinket: ['Ooh. Shiny. Mine.', 'Finders keepers, you dead little #@!%.'],
     eat: ['Crunchy.'],
     leak: ['One got in! OI!', 'Somebody stop that one!', "That's coming out of your wages, Puddin."],
@@ -50,7 +50,7 @@ const BARKS = {
     boss: ['Big. Ugly. Doomed.', "He's not afraid of me yet. He will be."],
     death: ['Eight down.', "That's... fine. I've got spares.", 'The dark takes me. Briefly.'],
     gate: ["The gate's gone. Good. Let them come.", 'Door open. Dinner served.'],
-    sell: ['Tails for fish. Fair trade.', 'Sardines. The only thing I trust.'],
+    sell: ['Points. The only thing I trust.', 'Fair trade.'],
     trinket: ['Shiny. Cursed, probably. Mine.', 'Lucky charm. For me, not them.'],
     eat: ['Crunchy.'],
     leak: ['One slipped into the dark.', "That one's luckier than it looks."],
@@ -65,7 +65,7 @@ const BARKS = {
     boss: ['Large. Slow. Weak spot: everywhere.', "That one's going to need a plan. Good thing I have one."],
     death: ['A miscalculation.', 'Noted. Adjusting.', 'That was the statistically unlikely outcome.'],
     gate: ['Gate breached. Plan B.', "They're inside. As I predicted."],
-    sell: ['A sound investment.', 'Tails to sardines. Basic economics.'],
+    sell: ['A sound investment.', 'Basic economics.'],
     trinket: ['Interesting. Useful.', "I'll study this later."],
     eat: ['Crunchy.'],
     leak: ['One got through. I did warn you.', 'A leak. Unacceptable.'],
@@ -103,6 +103,22 @@ const BARKS = {
     clear: ['Nap time!', 'Well done, everyone!', 'Cuddles all round.'],
     yawn: ['*Yaaaawn*', 'Sleepy time, everyone.', 'Shhhhh.'],
   },
+  // Mimo: a frisky tabby tom who never got over being neutered. Thinks he's a lion.
+  mimo: {
+    kill: ["Sorry, darling. I'm spoken for. By the vet.", "Rawr. Yeah. I said rawr.", "I'm on fire tonight.", 'Lion blood, me. Distant. Very distant.', 'Still got the moves. Just not the equipment.'],
+    trap: ['Ooh, nasty. I like it.', 'Smooth.', 'Floor show!'],
+    wave: ['Evening, ladies. Oh. Mice. Never mind.', 'Right. Who wants some of the lion?', "Here they come. I'll be gentle. I won't."],
+    boss: ["Big boy. I've seen bigger. In the mirror.", 'Time to roar.'],
+    death: ['The vet took my dignity first.', 'Still got it. Just... not today.', 'Tell the ladies I went out roaring.'],
+    gate: ['Gate gone. Open house, lads.', 'Door\'s off. Party time.'],
+    sell: ["Sardines. Dinner's on me.", 'Kerching. Treat yourself, Mimo.'],
+    trinket: ['Ooh, something for the missus. If I had one.', 'Shiny. Like me.'],
+    eat: ['Crunchy.'],
+    leak: ['One snuck past. Cheeky.', 'Oi! Get back here, you.'],
+    clear: ["That's how a lion does it.", "Who's purring now?", 'Lovely. Back to the windowsill.'],
+    roar: ['ROOOOOAR!', 'Hear me ROAR. That was a roar.', 'King of the jungle! Well. Of the loo.'],
+    bird: ['Got one! Feathers everywhere!', 'Birdie, birdie, birdie...', 'Bird for dinner, lads!', "That's what you get for flying."],
+  },
 };
 
 function mulberry32(seed) {
@@ -137,10 +153,13 @@ export class Sim {
     this.baits = [];                    // Cheese Chunks (refreshed each tick in stepTraps)
     const N = W * H;
     this.occ = { floor: new Int32Array(N), wall: new Int32Array(N), ceiling: new Int32Array(N) };
-    this.tails = []; this.loot = [];   // tails + trinkets lying on the ground
+    this.tails = []; this.loot = [];   // trinkets lying on the ground (tails are gone: kills pay Paw Points directly)
     this.trinkets = {};                // collected this run (team-wide), key -> count
     this.shots = [];                   // lobber rocks
     this.globs = [];                   // plague-rat spit flying at cats
+    this.birds = [];                   // magpies and crows (fly over everything)
+    this.zones = [];                   // item effects on the ground (laser dot, flea cloud)
+    this.decoys = [];                  // squeaky toys mice attack instead of moving on
     this.viaFlow = VIAS.map(() => null); // flow fields to each route choice (see VIAS in map.js)
     this.viaDirty = VIAS.map(() => true);
     this.packVia = -1;                 // route the current pack is using
@@ -164,8 +183,8 @@ export class Sim {
   get mods() {
     const cd = Math.pow(0.65, this.tk('crown'));
     return {
-      speed: 1 + 0.1 * this.tk('catnip'), bite: Math.pow(0.85, this.tk('cap')), tails: 1 + 0.25 * this.tk('bell'),
-      sell: 1 + 0.2 * this.tk('rind'), bleedMax: CAT.bleedMaxStacks + 2 * this.tk('collar'),
+      speed: 1 + 0.1 * this.tk('catnip'), bite: Math.pow(0.85, this.tk('cap')), points: 1 + 0.25 * this.tk('bell'),
+      waveBonus: 1 + 0.5 * this.tk('rind'), bleedMax: CAT.bleedMaxStacks + 2 * this.tk('collar'),
       regen: 1 + 0.3 * this.tk('tin'), crit: 0.08 * this.tk('whisker'),
       abilityCd: Math.pow(0.8, this.tk('watch')) * cd, trapCd: Math.pow(0.8, this.tk('key')) * cd,
       attackCd: cd, trapDmg: Math.pow(1.25, this.tk('thimble')),
@@ -173,10 +192,12 @@ export class Sim {
   }
 
   // ---------- players ----------
-  addPlayer(id, kind = 'fred') {
+  // opts.loadout = the 8 traps this player brought; opts.item = their one equipped item.
+  addPlayer(id, kind = 'fred', opts = {}) {
     const def = CATS[kind];
     const cat = { id, kind, def, name: def.name, x: CAT_SPAWN.x, y: 0, z: CAT_SPAWN.z, vx: 0, vy: 0, vz: 0, yaw: Math.PI, pitch: 0,
-      hp: def.maxHp, energy: CAT.maxEnergy, alive: true, respawnT: 0, onGround: true, airJumps: def.airJumps, tails: 0,
+      hp: def.maxHp, energy: def.maxEnergy, alive: true, respawnT: 0, onGround: true, airJumps: def.airJumps,
+      loadout: opts.loadout || null, item: opts.item || null, itemT: 0, guardT: 0, guard: 0, tauntT: 0, dashT: 0,
       attackT: 0, secT: 0, eatT: 0, altT: 0, charge: 0, leaping: false, pouncing: false, dashing: false, attacking: false,
       hissT: 0, flipT: 0, buffT: 0, healT: 0, healRate: 0, rage: 0, rageT: 0, frenzyT: 0, striking: false, strikeUsed: false, stillT: 0, napping: false,
       wallNormal: null, kicksLeft: 1, lastKick: null, hurtT: 0, isCat: true, turn: 0 };
@@ -195,12 +216,12 @@ export class Sim {
         Object.assign(inp, { mx: cmd.mx, mz: cmd.mz, yaw: cmd.yaw, pitch: cmd.pitch || 0, primary: !!cmd.primary, jumpHeld: !!cmd.jumpHeld, aim: cmd.aim || inp.aim });
         if (cmd.jump) inp.jump = true;           // edge-triggered: latched until consumed
         if (cmd.secondary) inp.secondary = true;
-        if (cmd.alt) inp.alt = true;             // Shift (Scary Cat's leap back)
+        if (cmd.alt) inp.alt = true;             // E: second ability
         break;
       }
       case 'place': this.placeTrap(cat, cmd.trap, cmd.ax, cmd.az, cmd.rot || 0, cmd.wallDir); break;
       case 'sellTrap': this.sellTrap(cmd.cell, cmd.layer); break;
-      case 'sellTails': this.sellTails(cat); break;
+      case 'item': this.useItem(cat, cmd.aim); break;
       case 'startWave': if (this.phase === 'build') this.phaseTimer = 0; break;
     }
   }
@@ -377,6 +398,7 @@ export class Sim {
     return true;
   }
   placeTrap(cat, kind, ax, az, rot, wallDir) {
+    if (cat && cat.loadout && !cat.loadout.includes(kind)) return;   // only traps you brought
     const def = TRAPS[kind]; if (!def || !cat) return;
     if (this.sardines < def.cost) { this.emit({ t: 'msg', text: 'Not enough sardines' }); return; }
     const ok = this.canPlace(kind, ax, az, rot, wallDir);
@@ -423,27 +445,12 @@ export class Sim {
     }
     return { x, z, y: this.groundAt(i, 0, 0.3, true) };
   }
-  dropTails(x, z, amount, stranded = false) {
-    if (amount <= 0) return;
-    const p = this.reachableSpot(x, z, stranded); if (!p) return;
-    this.tails.push({ id: this.nextId++, ...p, amount });
-  }
   dropTrinket(x, z, tier, stranded) {
     const p = this.reachableSpot(x, z, stranded); if (!p) return;
     const pool = Object.keys(TRINKETS).filter(k => TRINKETS[k].tier === tier);
     const key = pool[Math.floor(this.rng() * pool.length)];
     this.loot.push({ id: this.nextId++, ...p, key });
     this.emit({ t: 'msg', text: `A ${TRINKETS[key].tier} trinket dropped!` });
-  }
-  sellTails(cat) {
-    if (!cat || !cat.alive || cat.tails <= 0) return;
-    const stall = STALLS.find(s => Math.hypot(cat.x - s.sell[0], cat.z - s.sell[1]) < RULES.stallRadius);
-    if (!stall) { this.emit({ t: 'msg', text: 'Bring them to a tail stash' }); return; }
-    const pay = Math.round(cat.tails * RULES.tailPrice * this.mods.sell);
-    this.sardines += pay;
-    this.emit({ t: 'msg', text: `Traded ${cat.tails} tails for ${pay} sardines` });
-    this.emit({ t: 'stash', n: cat.tails, stall: STALLS.indexOf(stall) });
-    cat.tails = 0; this.bark('sell', cat.name, true);
   }
 
   // ---------- main step ----------
@@ -460,6 +467,8 @@ export class Sim {
     for (const m of this.mice) this.stepMouse(m);
     this.stepShots();
     this.stepGlobs();
+    this.stepBirds();
+    this.stepZones();
     this.stepMissiles();
     if (this.mice.some(m => m.dead)) this.mice = this.mice.filter(m => !m.dead);
     if (this.lives <= 0 && this.phase !== 'lost') {
@@ -486,12 +495,12 @@ export class Sim {
       while (s.queue.length && s.t <= 0) {
         const e = s.queue.shift();
         if (this.packVia === -2) this.packVia = this.chooseVia(this.door);    // first mouse of a pack picks the lane
-        this.spawnMouse(e.type, s.hpMul, e.pack, this.door, this.packVia);
+        if (MICE[e.type].bird) this.spawnBird(e.type, s.hpMul); else this.spawnMouse(e.type, s.hpMul, e.pack, this.door, this.packVia);
         if (e.intro) this.emit({ t: 'msg', text: `NEW: ${MICE[e.type].name} — ${INTRO_TEXT[e.type] || ''}` });
         s.t += e.gap;
         if (e.gap > 0.1) { this.door = (this.door + 1) % SPAWNS.length; this.packVia = -2; }   // next pack: other entrance, new lane
       }
-    } else if (this.mice.length === 0 && this.shots.length === 0) {
+    } else if (this.mice.length === 0 && this.shots.length === 0 && this.birds.length === 0) {
       if (this.mode === 'normal' && this.wave >= RULES.winWave) {
         this.phase = 'won';
         this.rating = ratePaws(this.lives, this.stats);
@@ -499,7 +508,7 @@ export class Sim {
       } else {
         this.phase = 'build'; this.phaseTimer = RULES.buildPhaseSeconds;
         // Income that doesn't depend on hauling tails, so you can always build.
-        const bonus = RULES.waveBonus + this.wave * 10; this.sardines += bonus;
+        const bonus = Math.round((RULES.waveBonus + this.wave * 10) * this.mods.waveBonus); this.sardines += bonus;
         this.emit({ t: 'msg', text: `Wave ${this.wave} cleared  +${bonus} sardines` }); this.emit({ t: 'waveClear', wave: this.wave });
         this.bark('clear', null, true);
       }
@@ -530,6 +539,7 @@ export class Sim {
   damageMouse(m, n, source, crit = false) {
     if (m.dead) return;
     if (m.packed && source !== 'stranded') n *= RULES.packDamageTaken;
+    if (m.vulnT > 0) n *= CAT.roarVuln;          // shaken by Mimo's roar
     m.hp -= n; m.flash = 0.12;
     if (m.asleep && source !== 'bleed') { m.asleep = false; m.stunT = 0; }   // a hit wakes a sleeping mouse
     if (n >= 1) this.emit({ t: 'dmg', x: m.x, y: m.y + MICE[m.type].size, z: m.z, n: Math.round(n), crit });
@@ -542,12 +552,10 @@ export class Sim {
     if (!drowned) {
       if (d.boss) this.dropTrinket(m.x, m.z, this.rng() < 0.35 ? 'legendary' : 'rare', stranded);
       else if (this.rng() < RULES.trinketChance) this.dropTrinket(m.x, m.z, this.rng() < 0.3 ? 'rare' : 'common', stranded);
-      if (!eaten && this.rng() < d.tailChance) {
-        this.tailAcc += d.tails * this.mods.tails;
-        const n = Math.floor(this.tailAcc); this.tailAcc -= n;
-        this.dropTails(m.x, m.z, n, stranded);
-      }
     }
+    // Every kill pays Paw Points straight away (no tails to carry any more).
+    const pts = Math.round((d.points || 1) * this.mods.points);
+    this.sardines += pts; this.emit({ t: 'points', x: m.x, z: m.z, n: pts });
     if (d.yarn) { this.yarn += d.yarn; this.emit({ t: 'msg', text: `+${d.yarn} yarn` }); }
     // Splitters burst into smaller mice (not if eaten or drowned — that's the counter-play).
     if (d.split && !drowned && !eaten && !stranded) {
@@ -569,13 +577,13 @@ export class Sim {
     const inp = this.inputs.get(cat.id), def = cat.def, mods = this.mods;
     if (!cat.alive) {
       cat.respawnT -= DT; inp.jump = inp.secondary = inp.alt = false;
-      if (cat.respawnT <= 0) Object.assign(cat, { alive: true, hp: def.maxHp, energy: CAT.maxEnergy, x: CAT_SPAWN.x, z: CAT_SPAWN.z, y: 0, vx: 0, vy: 0, vz: 0, charge: 0 });
+      if (cat.respawnT <= 0) Object.assign(cat, { alive: true, hp: def.maxHp, energy: def.maxEnergy, x: CAT_SPAWN.x, z: CAT_SPAWN.z, y: 0, vx: 0, vy: 0, vz: 0, charge: 0 });
       return;
     }
     cat.turn = inp.yaw - cat.yaw;   // for the tail flick
     cat.yaw = inp.yaw; cat.pitch = inp.pitch;
     cat.hurtT = Math.max(0, cat.hurtT - DT);
-    cat.energy = Math.min(CAT.maxEnergy, cat.energy + def.energyRegen * mods.regen * DT);
+    cat.energy = Math.min(def.maxEnergy, cat.energy + def.energyRegen * mods.regen * DT);
     cat.attackT = Math.max(0, cat.attackT - DT); cat.secT = Math.max(0, cat.secT - DT); cat.eatT = Math.max(0, cat.eatT - DT);
     cat.altT = Math.max(0, cat.altT - DT); cat.hissT = Math.max(0, cat.hissT - DT); cat.flipT = Math.max(0, cat.flipT - DT);
     cat.buffT = Math.max(0, cat.buffT - DT); cat.frenzyT = Math.max(0, cat.frenzyT - DT);
@@ -643,9 +651,26 @@ export class Sim {
       else if (def.secondary === 'purr') this.purr(cat);
       else if (def.secondary === 'frenzy') this.frenzy(cat);
       else if (def.secondary === 'yawn') this.yawn(cat);
+      else if (def.secondary === 'roar') this.roar(cat);
     }
-    // Shift: Scary Cat's leap back.
-    if (inp.alt) { inp.alt = false; if (def.alt === 'leapback') this.leapBack(cat); }
+    // E: each cat's second ability.
+    if (inp.alt) { inp.alt = false; this.ability2(cat, inp); }
+    cat.itemT = Math.max(0, cat.itemT - DT); cat.guardT = Math.max(0, cat.guardT - DT); cat.tauntT = Math.max(0, cat.tauntT - DT);
+    // Mimo's Sky Swipe: swat the bird when he reaches it.
+    if (cat.swipeT > 0) {
+      cat.swipeT -= DT;
+      for (const b of this.birds) if (!b.dead && Math.hypot(b.x - cat.x, b.y - (cat.y + 0.5), b.z - cat.z) < 1.8) { this.damageBird(b, ABILITY2.skyswipe.damage * CAT.vsBirds * this.dmgMul(cat)); cat.swipeT = 0; this.emit({ t: 'claw', id: cat.id, hits: 1 }); break; }
+    }
+    // Fred's dash: slash every mouse he passes through.
+    if (cat.dashT > 0) {
+      cat.dashT -= DT;
+      for (const m of this.nearMice(cat.x, cat.z, 1.2)) {
+        if (m.dead || cat.dashHit.has(m.id) || Math.hypot(m.x - cat.x, m.z - cat.z) > 0.9) continue;
+        cat.dashHit.add(m.id); if (m.bleed.length < this.mods.bleedMax) m.bleed.push(CAT.bleedSeconds);
+        this.damageMouse(m, ABILITY2.dash.damage * this.dmgMul(cat), 'cat');
+      }
+      if (cat.dashT <= 0) cat.dashing = false;
+    }
     // Left click (held): Fred spits, Puddin bites, Scary Cat whips, Nebbie shoots whiskers.
     cat.attacking = inp.primary;
     if (inp.primary && cat.attackT <= 0) {
@@ -654,6 +679,7 @@ export class Sim {
       else if (def.primary === 'whisker') this.fireWhisker(cat, inp);
       else if (def.primary === 'claw') this.claw(cat);
       else if (def.primary === 'burr') this.fireBurr(cat, inp);
+      else if (def.primary === 'pebble') this.firePebble(cat, inp);
       else this.bite(cat);
     }
 
@@ -677,14 +703,7 @@ export class Sim {
     // Water kills everything.
     if (this.isWater(cellOf(cat.x, cat.z)) && cat.y < -0.2) { this.killCat(cat, true); return; }
 
-    // Pick up tails + trinkets.
-    for (const t of this.tails) {
-      if (t.amount > 0 && cat.tails < RULES.tailCarryCap && Math.hypot(t.x - cat.x, t.z - cat.z) < RULES.pickupRadius && Math.abs(t.y - cat.y) < 1.5) {
-        const take = Math.min(t.amount, RULES.tailCarryCap - cat.tails);
-        cat.tails += take; t.amount -= take; this.emit({ t: 'pickup', n: take });
-      }
-    }
-    if (this.tails.some(t => t.amount <= 0)) this.tails = this.tails.filter(t => t.amount > 0);
+    // Pick up trinkets.
     for (const l of this.loot) {
       if (!l.taken && Math.hypot(l.x - cat.x, l.z - cat.z) < RULES.pickupRadius && Math.abs(l.y - cat.y) < 1.5) {
         l.taken = true; this.trinkets[l.key] = (this.trinkets[l.key] || 0) + 1;
@@ -730,6 +749,7 @@ export class Sim {
     const mul = this.dmgMul(cat);
     for (const [, m] of list) { const crit = this.rng() < this.mods.crit; this.damageMouse(m, CAT.clawDamage * mul * (crit ? 2 : 1), 'cat', crit); }
     this.gainRage(cat, list.length);
+    this.swatBirds(cat, CAT.clawRange, CAT.clawDamage * mul);
     this.emit({ t: 'claw', id: cat.id, hits: list.length, frenzy: fr });
   }
   frenzy(cat) {
@@ -755,6 +775,136 @@ export class Sim {
     this.missiles.push({ id: this.nextId++, kind: 'burr', x: sx, y: sy, z: sz, vx: dx / d * CAT.burrSpeed, vy: dy / d * CAT.burrSpeed + 1, vz: dz / d * CAT.burrSpeed, life: 1.2, g: 4, mul: this.dmgMul(cat) });
     this.emit({ t: 'burr', id: cat.id });
   }
+  // Mimo: flicked pebble (slight arc).
+  firePebble(cat, inp) {
+    cat.attackT = CAT.pebbleInterval * this.mods.attackCd;
+    const a = this.aimFrom(cat, inp);
+    const sx = cat.x + Math.sin(cat.yaw) * 0.4, sy = cat.y + cat.def.height * 0.75, sz = cat.z + Math.cos(cat.yaw) * 0.4;
+    const dx = a.x - sx, dy = a.y - sy, dz = a.z - sz, d = Math.hypot(dx, dy, dz) || 1, tf = d / CAT.pebbleSpeed;
+    this.missiles.push({ id: this.nextId++, kind: 'pebble', x: sx, y: sy, z: sz, vx: dx / d * CAT.pebbleSpeed, vy: dy / d * CAT.pebbleSpeed + 0.5 * 4 * tf, vz: dz / d * CAT.pebbleSpeed,
+      life: 1.4, g: 4, mul: this.dmgMul(cat) });
+    this.emit({ t: 'pebble', id: cat.id });
+  }
+  // Mimo: lion's roar. Everything in range takes more damage for a while; birds drop out of the sky.
+  roar(cat) {
+    if (cat.secT > 0 || cat.energy < CAT.roarCost) return;
+    cat.secT = CAT.roarCooldown * this.mods.abilityCd; cat.energy -= CAT.roarCost;
+    let n = 0;
+    for (const m of this.nearMice(cat.x, cat.z, CAT.roarRadius)) {
+      if (m.dead || Math.hypot(m.x - cat.x, m.z - cat.z) > CAT.roarRadius) continue;
+      m.vulnT = CAT.roarSecs; n++;
+    }
+    for (const b of this.birds) {
+      if (b.dead || Math.hypot(b.x - cat.x, b.z - cat.z) > CAT.roarRadius + 3) continue;
+      b.vulnT = CAT.roarSecs; b.stunT = CAT.roarBirdStun; n++;
+    }
+    this.emit({ t: 'roar', id: cat.id, x: cat.x, z: cat.z, r: CAT.roarRadius, n }); this.bark('roar', cat.name, true);
+  }
+
+  // ---------- birds ----------
+  // Birds come in from the forest edge high up, ignore every route, and go straight for
+  // what they want. Magpie: steal (a Cheese Chunk's cheese, a dropped tail, or peck a cat).
+  // Crow: carry mice over the defences and drop them near the hole.
+  spawnBird(type, hpMul) {
+    const d = MICE[type], hp = Math.max(1, Math.round(d.hp * hpMul));
+    const x = 10 + this.rng() * 76, z = WORLD_H - 2;
+    const b = { id: this.nextId++, type, x, y: 9, z, vx: 0, vy: 0, vz: 0, hp, maxHp: hp, state: 'in', t: 0, tx: x, tz: 40, ty: 0,
+      target: null, carry: d.carry || 0, dead: false, flash: 0, stunT: 0, vulnT: 0, yaw: Math.PI };
+    this.pickBirdTarget(b);
+    this.birds.push(b);
+    this.emit({ t: 'birdIn', id: b.id, kind: type });
+    return b;
+  }
+  pickBirdTarget(b) {
+    if (b.type === 'crow') {
+      // Drop zone: somewhere on the last stretch of a route, past most of your traps.
+      const r = this.route(); const p = r[Math.floor(r.length * (0.72 + this.rng() * 0.15))] || [48, 12];
+      b.tx = p[0]; b.tz = p[1]; b.ty = 1.4; b.target = { kind: 'drop' }; return;
+    }
+    const bait = this.baits.find(t => t.charges > 0);
+    if (bait) { b.tx = (bait.x0 + bait.x1) / 2; b.tz = (bait.z0 + bait.z1) / 2; b.ty = 1.2; b.target = { kind: 'bait', id: bait.id }; return; }
+    const cats = [...this.cats.values()].filter(c => c.alive);
+    const c = cats[Math.floor(this.rng() * cats.length)];
+    if (c) { b.tx = c.x; b.tz = c.z; b.ty = c.y + 0.8; b.target = { kind: 'cat', id: c.id }; return; }
+    b.state = 'out';
+  }
+  damageBird(b, n) {
+    if (b.dead) return;
+    if (b.vulnT > 0) n *= CAT.roarVuln;
+    b.hp -= n; b.flash = 0.12;
+    this.emit({ t: 'dmg', x: b.x, y: b.y + 0.4, z: b.z, n: Math.round(n), crit: false });
+    if (b.hp <= 0) {
+      b.dead = true; const d = MICE[b.type];
+      this.sardines += d.reward; this.stats.kills++;
+      this.emit({ t: 'birdKill', x: b.x, y: b.y, z: b.z, kind: b.type, reward: d.reward });
+      // A crow shot down still carrying mice: they fall (and from up high, they splat).
+      for (let k = 0; k < b.carry; k++) {
+        const m = this.spawnAt('mouse', b.x + (this.rng() - 0.5), b.z + (this.rng() - 0.5), MICE.mouse.hp);
+        m.y = b.y; this.launch(m, (this.rng() - 0.5) * 2, 0, (this.rng() - 0.5) * 2);
+      }
+      b.carry = 0;
+      if (this.rng() < 0.4) for (const cat of this.cats.values()) if (cat.def.birdHunter) { this.bark('bird', cat.name, true); break; }
+    }
+  }
+  stepBirds() {
+    for (const b of this.birds) {
+      if (b.dead) continue;
+      const d = MICE[b.type];
+      b.flash = Math.max(0, b.flash - DT); if (b.vulnT > 0) b.vulnT -= DT;
+      if (b.stunT > 0) {
+        // Knocked silly by a roar: tumbles down, flaps back up when it comes to.
+        b.stunT -= DT; b.vy -= GRAVITY * 0.5 * DT; b.y = Math.max(0.3, b.y + b.vy * DT);
+        if (b.stunT <= 0) { b.vy = 0; if (b.state !== 'out') b.state = 'in'; }
+        continue;
+      }
+      const goTo = (x, y, z, sp) => {
+        const dx = x - b.x, dy = y - b.y, dz = z - b.z, dd = Math.hypot(dx, dy, dz) || 1, st = Math.min(dd, sp * DT);
+        b.x += dx / dd * st; b.y += dy / dd * st; b.z += dz / dd * st;
+        if (Math.hypot(dx, dz) > 0.05) b.yaw = Math.atan2(dx, dz);
+        return dd;
+      };
+      if (b.state === 'in') {
+        // Cruise high, then dive when overhead.
+        const h = Math.hypot(b.tx - b.x, b.tz - b.z);
+        goTo(b.tx, h > 4 ? 9 : b.ty, b.tz, d.speed);
+        if (b.target && b.target.kind === 'cat') { const c = this.cats.get(b.target.id); if (c && c.alive) { b.tx = c.x; b.tz = c.z; b.ty = c.y + 0.8; } }
+        if (h < 0.6 && Math.abs(b.y - b.ty) < 0.3) { b.state = 'act'; b.t = b.type === 'crow' ? 0.4 : 1.2; }
+      } else if (b.state === 'act') {
+        b.t -= DT;
+        if (b.t <= 0) {
+          const tg = b.target || {};
+          if (tg.kind === 'drop') {
+            for (let k = 0; k < b.carry; k++) { const m = this.spawnAt('mouse', b.x + (this.rng() - 0.5) * 1.5, b.z + (this.rng() - 0.5) * 1.5, MICE.mouse.hp); m.y = b.y * 0.5; this.launch(m, 0, 0, 0); }
+            if (b.carry) this.emit({ t: 'birdDrop', x: b.x, z: b.z, n: b.carry });
+            b.carry = 0;
+          } else if (tg.kind === 'bait') {
+            const bait = this.traps.get(tg.id);
+            if (bait && bait.charges > 0) { bait.charges = 0; bait.rechargeT = bait.cdMax = TRAPS.bait.recharge; this.emit({ t: 'steal', x: b.x, z: b.z, what: 'cheese' }); }
+          } else if (tg.kind === 'cat') {
+            // Pecks the cat and makes off with some Paw Points.
+            const c = this.cats.get(tg.id);
+            if (c && Math.hypot(c.x - b.x, c.z - b.z) < 1.5) { this.hurtCat(c, d.bite); const took = Math.min(this.sardines, 15); this.sardines -= took; if (took) this.emit({ t: 'steal', x: b.x, z: b.z, what: 'points', n: took }); }
+          }
+          b.state = 'out';
+        }
+      } else {
+        // Leave the way it came (south, over the forest) and vanish.
+        goTo(b.x, 10, WORLD_H + 6, d.speed * 1.2);
+        if (b.z > WORLD_H + 4) b.dead = true;
+      }
+    }
+    if (this.birds.some(b => b.dead)) this.birds = this.birds.filter(b => !b.dead);
+  }
+  // Melee attacks swat birds that swoop low enough (within reach, in front).
+  swatBirds(cat, range, dmg) {
+    const fx = Math.sin(cat.yaw), fz = Math.cos(cat.yaw);
+    for (const b of this.birds) {
+      if (b.dead || b.y > cat.y + 1.8 || b.y < cat.y - 0.6) continue;
+      const dx = b.x - cat.x, dz = b.z - cat.z, dd = Math.hypot(dx, dz);
+      if (dd < range + 0.4 && (dx * fx + dz * fz) > 0) this.damageBird(b, dmg * (cat.def.birdHunter ? CAT.vsBirds : 1));
+    }
+  }
+
   putToSleep(m, secs) {
     if (MICE[m.type].boss) { m.slowT = Math.max(m.slowT, secs); return false; }
     m.stunT = m.stunMax = secs; m.asleep = true; m.drowsy = 0; m.fearT = 0; return true;
@@ -788,6 +938,7 @@ export class Sim {
       this.damageMouse(m, CAT.whipDamage * this.dmgMul(cat) * (crit ? 2 : 1), 'cat', crit);
       if (!m.dead && !MICE[m.type].boss) { m.x += fx * 0.3; m.z += fz * 0.3; }
     }
+    this.swatBirds(cat, CAT.whipRange, CAT.whipDamage * this.dmgMul(cat));
     this.emit({ t: 'whip', id: cat.id, hits: hits.length });
   }
   // Scary Cat: arch + hiss. Mice in range run away from her for a few seconds (bosses just slow).
@@ -804,11 +955,106 @@ export class Sim {
   }
   // Scary Cat: backflip away from where she's facing.
   leapBack(cat) {
-    if (cat.altT > 0 || !cat.onGround) return;
-    cat.altT = CAT.leapBackCooldown * this.mods.abilityCd;
+    if (!cat.onGround) return false;
     cat.vx = -Math.sin(cat.yaw) * CAT.leapBackH; cat.vz = -Math.cos(cat.yaw) * CAT.leapBackH; cat.vy = CAT.leapBackV;
     cat.onGround = false; cat.dashing = true; cat.flipT = 0.5;
     this.emit({ t: 'leapback', id: cat.id });
+    return true;
+  }
+
+  // ---------- E: second abilities ----------
+  ability2(cat, inp) {
+    const key = cat.def.ability2, a = ABILITY2[key];
+    if (!a || cat.altT > 0 || cat.energy < a.cost) return;
+    const ok = this[`ab_${key}`](cat, a, inp);
+    if (ok === false) return;                        // couldn't use it right now: no cost
+    cat.altT = a.cd * this.mods.abilityCd; cat.energy -= a.cost;
+  }
+  ab_leapback(cat) { return this.leapBack(cat); }
+  // Fred: Alley Dash — dart forward along the ground, slashing everything he passes.
+  ab_dash(cat, a) {
+    const sp = a.dist / 0.25;
+    cat.vx = Math.sin(cat.yaw) * sp; cat.vz = Math.cos(cat.yaw) * sp; cat.vy = 1; cat.onGround = false;
+    cat.dashing = true; cat.dashT = 0.25; cat.dashHit = new Set();
+    this.emit({ t: 'dash', id: cat.id });
+  }
+  // Puddin: Big Sit — flattens and pins the mice under him, then shrugs off hits for a while.
+  ab_sit(cat, a) {
+    for (const m of this.nearMice(cat.x, cat.z, a.radius + 0.5)) {
+      if (m.dead || Math.hypot(m.x - cat.x, m.z - cat.z) > a.radius) continue;
+      this.damageMouse(m, a.damage * this.dmgMul(cat), 'splat');
+      if (!m.dead) { m.stunT = m.stunMax = MICE[m.type].boss ? a.stun * 0.4 : a.stun; }
+    }
+    cat.guardT = a.guardSecs; cat.guard = a.guard; cat.vx = cat.vz = 0;
+    this.emit({ t: 'sit', id: cat.id, x: cat.x, z: cat.z, r: a.radius });
+  }
+  // Nebbie: Tinker — every trap nearby resets instantly and hits harder for a while.
+  ab_tinker(cat, a) {
+    let n = 0;
+    for (const tr of this.traps.values()) {
+      if (Math.hypot((tr.x0 + tr.x1) / 2 - cat.x, (tr.z0 + tr.z1) / 2 - cat.z) > a.radius || tr.kind === 'barricade') continue;
+      tr.cd = 0; tr.boostT = a.buffSecs;
+      if (tr.kind === 'gluepad') tr.charges = TRAPS.gluepad.charges;
+      if (tr.kind === 'bait') tr.charges = TRAPS.bait.nibbles;
+      n++;
+    }
+    this.emit({ t: 'tinker', id: cat.id, x: cat.x, z: cat.z, r: a.radius, n });
+    if (!n) this.emit({ t: 'msg', text: 'No traps close enough to tinker with' });
+    return n > 0;
+  }
+  // Casper: Show Off — every mouse nearby drops everything to come at him; he takes less damage.
+  ab_showoff(cat, a) {
+    cat.tauntT = a.secs; cat.guardT = a.secs; cat.guard = a.guard;
+    this.emit({ t: 'showoff', id: cat.id, x: cat.x, z: cat.z, r: a.radius }); this.bark('frenzy', cat.name, true);
+  }
+  // Meow Meow: Groom — heal the most-hurt cat close by (herself if nobody else needs it).
+  ab_groom(cat, a) {
+    let best = cat, worst = cat.hp / cat.def.maxHp;
+    for (const c of this.cats.values()) {
+      if (!c.alive || c === cat || Math.hypot(c.x - cat.x, c.z - cat.z) > a.radius) continue;
+      if (c.hp / c.def.maxHp < worst) { best = c; worst = c.hp / c.def.maxHp; }
+    }
+    best.hp = Math.min(best.def.maxHp, best.hp + best.def.maxHp * a.heal);
+    this.emit({ t: 'groom', id: best.id, from: cat.id });
+  }
+  // Mimo: Sky Swipe — springs at the nearest bird in reach and swats it; lands on whatever is below.
+  ab_skyswipe(cat, a) {
+    let target = null, bd = a.reach;
+    for (const b of this.birds) { const dd = Math.hypot(b.x - cat.x, b.y - cat.y, b.z - cat.z); if (!b.dead && dd < bd) { bd = dd; target = b; } }
+    const tx = target ? target.x : cat.x + Math.sin(cat.yaw) * 3, tz = target ? target.z : cat.z + Math.cos(cat.yaw) * 3, ty = target ? target.y : cat.y + 5;
+    const tf = 0.5, dy = ty - cat.y;
+    cat.vx = (tx - cat.x) / tf; cat.vz = (tz - cat.z) / tf; cat.vy = (dy + 0.5 * GRAVITY * tf * tf) / tf; cat.onGround = false; cat.dashing = true;
+    cat.swipeT = tf + 0.1; cat.swipeTarget = target ? target.id : null; cat.striking = true;
+    this.emit({ t: 'skyswipe', id: cat.id });
+  }
+
+  // ---------- Q: items (one per cat) ----------
+  useItem(cat, aim) {
+    if (!cat || !cat.alive || !cat.item || cat.itemT > 0) return;
+    const it = ITEMS[cat.item], p = aim || { x: cat.x + Math.sin(cat.yaw) * 4, z: cat.z + Math.cos(cat.yaw) * 4 };
+    const near = (r) => this.mice.filter(m => !m.dead && Math.hypot(m.x - p.x, m.z - p.z) < r);
+    switch (cat.item) {
+      case 'laser': this.zones.push({ id: this.nextId++, kind: 'laser', x: p.x, z: p.z, r: it.radius, t: it.secs }); break;
+      case 'bola': for (const m of near(it.radius)) { if (MICE[m.type].boss) { m.slowT = it.secs; continue; } m.state = 'stuck'; m.stuckT = it.secs; m.glueId = -1; } break;
+      case 'catnip':
+        for (const c of this.cats.values()) if (c.alive && Math.hypot(c.x - p.x, c.z - p.z) < it.radius + 1) c.buffT = Math.max(c.buffT, it.secs);
+        for (const m of near(it.radius)) { if (MICE[m.type].boss) continue; m.fearT = it.secs; m.fearX = m.x + (this.rng() - 0.5) * 6; m.fearZ = m.z + (this.rng() - 0.5) * 6; }
+        break;
+      case 'flea': this.zones.push({ id: this.nextId++, kind: 'flea', x: p.x, z: p.z, r: it.radius, t: it.secs, dps: it.dps }); break;
+      case 'tonic': cat.hp = Math.min(cat.def.maxHp, cat.hp + cat.def.maxHp * it.heal); break;
+      case 'squeaky': this.decoys.push({ id: this.nextId++, x: p.x, y: 0, z: p.z, hp: it.hp, maxHp: it.hp, t: it.secs, alive: true, decoy: true, onGround: true, def: { radius: 0.3, taunt: 3 } }); break;
+    }
+    cat.itemT = it.cd;
+    this.emit({ t: 'item', id: cat.id, item: cat.item, x: p.x, z: p.z, r: it.radius || 0 });
+  }
+  stepZones() {
+    for (const zn of this.zones) {
+      zn.t -= DT;
+      if (zn.kind === 'flea') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) if (!m.dead && Math.hypot(m.x - zn.x, m.z - zn.z) < zn.r) this.damageMouse(m, zn.dps * DT, 'poison');
+    }
+    if (this.zones.some(z => z.t <= 0)) this.zones = this.zones.filter(z => z.t > 0);
+    for (const d of this.decoys) { d.t -= DT; if (d.t <= 0 || d.hp <= 0) { d.alive = false; this.emit({ t: 'decoyGone', id: d.id, x: d.x, z: d.z }); } }
+    if (this.decoys.some(d => !d.alive)) this.decoys = this.decoys.filter(d => d.alive);
   }
   // Nebbie: whisker dart. Straight and fast; passes through up to whiskerPierce mice.
   fireWhisker(cat, inp) {
@@ -868,6 +1114,7 @@ export class Sim {
       if (d > 0.5 && ang > CAT.biteArc) continue;
       if (d < bd) { bd = d; best = m; }
     }
+    this.swatBirds(cat, CAT.biteRange, CAT.biteDamage * this.dmgMul(cat));
     this.emit({ t: 'bite', id: cat.id });
     if (!best) return;
     const crit = this.rng() < this.mods.crit;
@@ -916,8 +1163,7 @@ export class Sim {
   killCat(cat, drowned) {
     if (!cat.alive) return;
     cat.alive = false; cat.respawnT = RULES.catRespawnSeconds;
-    if (!drowned) this.dropTails(cat.x, cat.z, cat.tails);   // drowned tails are lost
-    cat.tails = 0; cat.charge = 0;
+    cat.charge = 0;
     this.lives -= RULES.livesLostPerCatDeath;
     this.emit({ t: 'catDeath', id: cat.id, drowned });
     this.emit({ t: 'msg', text: `${cat.name} died  −${RULES.livesLostPerCatDeath} lives` });
@@ -1033,6 +1279,7 @@ export class Sim {
       return;
     }
     if (m.state === 'stranded') { this.damageMouse(m, RULES.unreachableDps * DT, 'stranded'); return; }
+    if (m.vulnT > 0) m.vulnT -= DT;
     if (m.stunT > 0) { m.stunT -= DT; if (m.stunT <= 0) m.asleep = false; return; }
     if (m.state === 'stuck') { m.stuckT -= DT; if (m.stuckT <= 0) m.state = 'walk'; return; }
 
@@ -1064,6 +1311,17 @@ export class Sim {
       m.poisoned = false;
     }
     if (m.poisonT > 0) { m.poisonT -= DT; this.damageMouse(m, TRAPS.barricade.poisonDps * (d.boss ? 0.4 : 1) * this.mods.trapDmg * DT, 'poison'); if (m.dead) return; }
+    // Laser Pointer: mice near the red dot chase it (bosses too proud).
+    if (!d.boss && m.state === 'walk') {
+      const dot = this.zones.find(z => z.kind === 'laser' && Math.hypot(z.x - m.x, z.z - m.z) < z.r);
+      if (dot) {
+        const dx = dot.x + Math.sin(this.tick * 0.2 + m.id) * 0.8 - m.x, dz = dot.z + Math.cos(this.tick * 0.17 + m.id) * 0.8 - m.z, dd = Math.hypot(dx, dz) || 1;
+        const okl = (x, z) => { const c = cellOf(x, z); return c >= 0 && pass(c) && !this.isBlocker(c); };
+        const st = Math.min(dd, d.speed * 1.2 * DT), nx = m.x + dx / dd * st, nz = m.z + dz / dd * st;
+        if (okl(nx, nz)) { m.x = nx; m.z = nz; } else if (okl(nx, m.z)) m.x = nx; else if (okl(m.x, nz)) m.z = nz;
+        m.yaw = Math.atan2(dx, dz); return;
+      }
+    }
     // Cheese Chunk: if one with cheese left is close, go and nibble it (not bosses, not if full).
     if (!d.boss && !m.fed && !(m.baitIgnoreT > 0) && m.state === 'walk') {
       const bait = this.nearestBait(m);
@@ -1109,9 +1367,10 @@ export class Sim {
     // Nearest cat on (roughly) our level — what we fight.
     // Cats with taunt (Casper) count as closer, so mice pick them first and chase from further.
     let foe = null, foeD = Infinity, best = Infinity;
-    for (const cat of this.cats.values()) {
+    for (const cat of [...this.cats.values(), ...this.decoys]) {     // squeaky toys count as very tempting cats
       if (!cat.alive || Math.abs(cat.y - m.y) > 1.2) continue;
-      const dd = Math.hypot(cat.x - m.x, cat.z - m.z), eff = dd / (cat.def.taunt || 1);
+      const tn = cat.tauntT > 0 ? 4 : (cat.def.taunt || 1);
+      const dd = Math.hypot(cat.x - m.x, cat.z - m.z), eff = dd / tn;
       if (eff < best) { foe = cat; foeD = dd; best = eff; }
     }
 
@@ -1153,7 +1412,8 @@ export class Sim {
     // Bite any cat we bump into.
     m.biteT -= DT;
     if (m.biteT <= 0 && foe && foeD < d.size * 0.5 + foe.def.radius + 0.15) {
-      m.biteT = 1.0; this.hurtCat(foe, d.bite * this.mods.bite);
+      m.biteT = 1.0;
+      if (foe.decoy) { foe.hp -= d.bite; this.emit({ t: 'toySqueak', x: foe.x, z: foe.z }); } else this.hurtCat(foe, d.bite * this.mods.bite);
     }
 
     // Neighbours: count packmates (strength in numbers) and push apart (collision).
@@ -1171,7 +1431,8 @@ export class Sim {
     const sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * (m.packed ? RULES.packSpeed : 1);
     let mx, mz;
     m.ignoreT = Math.max(0, (m.ignoreT || 0) - DT);
-    const chasing = foe && d.aggro && foeD < d.aggro * (foe.def.taunt || 1) && foe.onGround !== false && m.ignoreT === 0;
+    const reachT = foe && foe.tauntT > 0 ? ABILITY2.showoff.radius : foe && foe.decoy ? ITEMS.squeaky.radius : d.aggro * (foe ? (foe.def.taunt || 1) : 1);
+    const chasing = foe && (d.aggro || foe.tauntT > 0 || foe.decoy) && foeD < reachT && foe.onGround !== false && m.ignoreT === 0;
     if (chasing) {
       // Go for the cat. Stop at biting distance (no pushing into it).
       const dx = foe.x - m.x, dz = foe.z - m.z, dd = foeD || 1, reach = d.size * 0.5 + foe.def.radius;
@@ -1231,6 +1492,7 @@ export class Sim {
   hurtCat(cat, dmg) {
     if (!cat.alive) return false;
     cat.stillT = 0;                                  // getting hit wakes a napping cat
+    if (cat.guardT > 0) dmg *= 1 - cat.guard;        // Big Sit / Show Off
     if (cat.def.dodge && this.rng() < cat.def.dodge) { this.emit({ t: 'dodge', id: cat.id }); if (this.rng() < 0.15) this.bark('dodge', cat.name); return false; }
     cat.hp -= dmg; cat.hurtT = 0.3; this.stats.damageTaken += dmg;
     this.emit({ t: 'catHurt', id: cat.id });
@@ -1273,14 +1535,15 @@ export class Sim {
       b.vy -= b.g * DT; b.life -= DT;
       // Move in short sub-steps so fast darts can't skip over a mouse between ticks.
       const n = Math.max(1, Math.ceil(Math.hypot(b.vx, b.vy, b.vz) * DT / 0.3));
-      let i = -1, hitMouse = null, hitWorld = false;
-      for (let k = 0; k < n && !hitMouse && !hitWorld; k++) {
+      let i = -1, hitMouse = null, hitWorld = false, hitBird = null;
+      for (let k = 0; k < n && !hitMouse && !hitWorld && !hitBird; k++) {
         b.x += b.vx * DT / n; b.y += b.vy * DT / n; b.z += b.vz * DT / n;
         i = cellOf(b.x, b.z);
         for (const m of this.nearMice(b.x, b.z, 1.2)) {
           const s = MICE[m.type].size;
           if (!m.dead && !(b.hit && b.hit.includes(m.id)) && Math.hypot(m.x - b.x, m.z - b.z) < s * 0.5 + 0.2 && Math.abs(m.y + s * 0.4 - b.y) < s * 0.6 + 0.2) { hitMouse = m; break; }
         }
+        if (!hitMouse) for (const bd of this.birds) if (!bd.dead && Math.hypot(bd.x - b.x, bd.y - b.y, bd.z - b.z) < 0.65) { hitBird = bd; break; }
         hitWorld = i < 0 || b.y <= this.groundAt(i, b.y + 0.1, 0.1, true) || this.blocks(i, b.y, 0.15, 0, true);
         // A piercing dart deals with this mouse and keeps flying through the rest of the sub-steps.
         if (hitMouse && b.kind === 'whisker' && b.pierce > 1 && !hitWorld) {
@@ -1292,6 +1555,13 @@ export class Sim {
         }
       }
       if (b.life <= 0) hitWorld = true;
+      if (hitBird) {
+        // Anything can knock a bird down; Mimo's pebbles hit them three times as hard.
+        const base = { pellet: CAT.pelletDamage, whisker: CAT.whiskerDamage, burr: CAT.burrDamage, pebble: CAT.pebbleDamage, hairball: CAT.hairballDamage }[b.kind] || 5;
+        this.damageBird(hitBird, base * (b.mul || 1) * (b.kind === 'pebble' ? CAT.vsBirds : 1));
+        this.emit({ t: 'pelletHit', x: b.x, y: b.y, z: b.z, mouse: true });
+        b.done = true; continue;
+      }
       if (!hitMouse && !hitWorld) continue;
       // Whisker darts go through mice until they run out of pierce (or hit the world).
       if (b.kind === 'whisker') {
@@ -1318,6 +1588,15 @@ export class Sim {
         continue;
       }
       b.done = true;
+      if (b.kind === 'pebble') {
+        // Mimo's pebble: double damage to ranged mice (plague rats, siege mice).
+        if (hitMouse) {
+          const crit = this.rng() < this.mods.crit, vs = MICE[hitMouse.type].ranged ? CAT.pebbleVsRanged : 1;
+          this.damageMouse(hitMouse, CAT.pebbleDamage * vs * (b.mul || 1) * (crit ? 2 : 1), 'cat', crit);
+        }
+        this.emit({ t: 'pelletHit', x: b.x, y: Math.max(0, b.y), z: b.z, mouse: !!hitMouse });
+        continue;
+      }
       if (b.kind === 'pellet') {
         if (hitMouse) {
           if (hitMouse.bleed.length < this.mods.bleedMax) hitMouse.bleed.push(CAT.bleedSeconds); else hitMouse.bleed[0] = CAT.bleedSeconds;
@@ -1339,7 +1618,7 @@ export class Sim {
 
   // ---------- trap behaviour ----------
   stepTraps() {
-    const mods = this.mods;
+    const baseMods = this.mods;
     this.baits = [];
     for (const tr of this.traps.values()) if (tr.kind === 'bait') {
       // Eaten-out cheese grows back (well, someone restocks it) after a while.
@@ -1354,9 +1633,12 @@ export class Sim {
       return { x0: Math.min(tr.x0, tr.x0 + nx * reach), x1: Math.max(tr.x1, tr.x1 + nx * reach),
                z0: Math.min(tr.z0, tr.z0 + nz * reach), z1: Math.max(tr.z1, tr.z1 + nz * reach), nx, nz };
     };
-    const reset = (tr, secs) => { tr.cd = tr.cdMax = secs * mods.trapCd; };
+    const reset = (tr, secs) => { tr.cd = tr.cdMax = secs * baseMods.trapCd; };
     for (const tr of this.traps.values()) {
       tr.cd = Math.max(0, tr.cd - DT);
+      // Nebbie's Tinker overclocks a trap for a while.
+      if (tr.boostT > 0) tr.boostT -= DT;
+      const mods = tr.boostT > 0 ? { ...baseMods, trapDmg: baseMods.trapDmg * ABILITY2.tinker.buff } : baseMods;
       const def = TRAPS[tr.kind];
       if (tr.kind === 'mousetrap' && tr.cd === 0) {
         // Like a spike trap: snaps everything standing on the tile.
@@ -1382,7 +1664,12 @@ export class Sim {
       } else if (tr.kind === 'zapper' && tr.cd === 0) {
         const cx = (tr.x0 + tr.x1) / 2, cz = (tr.z0 + tr.z1) / 2;
         const vs = this.mice.filter(m => !m.dead && Math.hypot(m.x - cx, m.z - cz) < def.radius && m.y < 1);
-        if (vs.length) { reset(tr, def.cooldown); this.emit({ t: 'zap', id: tr.id, hits: vs.slice(0, 6).map(m => [m.x, m.z]) }); for (const m of vs) this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); }
+        const bs = this.birds.filter(b => !b.dead && b.y < 4 && Math.hypot(b.x - cx, b.z - cz) < def.radius);   // bug zappers fry low-flying birds too
+        if (vs.length || bs.length) {
+          reset(tr, def.cooldown); this.emit({ t: 'zap', id: tr.id, hits: vs.slice(0, 6).map(m => [m.x, m.z]) });
+          for (const m of vs) this.damageMouse(m, def.damage * mods.trapDmg, 'trap');
+          for (const b of bs) this.damageBird(b, def.damage * mods.trapDmg);
+        }
       } else if (tr.kind === 'gluepad') {
         if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) tr.charges = def.charges; continue; }
         for (const m of this.mice) {
@@ -1421,19 +1708,19 @@ export class Sim {
   // Snapshot for HUD / co-op sync.
   hud(id) {
     const cat = this.cats.get(id);
-    const nearStall = cat ? STALLS.some(s => Math.hypot(cat.x - s.sell[0], cat.z - s.sell[1]) < RULES.stallRadius) : false;
     const def = cat ? cat.def : CATS.fred;
     const SEC = { hairball: [CAT.hairballCooldown, CAT.hairballCost], pounce: [CAT.pounceCooldown, CAT.pounceCost], hiss: [CAT.hissCooldown, CAT.hissCost],
-      purr: [CAT.purrCooldown, CAT.purrCost], frenzy: [CAT.frenzyCooldown, CAT.frenzyCost], yawn: [CAT.yawnCooldown, CAT.yawnCost] };
+      purr: [CAT.purrCooldown, CAT.purrCost], frenzy: [CAT.frenzyCooldown, CAT.frenzyCost], yawn: [CAT.yawnCooldown, CAT.yawnCost], roar: [CAT.roarCooldown, CAT.roarCost] };
     const [secCd, secCost] = SEC[def.secondary];
     return { phase: this.phase, wave: this.wave, phaseTimer: this.phaseTimer, lives: this.lives, sardines: this.sardines,
-      yarn: this.yarn, tails: cat ? cat.tails : 0, hp: cat ? cat.hp / def.maxHp : 0, energy: cat ? cat.energy / CAT.maxEnergy : 0,
+      yarn: this.yarn, hp: cat ? cat.hp / def.maxHp : 0, energy: cat ? cat.energy / def.maxEnergy : 0, energyAbs: cat ? cat.energy : 0, maxEnergy: def.maxEnergy,
       alive: cat ? cat.alive : false, respawnT: cat ? cat.respawnT : 0, name: cat ? cat.name : '', kind: cat ? cat.kind : 'fred',
       secCd: cat ? cat.secT / (secCd * this.mods.abilityCd) : 0,
-      secCost, rage: cat ? cat.rage / CAT.rageMax : 0, napping: cat ? cat.napping : false, altCd: cat && def.alt ? cat.altT / (CAT.leapBackCooldown * this.mods.abilityCd) : 0, buffT: cat ? cat.buffT : 0,
+      secCost, rage: cat ? cat.rage / CAT.rageMax : 0, napping: cat ? cat.napping : false, altCd: cat ? cat.altT / (ABILITY2[def.ability2].cd * this.mods.abilityCd) : 0, altCost: ABILITY2[def.ability2].cost, buffT: cat ? cat.buffT : 0,
+      item: cat ? cat.item : null, itemCd: cat && cat.item ? cat.itemT / ITEMS[cat.item].cd : 0,
       eatCd: cat ? cat.eatT / CAT.eatCooldown : 0, charge: cat ? cat.charge / CAT.leapMaxCharge : 0,
-      miceLeft: this.mice.length + (this.spawn ? this.spawn.queue.length : 0),
-      gateUp: this.gate.up, mode: this.mode, nearStall, trinkets: { ...this.trinkets } };
+      miceLeft: this.mice.length + this.birds.length + (this.spawn ? this.spawn.queue.length : 0),
+      gateUp: this.gate.up, mode: this.mode, trinkets: { ...this.trinkets } };
   }
 }
 

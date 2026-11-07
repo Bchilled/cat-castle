@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { CELL } from '../sim/map.js';
 import { tmat } from './textures.js';
+import { CATS } from '../config.js';
 
 const matCache = new Map();
 // Flat-shaded matte material, cached so identical colours share one material.
@@ -142,8 +143,6 @@ export function makeNebbie() {
   const b = g.userData.body, head = g.userData.head;
   b.add(part(new THREE.IcosahedronGeometry(0.16, 0), 0xdfe3e7, 0, 0.45 * s, 0.42 * s, 0.9, 1.1, 0.6, false));   // chest blaze
   for (let i = 0; i < 3; i++) b.add(box(0x6a7179, 0, 0.75 * s, (0.1 - i * 0.18) * s, 0.3 * s, 0.03, 0.05, false)); // faint stripes
-  const collar = part(new THREE.TorusGeometry(0.2 * s, 0.035, 5, 12), 0x2a6ab0, 0, 0.72 * s, 0.42 * s, 1, 1, 1, false); collar.rotation.x = 1.2; b.add(collar);
-  const tag = part(new THREE.CylinderGeometry(0.05, 0.05, 0.02, 8), 0xd8d8e0, 0, 0.56 * s, 0.6 * s, 1, 1, 1, false); tag.rotation.x = 1.4; b.add(tag);
   for (const k of [-1, 1]) for (const y of [-0.06, -0.1]) {
     const w = box(0xf4f4f4, k * 0.25 * s, y * s, 0.3 * s, 0.32 * s, 0.008, 0.008, false); w.rotation.z = k * (y + 0.08) * 2; head.add(w);   // long whiskers
   }
@@ -163,8 +162,6 @@ export function makeCasper() {
     const tuft = part(new THREE.ConeGeometry(0.06 * s, 0.2 * s, 4), 0xffffff, Math.cos(a) * 0.3 * s, 0.45 * s, 0.38 * s + Math.sin(a) * 0.1 * s, 1, 1, 1, false);
     tuft.rotation.z = Math.cos(a) * 1.2; tuft.rotation.x = 0.5; b.add(tuft);                 // show-cat ruff
   }
-  const collar = part(new THREE.TorusGeometry(0.21 * s, 0.035, 5, 12), 0xd8a820, 0, 0.74 * s, 0.42 * s, 1, 1, 1, false); collar.rotation.x = 1.2; b.add(collar);
-  b.add(part(new THREE.OctahedronGeometry(0.05, 0), 0xd02030, 0, 0.58 * s, 0.6 * s, 1, 1, 1, false));   // ruby
   const rage = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0, depthWrite: false }));
   rage.rotation.x = -Math.PI / 2; rage.position.y = 0.04; g.add(rage); g.userData.rage = rage;
   return g;
@@ -185,7 +182,54 @@ export function makeMeow() {
   return g;
 }
 
-export const makeCat = (kind) => ({ puddin: makePuddin, scary: makeScary, nebbie: makeNebbie, casper: makeCasper, meow: makeMeow }[kind] || makeFred)();
+// Mimo: frisky brown-grey mackerel tabby tom. Dark stripes, an "M" on his forehead,
+// pale chin, yellow-green eyes, a solid build.
+export function makeMimo() {
+  const s = 0.9;
+  const g = catRig({ reach: 0, scale: s, girth: 0.74, base: 0x8a7c6a, head: 0x92846f, muzzle: 0xe8e0d0, eye: 0xb8d030,
+    tailFluff: 1.0, tail: 0x8a7c6a, tailTip: 0x3a3028, legs: 0x8a7c6a, paw: 0xd8d0c0, ear: 0x6a5c4a });
+  const b = g.userData.body, head = g.userData.head;
+  for (let i = 0; i < 6; i++) b.add(box(0x3a3028, 0, 0.76 * s, (0.33 - i * 0.13) * s, 0.42 * s, 0.035, 0.05, false));   // mackerel stripes
+  for (const k of [-1, 1]) for (let i = 0; i < 3; i++) b.add(box(0x3a3028, k * 0.2 * s, 0.55 * s, (0.2 - i * 0.2) * s, 0.02, 0.2 * s, 0.05, false));
+  for (const [x, r] of [[-0.06, 0.4], [0.06, -0.4]]) { const m = box(0x3a3028, x * s, 0.16 * s, 0.3 * s, 0.02, 0.12 * s, 0.02, false); m.rotation.z = r; head.add(m); }   // the "M"
+  return g;
+}
+
+// Every cat wears a collar in its own colour (contrasting its fur), with a little tag.
+// The same colour marks the cat on the radar.
+export function makeCat(kind) {
+  const g = ({ puddin: makePuddin, scary: makeScary, nebbie: makeNebbie, casper: makeCasper, meow: makeMeow, mimo: makeMimo }[kind] || makeFred)();
+  const def = CATS[kind] || CATS.fred, s = g.userData.scale || 1, b = g.userData.body;
+  if (b && def.collar) {
+    const c = new THREE.Color(def.collar).getHex();
+    const collar = part(new THREE.TorusGeometry(0.2 * s, 0.04 * s, 5, 14), c, 0, 0.72 * s, 0.42 * s, 1, 1, 1, false); collar.rotation.x = 1.2; b.add(collar);
+    const tag = part(new THREE.CylinderGeometry(0.05 * s, 0.05 * s, 0.02, 8), 0xe0c040, 0, 0.55 * s, 0.6 * s, 1, 1, 1, false); tag.rotation.x = 1.4; b.add(tag);
+  }
+  return g;
+}
+
+// Birds. Magpie: black and white with a long tail. Crow: all black, heavier beak.
+// wings flap in the scene; a crow carrying mice shows them dangling underneath.
+export function makeBird(type) {
+  const g = new THREE.Group(), crow = type === 'crow', blk = crow ? 0x16161c : 0x1a1a24;
+  const body = part(new THREE.SphereGeometry(0.28, 10, 8), blk, 0, 0, 0, 0.9, 0.8, 1.4); g.add(body);
+  if (!crow) g.add(part(new THREE.SphereGeometry(0.2, 8, 6), 0xf0f0f0, 0, -0.06, 0.05, 1, 0.7, 1.3, false));   // white belly
+  g.add(part(new THREE.SphereGeometry(0.17, 8, 6), blk, 0, 0.12, 0.38));                                       // head
+  const beak = part(new THREE.ConeGeometry(0.06, crow ? 0.28 : 0.2, 5), crow ? 0x2a2a2a : 0x101010, 0, 0.1, crow ? 0.62 : 0.58); beak.rotation.x = Math.PI / 2; g.add(beak);
+  for (const k of [-1, 1]) g.add(part(new THREE.SphereGeometry(0.03, 5, 4), 0xffffff, k * 0.09, 0.16, 0.5, 1, 1, 1, false));       // eye glints
+  const tail = part(new THREE.BoxGeometry(0.16, 0.03, crow ? 0.35 : 0.6), blk, 0, 0.02, crow ? -0.5 : -0.62); g.add(tail);
+  const wings = [];
+  for (const k of [-1, 1]) {
+    const pivot = new THREE.Group(); pivot.position.set(k * 0.2, 0.08, 0); g.add(pivot);
+    const w = part(new THREE.BoxGeometry(0.6, 0.03, 0.34), blk, k * 0.3, 0, 0); pivot.add(w);
+    if (!crow) pivot.add(part(new THREE.BoxGeometry(0.25, 0.035, 0.2), 0xf0f0f0, k * 0.22, 0.005, 0.04, 1, 1, 1, false));   // white wing patch
+    wings.push(pivot);
+  }
+  const cargo = new THREE.Group(); cargo.position.y = -0.4; g.add(cargo);
+  for (let k = 0; k < 3; k++) cargo.add(part(new THREE.SphereGeometry(0.12, 6, 5), 0x8a8580, (k - 1) * 0.18, 0, 0, 1, 0.8, 1.5));
+  g.userData = { wings, cargo };
+  return g;
+}
 
 // ---------- traps (built at their real footprint, centred on the origin) ----------
 // Traps are built at tile scale: one tile = 2x2 units (Orcs Must Die footprint), so a

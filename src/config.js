@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.8.0';
+export const VERSION = '0.9.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -19,17 +19,14 @@ export const RULES = {
   livesLostPerCatDeath: 3,
   livesLostPerMouse: 1,
   livesLostPerBoss: 5,
-  startSardines: 1000,       // enough for ~15–20 traps on the first build
-  waveBonus: 100,            // sardines paid for clearing a wave (+10 per wave number)
-  tailPrice: 5,              // sardines per mouse tail traded at a stash
-  tailCarryCap: 20,          // max tails a cat can carry
-  pickupRadius: 1.2,
-  stallRadius: 2.2,          // how close you must be to sell
+  startSardines: 1000,       // starting Paw Points (the code still calls them sardines): ~15–20 traps
+  waveBonus: 100,            // Paw Points for clearing a wave (+10 per wave number)
+  pickupRadius: 1.2,         // trinkets lying on the ground
   buildPhaseSeconds: 25,     // break between waves (press G to skip)
   winWave: 24,               // clearing this wave wins the map
   catRespawnSeconds: 4,
   unreachableDps: 15,        // damage/sec to mice stranded where they can't path
-  trinketChance: 0.02,       // chance a normal mouse drops a trinket instead of cheese
+  trinketChance: 0.02,       // chance a normal mouse drops a trinket
   splatSpeed: 9,             // landing faster than this hurts mice (flippers splat them)
   splatDamage: 6,            // damage per unit of speed over splatSpeed
   // Strength in numbers: a mouse with this many packmates close by is faster and tougher.
@@ -143,67 +140,121 @@ export const CAT = {
   // Meow Meow: stand still for napDelay seconds and she naps, healing fast until she moves.
   napDelay: 1.5,
   napHeal: 0.08,             // fraction of max HP per second
+  // Mimo, left click: flicked pebbles. Extra damage to ranged mice, and to birds.
+  pebbleInterval: 0.38,
+  pebbleSpeed: 24,
+  pebbleDamage: 9,
+  pebbleVsRanged: 2,         // x damage to plague rats and siege mice
+  // Mimo, right click: lion's roar — everything nearby takes more damage for a while;
+  // birds in range are knocked out of the sky.
+  roarCost: 40,
+  roarCooldown: 10,
+  roarRadius: 6.5,
+  roarSecs: 6,
+  roarVuln: 1.35,            // damage taken multiplier while shaken
+  roarBirdStun: 2,
+  // Mimo's passive: bird hunter.
+  vsBirds: 3,                // x damage to birds
 };
+
+// Second abilities (E). Every cat has: left-click attack, right-click ability, E ability, a jump.
+// cost = energy, cd = seconds.
+export const ABILITY2 = {
+  dash:     { cost: 25, cd: 5,   dist: 6, damage: 12 },                 // Fred: Alley Dash — dart forward, slashing (and bleeding) everything passed
+  sit:      { cost: 35, cd: 12,  radius: 1.8, damage: 30, stun: 2, guard: 0.5, guardSecs: 4 },   // Puddin: Big Sit — flattens, pins, then shrugs off hits
+  leapback: { cost: 0,  cd: 2.5 },                                     // Scary Cat: Leap Back (backflip)
+  tinker:   { cost: 50, cd: 15,  radius: 7, buffSecs: 6, buff: 1.25 },  // Nebbie: Tinker — resets nearby traps and overclocks them
+  showoff:  { cost: 30, cd: 14,  radius: 9, secs: 5, guard: 0.4 },      // Casper: Show Off — every mouse nearby comes for him; he takes less
+  groom:    { cost: 35, cd: 10,  radius: 4, heal: 0.3 },                // Meow Meow: Groom — instantly heals the most-hurt cat nearby (or herself)
+  skyswipe: { cost: 30, cd: 8,   reach: 10, damage: 40, landRadius: 1.5, landDamage: 20 },   // Mimo: Sky Swipe — springs at the nearest bird
+};
+
+// Items: every cat equips ONE, used with Q. Picked on the menu.
+export const ITEMS = {
+  laser:   { name: 'Laser Pointer',  cd: 25, radius: 8, secs: 5,          desc: 'A red dot no mouse can resist. Mice near the crosshair chase it for 5 s.' },
+  bola:    { name: 'Yarn Bola',      cd: 18, radius: 2.5, secs: 3,        desc: 'Throw a tangle of yarn: mice where it lands are tied up for 3 s.' },
+  catnip:  { name: 'Catnip Bomb',    cd: 30, radius: 4, secs: 5,          desc: 'Cats in the cloud get buffed; mice in it stagger about confused.' },
+  flea:    { name: 'Flea Bomb',      cd: 28, radius: 3, secs: 6, dps: 12, desc: 'A cloud of fleas where you aim: steady damage to every mouse inside for 6 s.' },
+  tonic:   { name: 'Fish-Oil Tonic', cd: 35, heal: 0.5,                   desc: 'Knock it back: heal half your health now.' },
+  squeaky: { name: 'Squeaky Toy',    cd: 30, hp: 150, radius: 6, secs: 15, desc: 'Drop a squeaky toy: mice nearby attack it instead of moving on.' },
+};
+export const ITEM_ORDER = ['laser', 'bola', 'catnip', 'flea', 'tonic', 'squeaky'];
+export const LOADOUT_SIZE = 8;   // traps you bring into a map
 
 // Playable cats. Fred: quick, fragile, ranged, parkour. Puddin: slow tank, melee.
 export const CATS = {
   fred: {
     name: 'Fred', maxHp: 70, speed: 10, airControl: 0.2, jumpVel: 9, airJumps: 1, wallKick: 7, mantle: 0.9,
-    radius: 0.35, height: 0.95, stepHeight: 0.3, energyRegen: 12, push: 1,
-    primary: 'pellet', secondary: 'hairball', leap: false,
+    radius: 0.35, height: 0.95, stepHeight: 0.3, maxEnergy: 90, energyRegen: 13, push: 1,
+    primary: 'pellet', secondary: 'hairball', ability2: 'dash', leap: false,
   },
   puddin: {
     name: 'Puddin', maxHp: 200, speed: 6, airControl: 0.06, jumpVel: 7.5, airJumps: 0, wallKick: 0, mantle: 0.4,
-    radius: 0.5, height: 1.25, stepHeight: 0.35, energyRegen: 8, push: 2.5,
-    primary: 'bite', secondary: 'pounce', leap: true,
+    radius: 0.5, height: 1.25, stepHeight: 0.35, maxEnergy: 70, energyRegen: 7, push: 2.5,
+    primary: 'bite', secondary: 'pounce', ability2: 'sit', leap: true,
   },
   // Scary Cat: scrawny, beat-up black cat. Fragile; jumps highest; long thin tail whip,
-  // a hiss that scatters mice, and a backflip (Shift) to get out of trouble.
+  // a hiss that scatters mice, and a backflip (E) to get out of trouble.
   scary: {
     name: 'Scary Cat', maxHp: 55, speed: 9, airControl: 0.25, jumpVel: 12, airJumps: 0, wallKick: 0, mantle: 1.0,
-    radius: 0.33, height: 0.9, stepHeight: 0.3, energyRegen: 12, push: 0.8,
-    primary: 'whip', secondary: 'hiss', alt: 'leapback', leap: false,
+    radius: 0.33, height: 0.9, stepHeight: 0.3, maxEnergy: 110, energyRegen: 15, push: 0.8,
+    primary: 'whip', secondary: 'hiss', ability2: 'leapback', leap: false,
   },
   // Nebbie: sleek, clever grey cat. Shoots whisker darts, purrs to heal and buff
   // the cats around her, long-jumps, and dodges 30% of hits.
   nebbie: {
     name: 'Nebbie', maxHp: 75, speed: 9.5, airControl: 0.2, jumpVel: 8, airJumps: 0, wallKick: 0, mantle: 0.8,
-    radius: 0.34, height: 0.92, stepHeight: 0.3, energyRegen: 14, push: 1, dodge: 0.3,
-    primary: 'whisker', secondary: 'purr', longJump: true, leap: false,
+    radius: 0.34, height: 0.92, stepHeight: 0.3, maxEnergy: 130, energyRegen: 16, push: 1, dodge: 0.3,
+    primary: 'whisker', secondary: 'purr', ability2: 'tinker', longJump: true, leap: false,
   },
 };
 // Casper: pampered pure-white show cat with a vicious temper. Mice go for him first;
 // claws build rage, rage means more damage; frenzy; jump twice to leap-strike forward.
 CATS.casper = {
   name: 'Casper', maxHp: 115, speed: 8.5, airControl: 0.15, jumpVel: 8.5, airJumps: 0, wallKick: 0, mantle: 0.7,
-  radius: 0.4, height: 1.0, stepHeight: 0.3, energyRegen: 10, push: 1.6, taunt: 1.6,
-  primary: 'claw', secondary: 'frenzy', strike: true, leap: false,
+  radius: 0.4, height: 1.0, stepHeight: 0.3, maxEnergy: 80, energyRegen: 9, push: 1.6, taunt: 1.6,
+  primary: 'claw', secondary: 'frenzy', ability2: 'showoff', strike: true, leap: false,
 };
 // Meow Meow: friendly brown outdoor cat. Burrs slow mice and send them to sleep, her yawn
 // knocks out a crowd and buffs her friends, she triple-jumps, runs fast, and naps to heal.
 CATS.meow = {
   name: 'Meow Meow', maxHp: 80, speed: 10.5, airControl: 0.22, jumpVel: 8.5, airJumps: 2, wallKick: 0, mantle: 0.9,
-  radius: 0.34, height: 0.92, stepHeight: 0.3, energyRegen: 12, push: 1, naps: true,
-  primary: 'burr', secondary: 'yawn', leap: false,
+  radius: 0.34, height: 0.92, stepHeight: 0.3, maxEnergy: 120, energyRegen: 14, push: 1, naps: true,
+  primary: 'burr', secondary: 'yawn', ability2: 'groom', leap: false,
 };
-export const CAT_ORDER = ['fred', 'puddin', 'scary', 'nebbie', 'casper', 'meow'];
+// Mimo: frisky tabby tom (neutered, still thinks he's a lion). Pebbles that punish ranged
+// mice, a lion's roar that makes everything take more damage, and he hunts birds.
+CATS.mimo = {
+  name: 'Mimo', maxHp: 90, speed: 9, airControl: 0.2, jumpVel: 10, airJumps: 1, wallKick: 0, mantle: 0.9,
+  radius: 0.37, height: 0.95, stepHeight: 0.3, maxEnergy: 100, energyRegen: 11, push: 1.2,
+  primary: 'pebble', secondary: 'roar', ability2: 'skyswipe', leap: false, birdHunter: true,
+};
+// Collar colours: each cat's own, chosen to stand out against its fur. Used on the
+// model, the portrait, and the cat's marker on the radar.
+const COLLARS = { fred: '#2a7aff', puddin: '#b040ff', scary: '#a8ff20', nebbie: '#ff40a8', casper: '#ff2a2a', meow: '#ff8a00', mimo: '#20e0e0' };
+for (const k in COLLARS) CATS[k].collar = COLLARS[k];
+export const CAT_ORDER = ['fred', 'puddin', 'scary', 'nebbie', 'casper', 'meow', 'mimo'];
 
-// Mouse types (Pinkie = a baby mouse). tails = tail value dropped (big rat tails count for several); tailChance = odds it drops.
+// Mouse types (Pinkie = a baby mouse). points = Paw Points for the kill. tails = tail value dropped (big rat tails count for several); tailChance = odds it drops.
 // aggro = how far (units) it will turn off its route to go bite a cat; spit = ranged plague glob.
 // split = what it bursts into when it dies. intro = the wave it first shows up (it arrives alone
 // first so players learn it). Speed tiers: pup/runner fast, mouse normal, tank/fatty slow.
 export const MICE = {
-  pup:     { name: 'Pinkie',      hp: 7,    speed: 3.0, size: 0.28, tails: 1, tailChance: 0.5, bite: 2,  gateDmg: 3,  color: 0x948a82, aggro: 0 },
-  mouse:   { name: 'House Mouse', hp: 26,   speed: 2.6, size: 0.45, tails: 1, tailChance: 1,   bite: 5,  gateDmg: 10, color: 0x8a8580, aggro: 2.5 },
-  runner:  { name: 'Scamper',     hp: 16,   speed: 4.6, size: 0.4,  tails: 1, tailChance: 1,   bite: 4,  gateDmg: 6,  color: 0x7a5a3a, aggro: 0, intro: 3 },
-  splitter:{ name: 'Mama Mouse',  hp: 40,   speed: 2.4, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x9a6a8a, aggro: 2.5, split: 'pup', splitN: 2, intro: 4 },
-  tank:    { name: 'Sewer Rat',   hp: 100,  speed: 1.8, size: 0.75, tails: 1, tailChance: 1,   bite: 10, gateDmg: 25, color: 0x4f4b48, aggro: 3.5, intro: 5 },
-  lobber:  { name: 'Siege Mouse', hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45, aggro: 0 },
-  plague:  { name: 'Plague Rat',  hp: 45,   speed: 2.2, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 8,  color: 0x6f7a4a, aggro: 0, spit: { range: 7, dmg: 7, every: 2.2, speed: 11 }, intro: 7 },
-  fatty:   { name: 'Fat Rat',     hp: 260,  speed: 1.3, size: 1.0,  tails: 2, tailChance: 1,   bite: 18, gateDmg: 40, color: 0x5a4a40, aggro: 3, split: 'mouse', splitN: 3, intro: 9 },
-  miniboss:{ name: 'Rat Captain', hp: 900,  speed: 2.1, size: 2.0,  tails: 6, tailChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true, aggro: 6,
+  pup:     { name: 'Pinkie',      points: 2, hp: 7,    speed: 3.0, size: 0.28, tails: 1, tailChance: 0.5, bite: 2,  gateDmg: 3,  color: 0x948a82, aggro: 0 },
+  mouse:   { name: 'House Mouse', points: 5, hp: 26,   speed: 2.6, size: 0.45, tails: 1, tailChance: 1,   bite: 5,  gateDmg: 10, color: 0x8a8580, aggro: 2.5 },
+  runner:  { name: 'Scamper',     points: 4, hp: 16,   speed: 4.6, size: 0.4,  tails: 1, tailChance: 1,   bite: 4,  gateDmg: 6,  color: 0x7a5a3a, aggro: 0, intro: 3 },
+  splitter:{ name: 'Mama Mouse',  points: 6, hp: 40,   speed: 2.4, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x9a6a8a, aggro: 2.5, split: 'pup', splitN: 2, intro: 4 },
+  tank:    { name: 'Sewer Rat',   points: 12, hp: 100,  speed: 1.8, size: 0.75, tails: 1, tailChance: 1,   bite: 10, gateDmg: 25, color: 0x4f4b48, aggro: 3.5, intro: 5 },
+  lobber:  { name: 'Siege Mouse', points: 10, hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45, aggro: 0, ranged: true },
+  plague:  { name: 'Plague Rat',  points: 10, hp: 45,   speed: 2.2, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 8,  color: 0x6f7a4a, aggro: 0, spit: { range: 7, dmg: 7, every: 2.2, speed: 11 }, intro: 7, ranged: true },
+  fatty:   { name: 'Fat Rat',     points: 25, hp: 260,  speed: 1.3, size: 1.0,  tails: 2, tailChance: 1,   bite: 18, gateDmg: 40, color: 0x5a4a40, aggro: 3, split: 'mouse', splitN: 3, intro: 9 },
+  // Birds (flying; ignore the routes). Magpies steal cheese and dropped tails; crows carry
+  // mice past your traps and drop them. Kill a crow in the air and its mice fall to their deaths.
+  magpie:  { name: 'Magpie',      points: 10, hp: 30,   speed: 7,   size: 0.6,  tails: 0, tailChance: 0,   bite: 4,  gateDmg: 0,  color: 0x1a1a22, bird: true, intro: 8, reward: 10 },
+  crow:    { name: 'Crow',        points: 15, hp: 45,   speed: 6,   size: 0.7,  tails: 0, tailChance: 0,   bite: 4,  gateDmg: 0,  color: 0x121216, bird: true, intro: 10, reward: 15, carry: 3 },
+  miniboss:{ name: 'Rat Captain', points: 150, hp: 900,  speed: 2.1, size: 2.0,  tails: 6, tailChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true, aggro: 6,
              stomp: { every: 5, radius: 3.5, dmg: 15, stun: 1.0, fling: 7 } },
-  bigboss: { name: 'King Rat',    hp: 2600, speed: 1.6, size: 2.8,  tails: 15, tailChance: 1,  bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true, aggro: 7,
+  bigboss: { name: 'King Rat',    points: 400, hp: 2600, speed: 1.6, size: 2.8,  tails: 15, tailChance: 1,  bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true, aggro: 7,
              stomp: { every: 4, radius: 4.5, dmg: 22, stun: 1.4, fling: 9 } },
 };
 
@@ -231,10 +282,10 @@ export const GATE = { hp: 60 };   // falls in a few bites, stays down once broke
 
 // Roguelike trinkets: last for the current run, stack. Legendary only from bosses.
 export const TRINKETS = {
-  bell:    { name: 'Rusty Bell',        tier: 'common',    desc: 'Mice drop 25% more tails',            flav: "Off a dead cat's collar. Don't ask whose." },
+  bell:    { name: 'Rusty Bell',        tier: 'common',    desc: 'Kills give 25% more Paw Points',            flav: "Off a dead cat's collar. Don't ask whose." },
   catnip:  { name: 'Catnip Sprig',      tier: 'common',    desc: '+10% run speed',                      flav: 'Strictly medicinal.' },
   cap:     { name: 'Bottle-cap Shield', tier: 'common',    desc: 'Take 15% less bite damage',           flav: 'Smells of flat beer. Works, though.' },
-  rind:    { name: 'Mouldy Rind',       tier: 'rare',      desc: 'Tails trade for 20% more',            flav: 'The stash keepers go mad for it.' },
+  rind:    { name: 'Mouldy Rind',       tier: 'rare',      desc: 'Wave-clear bonus +50%',               flav: 'Smells like victory. And feet.' },
   collar:  { name: 'Flea Collar',       tier: 'rare',      desc: '+2 max bleed stacks',                 flav: 'The fleas come with it. Free of charge.' },
   tin:     { name: 'Sardine Tin',       tier: 'rare',      desc: '+30% energy regen',                   flav: 'Licked clean. Still inspiring.' },
   whisker: { name: 'Lucky Whisker',     tier: 'rare',      desc: '+8% chance to crit for double damage', flav: 'Pulled off a winner.' },
