@@ -1,6 +1,7 @@
 // main.js — wires input -> commands -> sim (fixed tick) -> renderer + HUD.
 
-import { DT, TRAPS, TRAP_ORDER } from './config.js';
+import { DT, TRAPS, TRAP_ORDER, MICE } from './config.js';
+import { Sfx } from './audio/sfx.js';
 import { Sim } from './sim/sim.js';
 import { W, CELL } from './sim/map.js';
 import { LocalTransport } from './net/local.js';
@@ -17,10 +18,29 @@ function loadProfile() { try { return JSON.parse(localStorage.getItem('catcastle
 function saveProfile(p) { try { localStorage.setItem('catcastle.profile', JSON.stringify(p)); } catch { /* ignore */ } }
 
 const profile = loadProfile();
+// Sound: needs a click before the browser allows it, so unlock on the first one.
+const sfx = new Sfx();
+document.addEventListener('pointerdown', () => sfx.unlock(), { once: false });
+document.addEventListener('keydown', () => sfx.unlock());
+// Loading-screen tips.
+const TIPS = [
+  'Mice always get a way through. Toy Blocks decide WHICH way.',
+  'Put a Flinger beside the moat and point it at the water. Free drowning.',
+  'When Puddin kills a mouse with a Chomp he eats it: health back, but no tail.',
+  'Eat a Mama Mouse and her Pinkies never come out.',
+  'A red ring on the floor means the Rat Captain is about to stomp. Move.',
+  'Stunned mice see stars. The circle of stars shrinks as the stun wears off.',
+  'Trap lamps: green = ready, red = resetting.',
+  'Bug Zappers hang under anything with a roof: the guard passage, the colonnade, the table, the bench.',
+  'Packs of mice choose between three lanes north of the courtyard. Block one and they take another.',
+  'Tails are worth sardines at any stash. Die carrying them and they drop where you fell.',
+  'Fred can kick off walls twice before he has to land.',
+];
+{ let k = Math.floor(Math.random() * TIPS.length); const show = () => { const el = document.getElementById('tip'); if (el) el.textContent = 'Tip: ' + TIPS[k++ % TIPS.length]; }; show(); setInterval(show, 6000); }
 document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn`;
 let chosenCat = 'fred';
 document.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => {
-  chosenCat = b.dataset.cat;
+  chosenCat = b.dataset.cat; sfx.unlock(); sfx.play('click');
   document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('picked', x === b));
 }));
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { previewOn = false; start(b.dataset.mode); }));
@@ -32,6 +52,7 @@ document.querySelectorAll('.catview').forEach(cv => {
   const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffe8d0, 0x3a2a1c, 2)); const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(2, 3, 2); sc.add(dl);
   const cam = new THREE.PerspectiveCamera(35, cv.width / cv.height, 0.1, 50);
   const cat = makeCat(cv.dataset.kind); sc.add(cat);
+  if (cat.userData.reach) cat.userData.reach.visible = false;   // no bite cone on the menu
   const big = cv.dataset.kind === 'puddin';
   cam.position.set(0, big ? 1.4 : 1.1, big ? 4.6 : 3.6); cam.lookAt(0, big ? 0.7 : 0.55, 0);
   const tick = (t) => { if (!previewOn) { r.dispose(); return; } cat.rotation.y = t / 1600; cat.userData.tail.rotation.z = Math.sin(t / 400) * 0.3; r.render(sc, cam); requestAnimationFrame(tick); };
@@ -40,6 +61,7 @@ document.querySelectorAll('.catview').forEach(cv => {
 
 function start(mode) {
   document.getElementById('menu').classList.remove('show');
+  sfx.unlock(); sfx.setMusic('build');
   const sim = new Sim({ mode, seed: (Date.now() & 0xffff) | 1 });
   sim.addPlayer(LOCAL_ID, chosenCat);
   const net = new LocalTransport(sim);
@@ -53,6 +75,23 @@ function start(mode) {
   let attackHeld = false, jumpQ = false, jumpHeld = false, secondaryQ = false;
   let selected = null, rot = 0, aim = null;
   canvas.addEventListener('click', () => { if (document.pointerLockElement !== canvas) canvas.requestPointerLock(); });
+  // Pause: losing the mouse (Esc) pauses the game and shows volume + controls.
+  let paused = false, hadLock = false;
+  const pauseEl = document.getElementById('pause');
+  const setPaused = (p) => { paused = p; pauseEl.classList.toggle('show', p); };
+  document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement === canvas) { hadLock = true; setPaused(false); }
+    else if (hadLock && !ended) setPaused(true);
+  });
+  document.getElementById('resume').onclick = () => { setPaused(false); canvas.requestPointerLock(); };
+  document.getElementById('quit').onclick = () => location.reload();
+  for (const k of ['master', 'music', 'sfx']) {
+    const el = document.getElementById('vol-' + k); el.value = sfx.prefs[k];
+    el.oninput = () => { sfx.set(k, +el.value); sfx.play('click'); };
+  }
+  const muteBtn = document.getElementById('mute'), mutedEl = document.getElementById('muted');
+  const showMute = () => { muteBtn.textContent = sfx.prefs.muted ? 'Unmute' : 'Mute'; mutedEl.style.display = sfx.prefs.muted ? 'block' : 'none'; };
+  muteBtn.onclick = () => { sfx.toggleMute(); showMute(); }; showMute();
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('mousemove', e => {
     if (document.pointerLockElement !== canvas) return;
@@ -76,7 +115,8 @@ function start(mode) {
     keys.add(k);
     if (k === ' ') { jumpQ = true; jumpHeld = true; }
     const n = parseInt(k, 10);
-    if (n >= 1 && n <= TRAP_ORDER.length) { const t = TRAP_ORDER[n - 1]; selected = selected === t ? null : t; }
+    if (n >= 1 && n <= TRAP_ORDER.length) { const t = TRAP_ORDER[n - 1]; selected = selected === t ? null : t; sfx.play('click'); }
+    if (k === 'm') { sfx.toggleMute(); showMute(); }
     if (k === 'q') selected = null;
     if (k === 'r') rot = (rot + 1) % 4;
     if (k === 'e') net.send({ type: 'sellTails', id: LOCAL_ID });
@@ -113,6 +153,7 @@ function start(mode) {
   }
   function placeSelected() {
     const p = placement(); if (!p || !p.cells) return;
+    if (!p.ok) sfx.play('deny');
     net.send({ type: 'place', id: LOCAL_ID, trap: selected, ax: p.ax, az: p.az, rot, wallDir: p.wallDir });
   }
 
@@ -133,16 +174,52 @@ function start(mode) {
   }
 
   // ---------- loop ----------
-  let last = performance.now(), acc = 0, ended = false;
+  // Where each sim event makes its sound (and how loud).
+  const at = (e) => {
+    if (e.x !== undefined) return [e.x, e.z];
+    if (e.id !== undefined && sim.cats.has(e.id)) { const c = sim.cats.get(e.id); return [c.x, c.z]; }
+    if (e.id !== undefined && sim.traps.has(e.id)) { const t = sim.traps.get(e.id); return [(t.x0 + t.x1) / 2, (t.z0 + t.z1) / 2]; }
+    return [undefined, undefined];
+  };
+  const GATE_POS = [48, 83.5];
+  function sound(e) {
+    const [x, z] = at(e);
+    switch (e.t) {
+      case 'kill': if (!e.drowned) sfx.play('squeak', x, z, { big: MICE[e.type].size >= 0.9 }); break;
+      case 'spit': sfx.play('pellet', x, z); break;
+      case 'pelletHit': if (e.mouse) sfx.play('hit', x, z); break;
+      case 'trapAdd': sfx.play('place', (e.trap.x0 + e.trap.x1) / 2, (e.trap.z0 + e.trap.z1) / 2); break;
+      case 'sold': sfx.play('sell', x, z); break;
+      case 'gateHit': sfx.play('gateHit', ...GATE_POS); break;
+      case 'gateBreak': sfx.play('gateBreak', ...GATE_POS, { vol: 1.4 }); break;
+      case 'leak': sfx.play('leak'); break;
+      case 'catHurt': if (e.id === LOCAL_ID) sfx.play('catHurt'); else sfx.play('catHurt', x, z); break;
+      case 'catDeath': sfx.play('catDeath', x, z); break;
+      case 'pickup': sfx.play('pickup'); break;
+      case 'stash': sfx.play('stash'); break;
+      case 'trinket': sfx.play('trinket'); break;
+      case 'waveStart': sfx.play('waveStart', undefined, undefined, { boss: e.boss }); break;
+      case 'waveClear': sfx.play('waveClear'); break;
+      case 'msg': if (e.text.startsWith('NEW:')) sfx.play('intro'); break;
+      case 'end': sfx.play(e.won ? 'win' : 'lose'); sfx.setMusic('menu'); break;
+      case 'slam': sfx.play('pounceLand', x, z); break;
+      case 'bossRoar': sfx.play('bossRoar', undefined, undefined, { vol: 0.9 }); break;
+      default: sfx.play(e.t, x, z, e);   // names that match a sound directly (snap, flip, zap, splat, ...)
+    }
+  }
+
+  let last = performance.now(), acc = 0, ended = false, grindT = 0;
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now; acc += dt;
     aim = scene.aim();
+    if (paused) acc = 0;
     while (acc >= DT) {
       sendInput(); sim.step(); acc -= DT;
       for (const e of sim.events) {
         scene.onEvent(e);
+        sound(e);
         if (e.t === 'msg') hud.message(e.text);
-        if (e.t === 'bark') hud.bark(e.who, e.text);
+        if (e.t === 'bark') hud.bark(e.who, e.text, e.kind);
         if (e.t === 'catHurt' && e.id === LOCAL_ID) hud.flashHurt();
         if (e.t === 'end' && !ended) {
           ended = true;
@@ -154,6 +231,12 @@ function start(mode) {
       }
       sim.events.length = 0;
     }
+    // Sound bookkeeping: listener on your cat, grinders whirring, music by phase.
+    const me2 = sim.cats.get(LOCAL_ID);
+    if (me2) sfx.listener(me2.x, me2.z, yaw);
+    grindT -= dt;
+    if (grindT <= 0) { grindT = 0.3; for (const t of sim.traps.values()) if (t.kind === 'grinder' && t.active) sfx.play('grind', (t.x0 + t.x1) / 2, (t.z0 + t.z1) / 2); }
+    if (!ended) sfx.setMusic(sim.phase === 'wave' ? (sim.mice.some(m => MICE[m.type].boss) ? 'boss' : 'wave') : 'build');
     const p = placement();
     scene.setGhost(selected, p ? p.cells : null, p ? p.ok : false, rot, p ? p.wallDir : -1);
     hud.update(dt, sim.hud(LOCAL_ID), selected, p ? p.ok : true);
@@ -162,4 +245,5 @@ function start(mode) {
   }
   requestAnimationFrame(frame);
   window.__sim = sim; window.__scene = scene;   // handy for debugging in the browser console
+  window.__setYaw = (y, p) => { yaw = y; if (p !== undefined) pitch = p; };   // used by the screenshot tests
 }

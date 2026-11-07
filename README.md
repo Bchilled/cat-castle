@@ -1,6 +1,6 @@
-# Cat Castle
+# Nine Lives Keep
 
-Cats vs mice trap tower defense in the browser (Three.js), at mouse scale in a human castle. Play as Fred (quick, fragile, ranged ginger tom) or Puddin (huge, slow, biting calico) and stop the mice pushing room by room toward the king's chamber.
+Cats vs mice trap tower defense in the browser (Three.js), at mouse scale in a human castle. Play as Fred (quick, fragile, ranged ginger tom) or Puddin (huge, slow, biting calico) and stop the mice pushing room by room toward the king's chamber. Sound and music are synthesised live in the browser (no audio files).
 
 Play: https://brentsnow.ca/cat-castle/
 

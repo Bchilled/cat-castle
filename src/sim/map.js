@@ -28,16 +28,17 @@ export const T = { FLOOR: 0, ROAD: 1, WATER: 2, BRIDGE: 3, SOLID: 4, GATE: 5, HO
 // (legs at the corners), 'roof' = ceiling slab with no legs.
 export const FURNITURE = [
   // Outer walls of the castle grounds.
-  { name: 'West wall', kind: 'solid', rect: [0, 0, 2, 84],   h: 16, look: 'stone' },
-  { name: 'East wall', kind: 'solid', rect: [94, 0, 96, 84], h: 16, look: 'stone' },
-  { name: 'Hall wall', kind: 'solid', rect: [2, 0, 94, 2],   h: 16, look: 'hallwall' },
+  // Heights are human scale (1 unit = 30 cm): the castle walls are ~8.5 m, a door is ~2.1 m.
+  { name: 'West wall', kind: 'solid', rect: [0, 0, 2, 84],   h: 28, look: 'stone' },
+  { name: 'East wall', kind: 'solid', rect: [94, 0, 96, 84], h: 28, look: 'stone' },
+  { name: 'Hall wall', kind: 'solid', rect: [2, 0, 94, 2],   h: 32, look: 'hallwall' },
   // Curtain wall with the gatehouse gap.
-  { name: 'Curtain wall W', kind: 'solid', rect: [0, 76, 40, 84],  h: 16, look: 'stone' },
-  { name: 'Curtain wall E', kind: 'solid', rect: [56, 76, 96, 84], h: 16, look: 'stone' },
+  { name: 'Curtain wall W', kind: 'solid', rect: [0, 76, 40, 84],  h: 28, look: 'stone' },
+  { name: 'Curtain wall E', kind: 'solid', rect: [56, 76, 96, 84], h: 28, look: 'stone' },
   // Gatehouse hall: thick walls each side, high stone roof (camera fits under).
-  { name: 'Gatehouse W', kind: 'solid', rect: [28, 58, 40, 76], h: 14, look: 'stone' },
-  { name: 'Gatehouse E', kind: 'solid', rect: [56, 58, 68, 76], h: 14, look: 'stone' },
-  { name: 'Gatehouse roof', kind: 'roof', rect: [40, 58, 56, 84], bot: 9, top: 14, look: 'tunnelroof' },
+  { name: 'Gatehouse W', kind: 'solid', rect: [28, 58, 40, 76], h: 34, look: 'stone' },
+  { name: 'Gatehouse E', kind: 'solid', rect: [56, 58, 68, 76], h: 34, look: 'stone' },
+  { name: 'Gatehouse roof', kind: 'roof', rect: [40, 58, 56, 84], bot: 9, top: 34, look: 'tunnelroof' },
   // Courtyard: walls that shape it, a well in the middle, raised walkways each side.
   { name: 'Yard wall SW', kind: 'solid', rect: [2, 56, 28, 58], h: 6, look: 'stone' },
   { name: 'Yard wall SE', kind: 'solid', rect: [68, 56, 94, 58], h: 6, look: 'stone' },
@@ -48,13 +49,20 @@ export const FURNITURE = [
   { name: 'Crate', kind: 'solid', rect: [86, 50, 88, 52], h: 1.4, look: 'crate' },
   { name: 'Crate', kind: 'solid', rect: [52, 44, 54, 46], h: 1.4, look: 'crate' },     // step up onto the well
   // Guardhouse with a roofed passage through the middle; colonnade west, bales east.
-  { name: 'Guardhouse W', kind: 'solid', rect: [30, 10, 44, 30], h: 9, look: 'guardhouse' },
-  { name: 'Guardhouse E', kind: 'solid', rect: [52, 10, 66, 30], h: 9, look: 'guardhouse' },
-  { name: 'Guard passage', kind: 'roof', rect: [44, 10, 52, 30], bot: 7, top: 9, look: 'tunnelroof' },
-  { name: 'Colonnade roof', kind: 'over', rect: [10, 8, 26, 30], bot: 7, top: 7.6, look: 'colonnade' },
+  { name: 'Guardhouse W', kind: 'solid', rect: [30, 10, 44, 30], h: 16, look: 'guardhouse' },
+  { name: 'Guardhouse E', kind: 'solid', rect: [52, 10, 66, 30], h: 16, look: 'guardhouse' },
+  { name: 'Guard passage', kind: 'roof', rect: [44, 10, 52, 30], bot: 7, top: 16, look: 'tunnelroof' },
+  { name: 'Colonnade roof', kind: 'over', rect: [10, 8, 26, 30], bot: 9, top: 9.8, look: 'colonnade' },
   { name: 'Barrels', kind: 'solid', rect: [2, 8, 10, 30], h: 3.0, look: 'barrels' },
   { name: 'Hay bales', kind: 'solid', rect: [84, 8, 94, 30], h: 2.6, look: 'bales' },
-  { name: 'Cart', kind: 'solid', rect: [72, 14, 78, 22], h: 2.2, look: 'cart' },        // splits the east lane
+  { name: 'Cart', kind: 'solid', rect: [72, 14, 78, 22], h: 3.6, look: 'cart' },        // splits the east lane
+  // Human things left lying about — sell the scale and give ceilings to trap under.
+  // legs: 'corners' = a table/bench: solid legs at the corners, walk-under top.
+  { name: 'Bench', kind: 'over', legs: 'corners', rect: [16, 40, 30, 43], bot: 1.5, top: 1.9, look: 'bench' },
+  { name: 'Trestle table', kind: 'over', legs: 'corners', rect: [62, 36, 74, 44], bot: 2.5, top: 2.9, look: 'table' },
+  { name: 'Bucket', kind: 'solid', rect: [54, 38, 56.5, 40.5], h: 1.4, look: 'bucket' },
+  { name: 'Helmet', kind: 'solid', rect: [31, 93.5, 34, 96.5], h: 1.5, look: 'helmet' },
+  { name: 'Spear rack', kind: 'solid', rect: [10, 52, 22, 53], h: 6, look: 'rack' },
   // Forest: a hollow log over each road.
   { name: 'Hollow log', kind: 'roof', rect: [16, 102, 26, 110], bot: 4, top: 5, look: 'log' },
   { name: 'Hollow log', kind: 'roof', rect: [70, 102, 80, 110], bot: 4, top: 5, look: 'log' },
@@ -138,8 +146,12 @@ export function buildMap() {
       eachCell(f.rect, (i, x, z) => {
         if (type[i] === T.SOLID && f.kind === 'roof') return;     // roofs don't override walls
         slabBot[i] = f.bot; slabTop[i] = f.top; furn[i] = fi;
-        // Colonnade: pillars every 4 units along both long sides.
-        if (f.kind === 'over' && (x === cx0 || x === cx1 || x === cx0 + 1 || x === cx1 - 1) && (z - cz0) % 8 < 2) { type[i] = T.SOLID; solid[i] = f.top; }
+        const sideX = x === cx0 || x === cx1 || x === cx0 + 1 || x === cx1 - 1;
+        if (f.legs === 'corners') {
+          // Table / bench: one leg (1x1 unit) in each corner.
+          const sideZ = z === cz0 || z === cz1 || z === cz0 + 1 || z === cz1 - 1;
+          if (sideX && sideZ) { type[i] = T.SOLID; solid[i] = f.top; }
+        } else if (f.kind === 'over' && sideX && (z - cz0) % 8 < 2) { type[i] = T.SOLID; solid[i] = f.top; }   // colonnade pillars every 4 units
       });
     }
   });

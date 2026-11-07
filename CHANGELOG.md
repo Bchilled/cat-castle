@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 — 2026-11-07
+Sound (new)
+- All sound and music synthesised live with WebAudio, no files: 46 effects (squeaks, spitballs, hairball hork, chomp/eat, pounce, belly flop, every trap, gate cracks, splats, splashes, boss roar and stomp, tails, stash ka-ching, wave horn and fanfare, win/lose). Positional (fades with distance, panned left/right), rate-limited so swarms don't clip. Music: sneaky plucked bass while building, drums for waves, heavier groove for bosses. `src/audio/sfx.js` 1-211 (new); wiring `src/main.js` 177-239.
+- M mutes; Esc pauses with Master / Music / Effects sliders (saved between visits). `index.html` 141-154; `src/main.js` 55-94.
+Scale and look
+- Human-scale castle (1 unit = 30 cm): walls 8.5 m, gatehouse towers 10 m, guardhouses 4.8 m with 2.1 m doors and windows above cat height, slate roofs; colonnade roof 2.7 m. `src/sim/map.js` 31-55.
+- Real-size textures: 11 cm cobbles, 45 cm stone blocks, planks, bark, plaster, slate (the unused triplanar textures are now wired in). `src/render/models.js` 236-377; `src/render/scene.js` 66-80, 95-123.
+- New human props, all solid with matching colliders: bench and trestle table (walk under them; Bug Zappers go underneath), bucket by the well, soldier's helmet in the clearing, spear rack in the courtyard. Bigger cart on 1 m wheels. Wall torches in iron sconces with flickering flames. `src/sim/map.js` 52-65, 149-154; `src/render/models.js`; `src/render/scene.js` 160-170, 460.
+Names and flavour
+- Game renamed Nine Lives Keep. Traps: Toy Block, Snapper, Flinger, Cheese Grater, Bug Zapper, Glue Trap, Thumbtacks, Boxing Glove, each with a description. Mice: Pinkie, House Mouse, Scamper, Mama Mouse, Sewer Rat, Siege Mouse, Plague Rat, Fat Rat, Rat Captain, King Rat. Abilities: Spitball / Hairball / Double Jump (Fred), Chomp / Pounce / Belly Flop (Puddin). `src/config.js` 8-9, 101-148; `src/ui/hud.js` 8-35.
+- Each cat has its own voice (Fred: mouthy alley scrapper; Puddin: posh, lazy glutton), new lines for leaks and wave clears; trinket flavour text; new-mouse intro lines; loading-screen tips; end-screen quips. `src/sim/sim.js` 15-44, 146-152; `src/sim/waves.js` 11-17; `src/main.js` 21-39.
+UI
+- Trap bar shows a picture of each trap (rendered from the 3D models); trap info card while one is held; next-wave preview in the build phase (count, NEW kinds, boss); boss health bar; kill counter; trinkets listed by name with their effect; ability panel shows per-cat names, energy cost, notes; Fred's unused charge bar hidden. `src/ui/hud.js` 55-182; `index.html` 22-73, 101-134.
+Fixes and tuning
+- A boss could get stuck forever chasing a cat it couldn't reach (wave never ended); mice now give up a blocked chase for 2 s, and the stomp triggers at 90% of its radius. `src/sim/sim.js` 872-898.
+- House Mouse bite 6 → 5, Sewer Rat 12 → 10 (mice now hunt cats, so bites hurt more often).
+- Plague spit event renamed so it no longer triggers Fred's spit effects. New events: waveStart, waveClear, jump, glue, sold.
+- Favicon (paw print). README renamed.
+Tests: 46 checks pass; every sound verified to play and produce signal in headless Chrome.
+
 ## 0.5.0 — 2026-11-07
 Traps (Orcs Must Die footprints)
 - Every trap is now one tile = 4x4 cells (2x2 units, two cats wide); barricade is a full-tile, 1.4-tall block whose collision matches its model. Traps snap to half-tiles and nudge one cell to fit against walls. `src/config.js` 114-131; `src/main.js` 95-110; `src/sim/sim.js` 151-152.

@@ -12,19 +12,36 @@ import {
 import { computeFlow, nextCell, nearestReachable } from './path.js';
 import { buildWave, ratePaws, INTRO_TEXT } from './waves.js';
 
-// Cat lines. Original, crude, bleeped.
+// Cat lines. Original, crude, bleeped. Each cat has its own voice:
+// Fred is a mouthy back-alley scrapper; Puddin is a lazy, posh glutton.
 const BARKS = {
-  kill: ['Squeak for your mum. Go on.', 'Another one for the gutter.', 'Oh, did that hurt? Good.',
-         'Flat as a beer mat. Lovely.', "I'll wear your tail as a #@!% scarf.", 'Wipe your feet, you filthy little #@!%s.',
-         "That's not blood, that's interest.", 'Tail tax. Pay up, vermin.'],
-  trap: ["Ha! Didn't see that coming, did ya.", 'Snap. Beautiful.', 'Mind the step, sunshine.', 'Fly, you greasy little #@!%.', 'Splat. Art, that is.'],
-  wave: ['Here they come. Smell like a bin.', "Bloody hell, they're breeding.", 'Not my castle. Still mine.', 'More of them. Course there is.'],
-  boss: ["That one's eaten a whole bakery.", 'Big lad. Bigger funeral.'],
-  death: ["Oh, for #@!%'s sake.", 'Nine lives my #@!%.', "Right. That's personal now."],
-  gate: ["Board's gone. Who wedged that, a #@!% hamster?", "They're through. Barricades, now."],
-  sell: ['Lovely bunch of tails.', 'Kerching, you mouldy beauties.'],
-  trinket: ['Ooh. Shiny. Mine.', 'Finders keepers, you dead little #@!%.'],
-  eat: ['Crunchy.', 'Needs salt.', 'Mm. Tastes like the floor.'],
+  fred: {
+    kill: ['Squeak for your mum. Go on.', 'Another one for the gutter.', 'Oh, did that hurt? Good.', 'Tail tax. Pay up, vermin.',
+           'Stay down, you mangy little #@!%.', "That's what you get for breathing.", 'Next!', 'Wipe your feet, you filthy little #@!%s.'],
+    trap: ["Ha! Didn't see that coming, did ya.", 'Snap. Beautiful.', 'Mind the step, sunshine.', 'Fly, you greasy little #@!%.', 'Splat. Art, that is.'],
+    wave: ['Here they come. Smell like a bin.', "Bloody hell, they're breeding.", 'More of them. Course there is.', 'Right. Who wants a slap?'],
+    boss: ["That one's eaten a whole bakery.", 'Big lad. Bigger funeral.', "Oh, he's ugly. Let's make him uglier."],
+    death: ["Oh, for #@!%'s sake.", 'Nine lives my #@!%.', "Right. That's personal now."],
+    gate: ["Board's gone. Who wedged that, a #@!% hamster?", "They're through. Barricades, now."],
+    sell: ['Lovely bunch of tails.', 'Kerching, you mouldy beauties.'],
+    trinket: ['Ooh. Shiny. Mine.', 'Finders keepers, you dead little #@!%.'],
+    eat: ['Crunchy.'],
+    leak: ['One got in! OI!', 'Somebody stop that one!', "That's coming out of your wages, Puddin."],
+    clear: ['Is that it? Is that all you got?', 'Go on, run home. Oh wait.', 'Lovely. Smoke break.'],
+  },
+  puddin: {
+    kill: ['Hm. Messy.', "Lie still, there's a good vermin.", "I've coughed up bigger than you.", 'Ghastly little things.', 'Another for the pile, I suppose.'],
+    trap: ['Oh, delightful.', 'Mm. Physics.', "Someone'll clean that up. Not me.", 'Into the moat with you, darling.'],
+    wave: ["Must they? It's nearly nap time.", 'Ugh. Visitors.', "Wake me when they're dead. Oh. Right. Me."],
+    boss: ["Goodness, he's fat. I'm allowed to say that.", "That's not a rat, that's a meal plan."],
+    death: ['Undignified.', "I'll be back once I've had a lie down.", "This is why I don't exercise."],
+    gate: ["The door's off. How common.", 'Well. Do something, Fred.'],
+    sell: ['Put it on my tab.', 'Sardines. Finally, some culture.'],
+    trinket: ["Ooh, that'll look lovely on me.", "Mine now. Don't argue."],
+    eat: ['Crunchy.', 'Needs salt.', 'Mm. Tastes like the floor.', 'Bit gamey.', 'Compliments to the gutter.'],
+    leak: ["One's slipped by. Not my fault.", "Someone's let one through. Fred."],
+    clear: ['Lovely. Now, snacks.', "That'll do. I'm going for a lie down.", 'Was that all? How dreary.'],
+  },
 };
 
 function mulberry32(seed) {
@@ -126,10 +143,13 @@ export class Sim {
 
   // ---------- helpers ----------
   emit(e) { this.events.push(e); }
+  // who = a cat's name (or nothing: any cat in the game speaks).
   bark(kind, who, force = false) {
     if (!force && this.barkCooldown > 0) return;
-    const lines = BARKS[kind]; this.barkCooldown = 3.5;
-    this.emit({ t: 'bark', who: who || 'Fred', text: lines[Math.floor(this.rng() * lines.length)] });
+    const cat = [...this.cats.values()].find(c => c.name === who) || [...this.cats.values()][Math.floor(this.rng() * this.cats.size)];
+    const voice = BARKS[cat ? cat.kind : 'fred'], lines = voice[kind] || BARKS.fred[kind]; if (!lines) return;
+    this.barkCooldown = 3.5;
+    this.emit({ t: 'bark', who: cat ? cat.name : 'Fred', kind: cat ? cat.kind : 'fred', text: lines[Math.floor(this.rng() * lines.length)] });
   }
   anyCatName() { const c = this.cats.values().next().value; return c ? c.name : 'Fred'; }
   isWater(i) { return i >= 0 && this.map.type[i] === T.WATER; }
@@ -318,7 +338,7 @@ export class Sim {
         // Full refund; a chewed barricade refunds only for the health it has left.
         const refund = tr.kind === 'barricade' ? Math.floor(tr.cost * tr.hp / tr.maxHp) : tr.cost;
         this.removeTrap(tr); this.sardines += refund;
-        this.emit({ t: 'msg', text: `Sold for ${refund} sardines` }); return;
+        this.emit({ t: 'msg', text: `Sold for ${refund} sardines` }); this.emit({ t: 'sold', x: (tr.x0 + tr.x1) / 2, z: (tr.z0 + tr.z1) / 2 }); return;
       }
     }
   }
@@ -390,6 +410,7 @@ export class Sim {
         this.wave++; this.phase = 'wave';
         this.spawn = { ...buildWave(this.wave, this.rng, this.gate.up), t: 0 }; this.packVia = -2;
         this.emit({ t: 'msg', text: `Wave ${this.wave}` + (this.wave % 12 === 0 ? ' — BIG BOSS RAT' : this.wave % 6 === 0 ? ' — mini boss' : '') });
+        this.emit({ t: 'waveStart', wave: this.wave, boss: this.wave % 6 === 0 });
         this.bark(this.wave % 6 === 0 ? 'boss' : 'wave', this.anyCatName(), true);
       }
       return;
@@ -415,7 +436,8 @@ export class Sim {
         this.phase = 'build'; this.phaseTimer = RULES.buildPhaseSeconds;
         // Income that doesn't depend on hauling tails, so you can always build.
         const bonus = RULES.waveBonus + this.wave * 10; this.sardines += bonus;
-        this.emit({ t: 'msg', text: `Wave ${this.wave} cleared  +${bonus} sardines` });
+        this.emit({ t: 'msg', text: `Wave ${this.wave} cleared  +${bonus} sardines` }); this.emit({ t: 'waveClear', wave: this.wave });
+        this.bark('clear', null, true);
       }
     }
   }
@@ -513,12 +535,12 @@ export class Sim {
       }
       inp.jump = false;
     } else if (inp.jump) {
-      if (cat.onGround) { cat.vy = def.jumpVel; cat.onGround = false; }
+      if (cat.onGround) { cat.vy = def.jumpVel; cat.onGround = false; this.emit({ t: 'jump', id: cat.id }); }
       else if (def.wallKick && cat.wallNormal && cat.kicksLeft > 0 && !sameWall(cat.lastKick, cat.wallNormal)) {
         cat.vy = def.jumpVel; cat.vx = cat.wallNormal[0] * def.wallKick; cat.vz = cat.wallNormal[1] * def.wallKick;
         cat.kicksLeft--; cat.lastKick = cat.wallNormal.slice();
         this.emit({ t: 'wallkick', x: cat.x, y: cat.y, z: cat.z });
-      } else if (cat.airJumps > 0) { cat.vy = def.jumpVel * 0.9; cat.airJumps--; }
+      } else if (cat.airJumps > 0) { cat.vy = def.jumpVel * 0.9; cat.airJumps--; this.emit({ t: 'jump', id: cat.id }); }
       inp.jump = false;
     }
 
@@ -780,7 +802,7 @@ export class Sim {
     if (i >= 0 && this.map.type[i] === T.HOLE) {
       m.dead = true;
       this.lives -= d.boss ? RULES.livesLostPerBoss : RULES.livesLostPerMouse;
-      this.emit({ t: 'leak', boss: !!d.boss });
+      this.emit({ t: 'leak', boss: !!d.boss }); this.bark('leak');
       this.emit({ t: 'msg', text: d.boss ? 'A boss got into the great hall!' : 'A mouse got into the great hall' });
       return;
     }
@@ -833,7 +855,7 @@ export class Sim {
         }
         return;                                   // stands still while winding up
       }
-      if (m.stompT <= 0 && foe && foeD < d.stomp.radius * 0.8) {
+      if (m.stompT <= 0 && foe && foeD < d.stomp.radius * 0.9) {
         m.stompT = d.stomp.every; m.windT = 0.7;
         this.emit({ t: 'stompWarn', id: m.id, x: m.x, z: m.z, r: d.stomp.radius });
       }
@@ -847,7 +869,7 @@ export class Sim {
         const tf = foeD / d.spit.speed, ty = foe.y + 0.5;
         this.globs.push({ id: this.nextId++, x: m.x, y: 0.5, z: m.z, vx: (foe.x + foe.vx * tf - m.x) / tf, vz: (foe.z + foe.vz * tf - m.z) / tf,
           vy: (ty - 0.5 + 0.5 * GRAVITY * tf * tf) / tf, dmg: d.spit.dmg, t: 3 });
-        this.emit({ t: 'spit', x: m.x, z: m.z });
+        this.emit({ t: 'ratSpit', x: m.x, z: m.z });
       }
     }
 
@@ -871,7 +893,9 @@ export class Sim {
     const ok = (x, z) => { const c = cellOf(x, z); return c >= 0 && pass(c) && !this.isBlocker(c); };
     const sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * (m.packed ? RULES.packSpeed : 1);
     let mx, mz;
-    if (foe && d.aggro && foeD < d.aggro && foe.onGround !== false) {
+    m.ignoreT = Math.max(0, (m.ignoreT || 0) - DT);
+    const chasing = foe && d.aggro && foeD < d.aggro && foe.onGround !== false && m.ignoreT === 0;
+    if (chasing) {
       // Go for the cat. Stop at biting distance (no pushing into it).
       const dx = foe.x - m.x, dz = foe.z - m.z, dd = foeD || 1, reach = d.size * 0.5 + foe.def.radius;
       const go = dd > reach ? 1.15 : 0;
@@ -919,6 +943,8 @@ export class Sim {
     m.x += mx * sp * DT + sx; m.z += mz * sp * DT + sz;
     // Walls: mice can't be shoved into solid tiles; slide along them instead.
     if (!ok(m.x, m.z)) { if (ok(m.x, oz)) m.z = oz; else if (ok(ox, m.z)) m.x = ox; else { m.x = ox; m.z = oz; } }
+    // A cat standing somewhere this mouse can't reach: give up the chase for a bit.
+    if (chasing && Math.hypot(m.x - ox, m.z - oz) < sp * DT * 0.2 && foeD > d.size * 0.5 + foe.def.radius + 0.1) m.ignoreT = 2;
     m.y = 0;
   }
 
@@ -1035,7 +1061,7 @@ export class Sim {
         if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) tr.charges = def.charges; continue; }
         for (const m of this.mice) {
           if (m.dead || m.state !== 'walk' || m.glueId === tr.id || !inRect(m, tr, 0)) continue;
-          m.state = 'stuck'; m.stuckT = def.stickSecs * (MICE[m.type].boss ? 0.4 : 1); m.glueId = tr.id;
+          m.state = 'stuck'; m.stuckT = def.stickSecs * (MICE[m.type].boss ? 0.4 : 1); m.glueId = tr.id; this.emit({ t: 'glue', x: m.x, z: m.z });
           if (--tr.charges <= 0) { tr.rechargeT = tr.cdMax = def.recharge * mods.trapCd; break; }
         }
       } else if (tr.kind === 'tacks') {

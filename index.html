@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cat Castle</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%23e0a33a'%3E%3Cellipse cx='12' cy='16' rx='5' ry='4.2'/%3E%3Ccircle cx='6' cy='10' r='2.2'/%3E%3Ccircle cx='10' cy='6.5' r='2.2'/%3E%3Ccircle cx='14' cy='6.5' r='2.2'/%3E%3Ccircle cx='18' cy='10' r='2.2'/%3E%3C/g%3E%3C/svg%3E">
+<title>Nine Lives Keep</title>
 <!-- Three.js from a CDN via an import map: no build step, runs on GitHub Pages. -->
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
 <style>
@@ -18,11 +19,27 @@
   #wave { font-size: 20px; font-weight: bold; } #status { font-size: 13px; color: var(--dim); }
   #radarbox { top: 10px; right: 10px; padding: 4px; }
   #radar { display: block; width: 200px; height: 200px; image-rendering: pixelated; }
-  #trinkets { display: flex; flex-wrap: wrap; gap: 4px; max-width: 200px; margin-top: 4px; }
-  .tk { font-size: 11px; font-weight: bold; padding: 2px 5px; border-radius: 4px; background: #3b322a; border: 1px solid #0e0b09; cursor: help; }
+  #trinkets { display: flex; flex-direction: column; gap: 3px; width: 200px; margin-top: 4px; }
+  .tk { font-size: 12px; font-weight: bold; padding: 2px 6px; border-radius: 4px; background: #3b322a; border: 1px solid #0e0b09; }
+  .tk small { display: block; font-weight: normal; font-size: 10.5px; color: var(--dim); }
   .tk.common { color: #d8d0c0; } .tk.rare { color: #7ab8f0; } .tk.legendary { color: #f0b030; border-color: #f0b030; }
-  .tk b { margin-left: 2px; color: var(--ink); }
-  #me { bottom: 84px; left: 10px; font-size: 15px; }
+  .tk b { color: var(--ink); }
+  #next { top: 78px; left: 50%; transform: translateX(-50%); font-size: 13px; white-space: nowrap; }
+  #next .new { color: #8ad0ff; } #next .boss { color: var(--bad); }
+  #bossbar { top: 78px; left: 50%; transform: translateX(-50%); width: 420px; text-align: center; font-size: 14px; font-weight: bold; color: #ff8a6a; letter-spacing: 1px; }
+  #bossbar .bar { height: 10px; margin-top: 3px; background: #2a1410; border: 1px solid #0e0b09; } #bosshp { display: block; height: 100%; background: linear-gradient(#e0402a, #9a1a10); width: 100%; transition: width .15s; }
+  #trapinfo { left: 10px; bottom: 128px; width: 300px; font-size: 13px; }
+  #trapinfo b { font-size: 16px; color: var(--accent); } #trapinfo .cost { color: var(--dim); } #trapinfo .cost::before { content: "\1F41F  "; font-size: 11px; }
+  #trapinfo small { display: block; color: var(--dim); } #trapinfo p { margin: 4px 0 0; color: var(--ink); }
+  #me { bottom: 92px; left: 10px; font-size: 15px; }
+  #muted { position: fixed; top: 52px; left: 10px; font-size: 12px; color: var(--dim); display: none; }
+  #sub b.fred { color: #f0903a; } #sub b.puddin { color: #e8d8b0; }
+  #pause label { display: grid; grid-template-columns: 130px 220px; align-items: center; gap: 8px; margin: 6px; color: var(--ink); }
+  #pause input[type=range] { accent-color: var(--accent); }
+  #pause .keys { color: var(--dim); font-size: 13px; line-height: 1.6; margin-top: 10px; }
+  #pause .keys b { color: var(--ink); }
+  .tip { color: var(--dim); font-size: 14px; min-height: 20px; margin-top: 14px; font-style: italic; }
+  .quip { font-style: italic; }
   #me b { color: var(--accent); }
   /* Whisker crosshair */
   #crosshair { position: fixed; top: 50%; left: 50%; width: 120px; height: 44px; margin: -22px -60px; pointer-events: none; }
@@ -33,8 +50,8 @@
   #crosshair .nose { fill: #d88a8a; stroke: #0a0806; stroke-width: 1.2; }
   #crosshair.bad .nose { fill: var(--bad); }
   /* Abilities */
-  #abilities { position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
-  .ab { position: relative; width: 92px; height: 50px; background: var(--bg); border: 2px solid #0e0b09; border-radius: 6px; font-size: 11px; text-align: center; padding-top: 4px; overflow: hidden; }
+  #abilities { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+  .ab { position: relative; width: 104px; height: 60px; background: var(--bg); border: 2px solid #0e0b09; border-radius: 6px; font-size: 11px; text-align: center; padding-top: 4px; overflow: hidden; }
   .ab .k { display: block; color: var(--accent); font-weight: bold; font-size: 12px; }
   .ab::after { content: ""; position: absolute; inset: 0; background: conic-gradient(rgba(0,0,0,.65) var(--cd, 0deg), transparent 0); pointer-events: none; }
   .ab.noenergy { opacity: .45; }
@@ -42,16 +59,18 @@
   .ab .charge { height: 4px; margin: 3px 8px 0; background: #3b322a; } .ab .charge i { display: block; height: 100%; width: 0; background: var(--accent); }
   /* Trap bar */
   #trapbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; }
-  .slot { background: var(--bg); border: 2px solid #0e0b09; border-radius: 6px; padding: 3px 7px; width: 104px; font-size: 12px; display: grid; grid-template-columns: auto 1fr; gap: 0 6px; white-space: nowrap; overflow: hidden; }
-  .slot .key { grid-row: span 2; font-size: 19px; font-weight: bold; color: var(--accent); }
+  .slot { position: relative; background: var(--bg); border: 2px solid #0e0b09; border-radius: 6px; padding: 2px 4px 3px; width: 92px; font-size: 11.5px; text-align: center; white-space: nowrap; overflow: hidden; }
+  .slot img { display: block; width: 64px; height: 48px; margin: 0 auto -2px; }
+  .slot .key { position: absolute; top: 1px; left: 5px; font-size: 16px; font-weight: bold; color: var(--accent); text-shadow: 0 1px 2px #000; }
+  .slot .nm, .slot .cost { display: block; }
   .slot .cost { color: var(--dim); } .slot .cost::before { content: "\1F41F  "; font-size: 10px; }
   .slot.sel { border-color: var(--accent); background: rgba(80,58,24,.92); } .slot.poor .cost { color: var(--bad); }
   /* Controls panel */
-  #controls { right: 10px; bottom: 84px; font-size: 12px; line-height: 1.55; color: var(--dim); }
+  #controls { right: 10px; bottom: 92px; font-size: 12px; line-height: 1.55; color: var(--dim); }
   #controls b { color: var(--ink); } #controls.hidden { display: none; }
-  #prompt { position: fixed; bottom: 142px; left: 50%; transform: translateX(-50%); font-size: 15px; text-shadow: 0 1px 3px #000; white-space: nowrap; }
-  #msg { position: fixed; top: 72px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: bold; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity .3s; white-space: nowrap; }
-  #sub { position: fixed; bottom: 172px; left: 50%; transform: translateX(-50%); max-width: 70vw; text-align: center; font-size: 18px; background: rgba(0,0,0,.55); padding: 4px 12px; border-radius: 4px; opacity: 0; transition: opacity .3s; }
+  #prompt { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); font-size: 15px; text-shadow: 0 1px 3px #000; white-space: nowrap; }
+  #msg { position: fixed; top: 116px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: bold; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  #sub { position: fixed; bottom: 180px; left: 50%; transform: translateX(-50%); max-width: 70vw; text-align: center; font-size: 18px; background: rgba(0,0,0,.55); padding: 4px 12px; border-radius: 4px; opacity: 0; transition: opacity .3s; }
   #sub b { color: var(--accent); }
   .show { opacity: 1 !important; }
   #hurt { position: fixed; inset: 0; pointer-events: none; }
@@ -79,24 +98,28 @@
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="top" class="panel">Lives <b id="lives">20</b> Sardines <b id="sardines">0</b> Yarn <b id="yarn">0</b></div>
+<div id="top" class="panel">Lives <b id="lives">20</b> Sardines <b id="sardines">0</b> Yarn <b id="yarn">0</b> Kills <b id="kills">0</b></div>
+<div id="muted">Sound off (M)</div>
 <div id="wavebox" class="panel"><div id="wave"></div><div id="status"></div></div>
+<div id="next" class="panel" style="display:none"></div>
+<div id="bossbar" class="panel" style="display:none"><span id="bossname"></span><div class="bar"><i id="bosshp"></i></div></div>
+<div id="trapinfo" class="panel" style="display:none"></div>
 <div id="radarbox" class="panel"><canvas id="radar" width="200" height="200"></canvas><div id="trinkets"></div></div>
 <div id="me" class="panel"><span id="catname"></span> · Tails <b id="tails">0</b></div>
 <div id="crosshair"></div>
 <div id="abilities">
-  <div class="ab"><span class="k">L-click</span><span id="ab-pri-name">Spit</span><small id="ab-pri-note"></small></div>
-  <div class="ab" id="ab-sec"><span class="k">R-click</span><span id="ab-sec-name">Hairball</span></div>
-  <div class="ab"><span class="k">Space</span><span id="ab-jump-name">Double jump</span><div class="charge"><i id="ab-charge"></i></div></div>
+  <div class="ab"><span class="k">Left click</span><span id="ab-pri-name"></span><small id="ab-pri-note"></small></div>
+  <div class="ab" id="ab-sec"><span class="k">Right click</span><span id="ab-sec-name"></span><small id="ab-sec-note"></small></div>
+  <div class="ab"><span class="k">Space</span><span id="ab-jump-name"></span><small id="ab-jump-note"></small><div class="charge"><i id="ab-charge"></i></div></div>
 </div>
 <div id="trapbar"></div>
 <div id="controls" class="panel">
   <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom<br>
-  <b>Left click</b> Fred spits / Puddin bites (hold)<br>
-  <b>Right click</b> hairball / pounce, or place the held trap<br>
-  <b>Space</b> Fred: double jump, wall kick · Puddin: hold to charge a leap<br>
+  <b>Left click</b> attack (hold) · <b>Right click</b> ability, or place the held trap<br>
+  <b>Space</b> Fred: double jump, wall kick · Puddin: hold for a belly flop<br>
   <b>1–8</b> pick trap · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away<br>
-  <b>E</b> trade tails at a stash · <b>G</b> next wave · <b>H</b> hide this
+  <b>E</b> trade tails at a stash · <b>G</b> next wave<br>
+  <b>M</b> sound on/off · <b>Esc</b> pause · <b>H</b> hide this
 </div>
 <div id="prompt"></div>
 <div id="msg"></div>
@@ -104,17 +127,31 @@
 <div id="hurt"></div>
 
 <div id="menu" class="screen show">
-  <div class="title">Cat Castle</div>
+  <div class="title">Nine Lives Keep</div>
   <p class="tag">Two mean cats. One castle. Far too many mice.</p>
   <div class="cats">
-    <button class="catpick picked" data-cat="fred"><canvas class="catview" data-kind="fred" width="220" height="160"></canvas><b>Fred</b><small>Scruffy ginger tom. Quick and fragile: spits pellets that bleed, hairball splash, parkour.</small></button>
-    <button class="catpick" data-cat="puddin"><canvas class="catview" data-kind="puddin" width="220" height="160"></canvas><b>Puddin</b><small>Huge long-haired calico. Slow tank: heavy bite that eats to heal, stunning pounce, charged leap.</small></button>
+    <button class="catpick picked" data-cat="fred"><canvas class="catview" data-kind="fred" width="220" height="160"></canvas><b>Fred</b><small>Scruffy ginger alley tom with a mouth on him. Fast and fragile: spitballs that make them bleed, a splashy hairball, double jumps and wall kicks.</small></button>
+    <button class="catpick" data-cat="puddin"><canvas class="catview" data-kind="puddin" width="220" height="160"></canvas><b>Puddin</b><small>Enormous long-haired calico. Posh, lazy, always hungry. Chomps (and eats) mice to heal, pounces to stun, belly flops to scatter.</small></button>
   </div>
   <div class="modes">
     <button class="play" data-mode="normal">Castle entrance · 24 waves</button>
     <button data-mode="endless">Endless</button>
   </div>
   <p id="profile" class="dim"></p>
+  <p class="tip" id="tip"></p>
+</div>
+<div id="pause" class="screen">
+  <h1>Paused</h1>
+  <button id="resume" class="play">Resume</button>
+  <label>Master <input type="range" id="vol-master" min="0" max="1" step="0.05"></label>
+  <label>Music <input type="range" id="vol-music" min="0" max="1" step="0.05"></label>
+  <label>Sound effects <input type="range" id="vol-sfx" min="0" max="1" step="0.05"></label>
+  <button id="mute">Mute</button>
+  <div class="keys">
+    <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom · <b>Left click</b> attack · <b>Right click</b> ability / place trap<br>
+    <b>Space</b> jump · <b>1–8</b> traps · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away · <b>E</b> trade tails · <b>G</b> next wave · <b>M</b> mute
+  </div>
+  <button id="quit">Quit to menu</button>
 </div>
 <div id="end" class="screen"></div>
 

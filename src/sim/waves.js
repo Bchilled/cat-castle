@@ -8,13 +8,13 @@ import { MICE } from '../config.js';
 
 // What each new kind does — shown when it first appears.
 export const INTRO_TEXT = {
-  miniboss: 'big, fast, and it STOMPS — watch for the red ring and get out.',
-  bigboss: 'the King rat. Bigger stomp. Bring everything.',
-  runner: 'fast and fragile. Glue slows it down.',
-  splitter: 'bursts into two pups when it dies. Eat it to stop the split.',
-  tank: 'slow, tough sewer rat. Chews barricades fast.',
+  miniboss: 'huge, fast, and it STOMPS. Red ring on the floor = get out.',
+  bigboss: 'the King Rat himself. Bigger stomp. Bring everything.',
+  runner: 'quick and flimsy. Glue Traps and Snappers love it.',
+  splitter: 'bursts into two Pinkies when killed. Have Puddin eat her and they never come out.',
+  tank: 'tough and slow. Chews through Toy Blocks fast.',
   plague: 'spits plague at cats from range. Kill it first.',
-  fatty: 'huge and slow. Bursts into three mice.',
+  fatty: "huge, slow, and full of mice. Don't ask.",
 };
 
 // Queue entries: { type, gap, pack, intro? } — gap = seconds until the next entry.
@@ -69,4 +69,19 @@ export function ratePaws(lives, stats) {
     { name: 'No energy used', got: stats.energyUsed === 0 },
   ];
   return { base, bonus, total: base + bonus.filter(b => b.got).length };
+}
+
+// What the next wave holds, for the HUD during the build phase. Uses a fixed
+// stand-in random so it never touches the game's own random sequence.
+export function previewWave(n, gateUp) {
+  let seed = n * 7919 + 1; const rng = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const { queue } = buildWave(n, rng, gateUp);
+  const counts = {};
+  for (const e of queue) counts[e.type] = (counts[e.type] || 0) + 1;
+  return {
+    total: queue.length,
+    fresh: queue.filter(e => e.intro && !MICE[e.type].boss).map(e => MICE[e.type].name),
+    boss: queue.filter(e => MICE[e.type].boss).map(e => MICE[e.type].name)[0] || null,
+    counts,
+  };
 }

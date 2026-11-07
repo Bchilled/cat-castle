@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { CELL } from '../sim/map.js';
+import { tmat } from './textures.js';
 
 const matCache = new Map();
 // Flat-shaded matte material, cached so identical colours share one material.
@@ -232,44 +233,57 @@ export function makeFurniture(f) {
   const [x0, z0, x1, z1] = f.rect, w = x1 - x0, d = z1 - z0;
   const g = new THREE.Group(); g.position.set(x0 + w / 2, 0, z0 + d / 2);
   const B = (c, x, y, z, sx, sy, sz, line = true) => { const m = box(c, x, y, z, sx, sy, sz, line); g.add(m); return m; };
-  const leg = 0.5;
+  // Textured box: texture name + world units per repeat. Detail at real size
+  // (45 cm stone blocks, 12 cm cobbles, 15 cm planks) is what makes the world read huge.
+  const TB = (tex, scale, tint, x, y, z, sx, sy, sz, line = true) => {
+    const m = new THREE.Mesh(BOX, tmat(tex, scale, tint)); m.position.set(x, y, z); m.scale.set(sx, sy, sz);
+    if (line) outline(m, 1.005); g.add(m); return m;
+  };
+  const TC = (tex, scale, tint, geo, x, y, z) => { const m = new THREE.Mesh(geo, tmat(tex, scale, tint)); m.position.set(x, y, z); g.add(m); return m; };
   switch (f.look) {
     case 'stone': {
-      B(STONE2, 0, f.h / 2, 0, w, f.h, d, false);
-      // Mortar courses: thin darker bands, flush with the faces.
-      for (let y = 1.2; y < f.h; y += 1.4) B(0x4a453f, 0, y, 0, w + 0.02, 0.08, d + 0.02, false);
+      TB('stone', 6, 0xd8d0c4, 0, f.h / 2, 0, w, f.h, d, false);
+      B(0x4a453f, 0, f.h - 0.4, 0, w + 0.3, 0.8, d + 0.3, false);         // coping along the top
       break;
     }
     case 'hallwall': {
-      B(STONE2, 0, f.h / 2, 0, w, f.h, d, false);
-      for (let y = 1.2; y < f.h; y += 1.4) B(0x4a453f, 0, y, 0, w + 0.02, 0.08, d + 0.02, false);
-      // The great hall's human-size door, painted flush on the wall face.
-      B(0x4a3220, -w / 2 + 29, 5, d / 2 + 0.01, 9, 10, 0.02, false);
-      for (let k = 0; k < 3; k++) B(0x26221e, -w / 2 + 29, 2 + k * 3, d / 2 + 0.02, 9.1, 0.3, 0.02, false);
+      TB('stone', 6, 0xd0c6b6, 0, f.h / 2, 0, w, f.h, d, false);
+      // The great hall's human doors: 3 m wide, 4.2 m tall, studded planks in a stone arch.
+      TB('planks', 3, 0x9a7a58, -w / 2 + 29, 7, d / 2 + 0.03, 10, 14, 0.06, false);
+      for (let k = 0; k < 3; k++) B(0x26221e, -w / 2 + 29, 2 + k * 4.5, d / 2 + 0.08, 10.1, 0.35, 0.04, false);   // iron straps
+      B(0x26221e, -w / 2 + 31, 7, d / 2 + 0.1, 0.5, 0.5, 0.1, false);                                            // ring handle
       break;
     }
     case 'tunnelroof': {
-      B(STONE2, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d, false);
-      for (let z = -d / 2 + 2; z < d / 2; z += 3) B(0x3e3a34, 0, f.bot + 0.15, z, w, 0.3, 0.6, false);   // ribs under the vault
+      TB('stone', 6, 0xc8beb0, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d, false);
+      for (let z = -d / 2 + 2; z < d / 2; z += 3) B(0x3e3a34, 0, f.bot + 0.2, z, w, 0.4, 0.7, false);   // ribs under the vault
       break;
     }
     case 'guardhouse': {
-      B(0x7a7268, 0, f.h / 2, 0, w, f.h, d);
-      for (let y = 1.2; y < f.h; y += 1.4) B(0x5a544c, 0, y, 0, w + 0.02, 0.08, d + 0.02, false);
-      B(0x4a3220, 0, 3, d / 2 + 0.01, 3.5, 6, 0.02, false);          // door, flush
-      B(0x1a1612, w / 4, 4, d / 2 + 0.01, 2, 1.5, 0.02, false);      // window, flush
+      // Stone plinth, timber-framed plaster walls, a human door (2.1 m) and windows
+      // well above a cat's head, slate roof.
+      TB('stone', 6, 0xc8beb0, 0, 1.5, 0, w, 3, d);
+      TB('plaster', 4, 0xe8e0d0, 0, 3 + (f.h - 3) / 2, 0, w - 0.1, f.h - 3, d - 0.1, false);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) B(DARKWOOD, sx * (w / 2 - 0.3), 3 + (f.h - 3) / 2, sz * (d / 2 - 0.3), 0.6, f.h - 3, 0.6, false);
+      for (const y of [3.2, f.h - 0.3]) { B(DARKWOOD, 0, y, d / 2 - 0.02, w, 0.5, 0.1, false); B(DARKWOOD, 0, y, -d / 2 + 0.02, w, 0.5, 0.1, false); }
+      TB('planks', 3, 0x8a6a48, 0, 3.5, d / 2 + 0.03, 3.6, 7, 0.06, false);                    // door, flush
+      B(0x26221e, 1.2, 3.5, d / 2 + 0.08, 0.35, 0.35, 0.06, false);                            // handle
+      for (const wx of [-w / 4 - 1, w / 4 + 1]) {
+        B(0x1a1612, wx, 10, d / 2 + 0.02, 2.4, 3, 0.04, false);                              // window
+        B(DARKWOOD, wx, 10, d / 2 + 0.05, 2.6, 0.2, 0.04, false); B(DARKWOOD, wx, 10, d / 2 + 0.06, 0.2, 3.2, 0.04, false);
+      }
       const roof = new THREE.Group(); roof.position.y = f.h;
-      const cone = outline(new THREE.Mesh(new THREE.ConeGeometry(0.71, 1, 4, 1), mat(0x4a3a2c)), 1.02);
-      cone.rotation.y = Math.PI / 4; cone.position.y = 0.5; roof.add(cone); roof.scale.set(w, 3, d); g.add(roof);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.71, 1, 4, 1), tmat('slate', 3, 0xc0c4cc)); outline(cone, 1.02);
+      cone.rotation.y = Math.PI / 4; cone.position.y = 0.5; roof.add(cone); roof.scale.set(w + 1, 6, d + 1); g.add(roof);
       break;
     }
     case 'barrels': {
-      // Barrels packed into the block; the collider is the whole block.
+      // Barrels packed into the block (90 cm tall, 60 cm wide); the collider is the whole block.
       const r = 0.95;
       for (let bx = -w / 2 + r; bx <= w / 2 - r + 0.01; bx += 2 * r + 0.05)
         for (let bz = -d / 2 + r; bz <= d / 2 - r + 0.01; bz += 2 * r + 0.05) {
-          g.add(part(cyl(r * 0.92, r, f.h, 10), 0x7a5634, bx, f.h / 2, bz));
-          for (const y of [0.4, f.h - 0.4]) g.add(part(cyl(r * 0.97, r * 0.97, 0.12, 10), 0x2e2c2a, bx, y, bz, 1, 1, 1, false));
+          outline(TC('planks', 2, 0xb08a60, cyl(r * 0.92, r, f.h, 12), bx, f.h / 2, bz), 1.02);
+          for (const y of [0.4, f.h / 2, f.h - 0.4]) g.add(part(cyl(r * 0.97, r * 0.97, 0.12, 12), 0x2e2c2a, bx, y, bz, 1, 1, 1, false));
         }
       break;
     }
@@ -277,24 +291,52 @@ export function makeFurniture(f) {
       for (let bz = -d / 2; bz < d / 2 - 0.01; bz += 2.2) {
         const len = Math.min(2.2, d / 2 - bz);
         B(0xc8a858, 0, f.h / 2, bz + len / 2, w, f.h, len - 0.04);
-        B(0x8a6a38, 0, f.h / 2, bz + len / 2, w + 0.02, 0.1, len * 0.9, false);   // twine
+        for (const k of [-0.3, 0.3]) B(0x8a6a38, 0, f.h / 2, bz + len / 2 + k * len, w + 0.02, f.h + 0.02, 0.08, false);   // twine
       }
       break;
     }
     case 'bench': {
-      B(WOOD, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) B(DARKWOOD, sx * (w / 2 - leg / 2), f.bot / 2, sz * (d / 2 - leg / 2), leg, f.bot, leg);
+      // A human bench (45 cm seat): planks on four legs; mice run underneath.
+      TB('planks', 2, 0xb08a60, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) TB('planks', 2, 0x8a6a48, sx * (w / 2 - 0.5), f.bot / 2, sz * (d / 2 - 0.5), 1, f.bot, 1);
       break;
     }
-    case 'arch': {
-      // Wooden gallery over the last stretch before the hall door.
-      B(DARKWOOD, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
-      for (let x = -w / 2 + 1; x < w / 2; x += 3) B(0x3a2a1a, x, f.bot - 0.0, -d / 2 + 0.3, 0.3, 0.01, d - 0.6, false);
+    case 'table': {
+      // Trestle table (75 cm): big plank top, a leg in each corner, a stretcher too high to trip on.
+      TB('planks', 2.5, 0xb89068, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) TB('planks', 2, 0x8a6a48, sx * (w / 2 - 0.5), f.bot / 2, sz * (d / 2 - 0.5), 1, f.bot, 1);
+      B(DARKWOOD, 0, f.bot - 0.25, 0, w - 1, 0.3, 0.3, false);
+      break;
+    }
+    case 'bucket': {
+      const r = Math.min(w, d) / 2;
+      outline(TC('planks', 1.5, 0xa08060, cyl(r, r * 0.85, f.h, 12), 0, f.h / 2, 0), 1.03);
+      for (const y of [0.25, f.h - 0.2]) g.add(part(cyl(r * 1.01, r * 0.9, 0.1, 12), 0x2e2c2a, 0, y, 0, 1, 1, 1, false));
+      g.add(part(cyl(r * 0.85, r * 0.85, 0.04, 12), 0x2a4a5a, 0, f.h - 0.15, 0, 1, 1, 1, false));   // water
+      break;
+    }
+    case 'helmet': {
+      // A soldier's kettle hat dropped by the bridge: dome + wide brim, fits the 3x3 block.
+      const r = Math.min(w, d) / 2;
+      const dome = part(new THREE.SphereGeometry(r * 0.75, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0x8a8a90, 0, 0.15, 0);
+      dome.scale.y = (f.h - 0.15) / (r * 0.75); g.add(dome);
+      g.add(part(cyl(r, r, 0.15, 16), 0x6e6e74, 0, 0.08, 0));
+      break;
+    }
+    case 'rack': {
+      // Spear rack: two posts, two rails, spears standing in it (all inside the block).
+      for (const sx of [-1, 1]) TB('planks', 2, 0x8a6a48, sx * (w / 2 - 0.4), f.h / 2, 0, 0.8, f.h, d);
+      for (const y of [1.5, 4.5]) TB('planks', 2, 0x9a7a58, 0, y, 0, w, 0.4, d * 0.8);
+      for (let k = 0; k < 7; k++) {
+        const x = -w / 2 + 1.5 + k * (w - 3) / 6;
+        g.add(part(cyl(0.12, 0.12, f.h - 0.6, 6), 0x6e5030, x, (f.h - 0.6) / 2, 0, 1, 1, 1, false));
+        const tip = part(new THREE.ConeGeometry(0.22, 0.6, 4), 0xb0b0b8, x, f.h - 0.3, 0); g.add(tip);
+      }
       break;
     }
     case 'log': {
       // Hollow log: flat-bottomed bark roof over the road (collider = slab).
-      B(0x5a4030, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      TB('bark', 3, 0xb09080, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
       for (const k of [-1, 1]) {
         const ring = new THREE.Mesh(new THREE.BoxGeometry(w, f.top - f.bot, 0.05), mat(0xb08a5a));
         ring.position.set(0, (f.bot + f.top) / 2, k * (d / 2 + 0.01)); g.add(ring);
@@ -303,33 +345,36 @@ export function makeFurniture(f) {
     }
     case 'well': {
       const r = Math.min(w, d) / 2;
-      g.add(part(cyl(r, r, f.h, 14), 0x7a7268, 0, f.h / 2, 0));
-      g.add(part(cyl(r * 0.75, r * 0.75, 0.05, 14), 0x1a2a2a, 0, f.h + 0.01, 0, 1, 1, 1, false));   // dark water inside
+      outline(TC('stone', 3, 0xd0c8bc, cyl(r, r, f.h, 16), 0, f.h / 2, 0), 1.01);
+      g.add(part(cyl(r * 0.75, r * 0.75, 0.05, 16), 0x1a2a2a, 0, f.h + 0.01, 0, 1, 1, 1, false));   // dark water inside
       break;
     }
     case 'walkway': {
-      B(0x6a6258, 0, f.h / 2, 0, w, f.h, d);
-      B(0x4a3a2a, 0, f.h + 0.03, 0, w, 0.06, d, false);    // plank deck, flush on top
+      TB('stone', 6, 0xc0b8aa, 0, f.h / 2, 0, w, f.h, d);
+      TB('planks', 2, 0x9a7a58, 0, f.h + 0.03, 0, w, 0.06, d, false);    // plank deck, flush on top
       break;
     }
     case 'crate': {
-      B(0x8a6a44, 0, f.h / 2, 0, w, f.h, d);
+      TB('planks', 1.5, 0xb89068, 0, f.h / 2, 0, w, f.h, d);
       for (const k of [-1, 1]) B(0x5a4228, 0, f.h / 2, k * (d / 2 + 0.01), w * 1.01, 0.18, 0.02, false);
       break;
     }
     case 'colonnade': {
       // Roof slab plus the pillars the map makes solid (1x1 every 4 units on both long sides).
-      B(0x5a4a3a, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
+      TB('planks', 3, 0x9a7a58, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
       for (let pz = 0; pz < d; pz += 4) for (const px of [0.5, w - 0.5]) {
-        B(0x7a7268, -w / 2 + px, f.bot / 2, -d / 2 + pz + 0.5, 1, f.bot, 1);
+        TB('stone', 3, 0xd0c8bc, -w / 2 + px, f.bot / 2, -d / 2 + pz + 0.5, 1, f.bot, 1);
       }
       break;
     }
     case 'cart': {
-      B(0x6e4e30, 0, f.h * 0.6, 0, w, f.h * 0.8, d);
+      // Farm cart: bed at human waist height on big spoked wheels (~1 m across).
+      TB('planks', 2, 0xa07c58, 0, 2.5, 0, w - 0.8, 0.5, d);
+      for (const k of [-1, 1]) TB('planks', 2, 0x8a6a48, k * (w / 2 - 0.5), 3.05, 0, 0.2, 1.1, d);
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-        const wh = part(cyl(0.9, 0.9, 0.3, 10), 0x3a2a1a, sx * (w / 2 - 0.15), 0.9, sz * (d / 2 - 1.2)); wh.rotation.z = Math.PI / 2; g.add(wh);
+        const wh = part(cyl(1.6, 1.6, 0.3, 14), 0x3a2a1a, sx * (w / 2 - 0.15), 1.6, sz * (d / 2 - 1.7)); wh.rotation.z = Math.PI / 2; g.add(wh);
       }
+      B(DARKWOOD, 0, 2.1, d / 2 + 0, 0.3, 0.3, 0.02, false);
       break;
     }
     default: B(WOOD, 0, (f.h || 1) / 2, 0, w, f.h || 1, d);

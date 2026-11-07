@@ -10,6 +10,7 @@ import {
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
 import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture } from './models.js';
+import { tmat } from './textures.js';
 
 const MAX_MICE = 800;
 const YAW_FOR = [Math.PI / 2, -Math.PI / 2, 0, Math.PI];   // DIRS4 index -> yaw pointing local +z that way
@@ -62,16 +63,21 @@ export class Scene {
       if (t === T.WATER) continue;
       ground.push([x, z, t]);
     }
-    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.97, 0.3, 0.97), mat(0xffffff), ground.length);
+    // Real-size detail: 11 cm cobbles in the castle, packed dirt outside. One instanced
+    // slab per unit square, textured by world position so the pattern runs seamlessly.
     const m4 = new THREE.Matrix4(), c = new THREE.Color();
-    ground.forEach(([x, z, t], k) => {
-      m4.makeTranslation((x + 1) * CELL, -0.15, (z + 1) * CELL); inst.setMatrixAt(k, m4);
-      const j = (((x * 73856093) ^ (z * 19349663)) >>> 0) % 100 / 100;
-      const base = t === T.ROAD || map.forest[i(x, z)] ? 0x6a5236 : 0x6e675e;
-      c.setHex(base).offsetHSL(0, -0.02, (j - 0.5) * 0.1); inst.setColorAt(k, c);
-    });
     function i(x, z) { return z * W + x; }
-    s.add(inst);
+    const isDirt = ([x, z, t]) => t === T.ROAD || !!map.forest[i(x, z)];
+    for (const [dirt, tex, scale, tint] of [[false, 'cobbles', 3, 0xc8c0b4], [true, 'dirt', 4, 0xd8ccb8]]) {
+      const list = ground.filter(g => isDirt(g) === dirt);
+      const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.3, 1), tmat(tex, scale, tint), list.length);
+      list.forEach(([x, z], k) => {
+        m4.makeTranslation((x + 1) * CELL, -0.15, (z + 1) * CELL); inst.setMatrixAt(k, m4);
+        const j = (((x * 73856093) ^ (z * 19349663)) >>> 0) % 100 / 100;
+        c.setHex(0xffffff).offsetHSL(0, 0, (j - 0.5) * 0.06); inst.setColorAt(k, c);   // faint patchiness
+      });
+      s.add(inst);
+    }
     const under = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W + 200, WORLD_H + 200), mat(0x3a4a2a));
     under.rotation.x = -Math.PI / 2; under.position.set(WORLD_W / 2, -0.31, WORLD_H / 2); s.add(under);
     this.proxy(0, -0.3, 0, WORLD_W, 0, WORLD_H);
@@ -86,7 +92,7 @@ export class Scene {
     this.waterBase = Float32Array.from(wgeo.attributes.position.array);
     // Fallen branch across the moat (the mouse-sized bridge).
     const bw = BRIDGE.x1 - BRIDGE.x0, bd = BRIDGE.z1 - BRIDGE.z0;
-    const branch = outline(new THREE.Mesh(new THREE.CylinderGeometry(bw / 2, bw / 2 * 0.85, bd, 9), mat(0x5a4028)), 1.01);
+    const branch = outline(new THREE.Mesh(new THREE.CylinderGeometry(bw / 2, bw / 2 * 0.85, bd, 12), tmat('bark', 3, 0xc0a890)), 1.01);
     branch.rotation.x = Math.PI / 2; branch.scale.set(1, 1, 0.5); branch.position.set((BRIDGE.x0 + BRIDGE.x1) / 2, -bw / 4 + 0.02, (BRIDGE.z0 + BRIDGE.z1) / 2); s.add(branch);
 
     // Forest: a dense hedge of roots, rocks and bushes along the road (that's
@@ -108,13 +114,13 @@ export class Scene {
     });
     s.add(hedge);
     for (const [x, z] of back) {
-      const trunk = outline(new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.5, 22, 8), mat(0x4a3622)));
+      const trunk = outline(new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.5, 22, 8), tmat('bark', 3, 0xb09880)));
       trunk.position.set((x + 0.5) * CELL, 11, (z + 0.5) * CELL); s.add(trunk);
       const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(7, 0), mat(0x2e4428)); crown.position.set((x + 0.5) * CELL, 24, (z + 0.5) * CELL); s.add(crown);
     }
     // Spawn: arched mouse hole in a huge stump at the road's end (Y).
     for (const sp of SPAWNS) {
-      const stump = outline(new THREE.Mesh(new THREE.CylinderGeometry(7, 7.5, 7, 12), mat(0x5a4230)), 1.01);
+      const stump = outline(new THREE.Mesh(new THREE.CylinderGeometry(7, 7.5, 7, 16), tmat('bark', 4, 0xc0a890)), 1.01);
       stump.position.set(sp.x, 3.5, WORLD_H + 7); s.add(stump);
       this.archHole(sp.x, WORLD_H, Math.PI, 1.6, 0x050403);
     }
@@ -136,10 +142,10 @@ export class Scene {
     const gw = GATE.x1 - GATE.x0, gd = GATE.z1 - GATE.z0, gx = (GATE.x0 + GATE.x1) / 2, gz = (GATE.z0 + GATE.z1) / 2;
     const gate = new THREE.Group(); gate.position.set(gx, 0, gz);
     for (const side of [-1, 1]) {
-      const plank = outline(new THREE.Mesh(new THREE.BoxGeometry(gw / 2 - 0.6, 4.2, gd), mat(0x7a5a38)), 1.01);
+      const plank = outline(new THREE.Mesh(new THREE.BoxGeometry(gw / 2 - 0.6, 4.2, gd), tmat('planks', 2, 0xb08a60)), 1.01);
       plank.position.set(side * (gw / 4 + 0.3), 2.1, 0); gate.add(plank);
     }
-    const lintel = outline(new THREE.Mesh(new THREE.BoxGeometry(1.2, 4.2 - 1.3, gd), mat(0x7a5a38)), 1.01); lintel.position.set(0, 1.3 + (4.2 - 1.3) / 2, 0); gate.add(lintel);
+    const lintel = outline(new THREE.Mesh(new THREE.BoxGeometry(1.2, 4.2 - 1.3, gd), tmat('planks', 2, 0xb08a60)), 1.01); lintel.position.set(0, 1.3 + (4.2 - 1.3) / 2, 0); gate.add(lintel);
     s.add(gate); this.gateMesh = gate;
     this.gateProxy = this.proxy(GATE.x0, 0, GATE.z0, GATE.x1, 4.2, GATE.z1);
     // Portcullis raised into the tunnel roof (bars end at the roof line).
@@ -151,10 +157,17 @@ export class Scene {
     const glow = new THREE.PointLight(0xffa050, 10, 9, 1.5); glow.position.set(hx, 0.6, 2); s.add(glow);
     this.exitRing = new THREE.Mesh(new THREE.RingGeometry(1.6, 1.9, 24), new THREE.MeshBasicMaterial({ color: 0xc8302a, transparent: true, opacity: 0.8 }));
     this.exitRing.rotation.x = -Math.PI / 2; this.exitRing.position.set(hx, 0.03, 2.2); s.add(this.exitRing);
-    // Torches on the yard walls.
-    for (const [x, z] of [[2.2, 40], [93.8, 40], [39.8, 66], [56.2, 66], [48, 2.2], [27.8, 20], [68.2, 20]]) {
-      const l = new THREE.PointLight(0xffb060, 8, 26, 1.4); l.position.set(x, 6, z); s.add(l);
+    // Wall torches at human height (2.4 m) in iron sconces: [x, z, face normal x, z].
+    this.flames = [];
+    for (const [x, z, nx, nz] of [[2, 40, 1, 0], [94, 40, -1, 0], [40, 66, 1, 0], [56, 66, -1, 0], [42, 2, 0, 1], [54, 2, 0, 1], [30, 20, -1, 0], [66, 20, 1, 0]]) {
+      const g = new THREE.Group(); g.position.set(x, 8, z); g.rotation.y = Math.atan2(nx, nz); s.add(g);
+      g.add(part3(new THREE.BoxGeometry(0.5, 0.8, 0.12), 0x26221e, 0, 0, 0.06));
+      const stick = part3(new THREE.CylinderGeometry(0.12, 0.08, 1.2, 6), 0x5a3a20, 0, 0.3, 0.45); stick.rotation.x = 0.35; g.add(stick);
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.7, 6), new THREE.MeshBasicMaterial({ color: 0xffa040 }));
+      flame.position.set(0, 1.05, 0.65); g.add(flame); this.flames.push(flame);
+      const l = new THREE.PointLight(0xffb060, 10, 30, 1.4); l.position.set(x + nx * 1, 9, z + nz * 1); s.add(l);
     }
+    function part3(geo, color, x, y, z) { const m = new THREE.Mesh(geo, mat(color)); m.position.set(x, y, z); return m; }
     // Tail stashes: crate + a frame with a string to peg tails on. Fits inside its 2.2 collider.
     this.stashLines = [];
     for (const st of STALLS) {
@@ -444,6 +457,7 @@ export class Scene {
     for (let v = 0; v < pos.count; v++) { const x = base[v * 3], y = base[v * 3 + 1]; pos.array[v * 3 + 2] = Math.sin(x * 0.6 + t) * 0.06 + Math.cos(y * 0.9 + t * 1.3) * 0.05; }
     pos.needsUpdate = true; this.water.geometry.computeVertexNormals();
     this.exitRing.material.opacity = 0.5 + Math.sin(now / 250) * 0.3;
+    this.flames.forEach((f, k) => { const n = Math.sin(now / 90 + k * 1.7) * 0.5 + Math.sin(now / 37 + k) * 0.5; f.scale.set(1 + n * 0.12, 1 + n * 0.25, 1 + n * 0.12); });
     this.updateRoute(now);
     // Roofs fade out from below while you're under them, so you can see the fight.
     if (this.localCat) {

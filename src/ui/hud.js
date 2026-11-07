@@ -2,8 +2,37 @@
 // cooldowns, square radar, trap bar, trinkets, prompts, cat subtitles, menus.
 // Plain HTML/SVG/canvas over the 3D view. Why: crisp text, cheap, easy to restyle.
 
+import * as THREE from 'three';
 import { TRAPS, TRAP_ORDER, RULES, TRINKETS, CAT, MICE } from '../config.js';
 import { W, H, CELL, T, STALLS, HOLE, SPAWNS, GATE } from '../sim/map.js';
+import { previewWave } from '../sim/waves.js';
+import { makeTrap } from '../render/models.js';
+
+// Ability names per cat: [left click, right click, space].
+const ABIL = { fred: ['Spitball', 'Hairball', 'Double Jump'], puddin: ['Chomp', 'Pounce', 'Belly Flop'] };
+const SURFACE = { floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling (under roofs, tables, benches)' };
+
+// Little pictures of each trap for the trap bar, rendered once from the real 3D models.
+function trapIcons() {
+  const icons = {};
+  try {
+    const cv = document.createElement('canvas'); cv.width = 96; cv.height = 72;
+    const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xfff0e0, 0x3a2a1c, 2.2));
+    const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(2, 4, 3); sc.add(dl);
+    const cam = new THREE.PerspectiveCamera(32, 96 / 72, 0.1, 50);
+    for (const k of TRAP_ORDER) {
+      const def = TRAPS[k], m = makeTrap(k);
+      if (m.userData.lamp) m.userData.lamp.visible = false;
+      if (def.surface === 'ceiling') { m.position.y = 1.4; cam.position.set(2.6, 0.2, 3.4); cam.lookAt(0, 0.6, 0); }
+      else if (def.surface === 'wall') { cam.position.set(2.6, 2.4, 3.6); cam.lookAt(0, 0.45, 0.4); }
+      else { cam.position.set(2.4, 3.0, 3.4); cam.lookAt(0, k === 'barricade' ? 0.6 : 0.1, 0); }
+      sc.add(m); r.render(sc, cam); icons[k] = cv.toDataURL(); sc.remove(m);
+    }
+    r.dispose();
+  } catch { /* no WebGL for icons: names only */ }
+  return icons;
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -23,8 +52,10 @@ const TYPE_RGB = { [T.FLOOR]: '#5a544c', [T.ROAD]: '#5a4630', [T.WATER]: '#2f6f9
 export class Hud {
   constructor(sim) {
     this.sim = sim; this.msgT = 0; this.subT = 0;
+    const icons = trapIcons();
     $('trapbar').innerHTML = TRAP_ORDER.map((k, i) =>
-      `<div class="slot" data-k="${k}"><span class="key">${i + 1}</span><span class="nm">${TRAPS[k].name}</span><span class="cost">${TRAPS[k].cost}</span></div>`).join('');
+      `<div class="slot" data-k="${k}"><span class="key">${i + 1}</span>${icons[k] ? `<img src="${icons[k]}" alt="">` : ''}<span class="nm">${TRAPS[k].name}</span><span class="cost">${TRAPS[k].cost}</span></div>`).join('');
+    this.preview = null; this.previewWave = -1; this.lastTk = '';
     $('crosshair').innerHTML = whiskerSvg();
     this.whp = [...document.querySelectorAll('#crosshair .whp')];
     this.wen = [...document.querySelectorAll('#crosshair .wen')];
@@ -46,37 +77,63 @@ export class Hud {
     $('lives').textContent = h.lives;
     $('sardines').textContent = h.sardines;
     $('yarn').textContent = h.yarn;
+    $('kills').textContent = this.sim.stats.kills;
     $('tails').textContent = `${h.tails}/${RULES.tailCarryCap}`;
     $('catname').textContent = h.name;
     $('wave').textContent = h.wave ? `Wave ${h.wave}${h.mode === 'normal' ? ' / ' + RULES.winWave : ''}` : 'Get ready';
     let status = '';
-    if (h.phase === 'build') status = h.wave === 0 ? 'Press G to release the mice' : `Next wave in ${Math.ceil(h.phaseTimer)}s — G to start now`;
+    if (h.phase === 'build') status = h.wave === 0 ? 'Build, then press G to release the mice' : `Next wave in ${Math.ceil(h.phaseTimer)}s — G to start now`;
     else if (h.phase === 'wave') status = `${h.miceLeft} mice left`;
     $('status').textContent = status;
+    // What's coming next (build phase only).
+    let next = '';
+    if (h.phase === 'build') {
+      const n = h.wave + 1;
+      if (this.previewWave !== n) { this.preview = previewWave(n, h.gateUp); this.previewWave = n; }
+      const p = this.preview;
+      next = `Wave ${n}: ~${p.total} mice` + (p.fresh.length ? ` · <b class="new">NEW: ${p.fresh.join(', ')}</b>` : '') + (p.boss ? ` · <b class="boss">BOSS: ${p.boss}</b>` : '');
+    }
+    $('next').innerHTML = next; $('next').style.display = next ? '' : 'none';
+    // Boss health bar: the biggest boss alive.
+    const boss = this.sim.mice.filter(m => !m.dead && MICE[m.type].boss).sort((a, b) => b.maxHp - a.maxHp)[0];
+    $('bossbar').style.display = boss ? '' : 'none';
+    if (boss) { $('bossname').textContent = MICE[boss.type].name; $('bosshp').style.width = `${Math.max(0, boss.hp / boss.maxHp) * 100}%`; }
     // Whiskers: stroke-dashoffset trims each whisker from the tip inward.
     for (const p of this.whp) p.style.strokeDasharray = `${Math.max(0, h.hp) * 100} 100`;
     for (const p of this.wen) p.style.strokeDasharray = `${Math.max(0, h.energy) * 100} 100`;
     $('crosshair').classList.toggle('bad', !!sel && !aimValid);
     // Ability panel, per cat.
-    const fred = h.kind === 'fred';
-    $('ab-pri-name').textContent = fred ? 'Spit' : 'Bite';
-    $('ab-pri-note').textContent = fred ? 'bleed' : (h.eatCd > 0 ? `eat ${Math.ceil(h.eatCd * CAT.eatCooldown)}s` : 'eat ready');
-    $('ab-sec-name').textContent = fred ? 'Hairball' : 'Pounce';
+    const fred = h.kind === 'fred', ab = ABIL[h.kind] || ABIL.fred;
+    $('ab-pri-name').textContent = ab[0];
+    $('ab-pri-note').textContent = fred ? 'makes them bleed' : (h.eatCd > 0 ? `eat in ${Math.ceil(h.eatCd * CAT.eatCooldown)}s` : 'kill = eat + heal');
+    $('ab-sec-name').textContent = ab[1];
+    $('ab-sec-note').textContent = `${h.secCost} energy`;
     setCd($('ab-sec'), h.secCd, h.energy * CAT.maxEnergy >= h.secCost);
-    $('ab-jump-name').textContent = fred ? 'Double jump' : 'Charge leap';
+    $('ab-jump-name').textContent = ab[2];
+    $('ab-jump-note').textContent = fred ? 'kick off walls' : 'hold to charge';
+    $('ab-charge').parentElement.style.display = fred ? 'none' : '';
     $('ab-charge').style.width = `${Math.round(h.charge * 100)}%`;
+    // Trap info card while a trap is in hand.
+    if (sel) {
+      const d = TRAPS[sel];
+      $('trapinfo').innerHTML = `<b>${d.name}</b> <span class="cost">${d.cost}</span><small>${SURFACE[d.surface]} · ${d.size[0] / 4}×${Math.max(1, d.size[1] / 4)} tile${d.surface === 'wall' ? ' of wall' : ''}</small><p>${d.desc}</p>`;
+    }
+    $('trapinfo').style.display = sel ? '' : 'none';
     // Trap bar.
     document.querySelectorAll('.slot').forEach(s => {
       s.classList.toggle('sel', s.dataset.k === sel);
       s.classList.toggle('poor', TRAPS[s.dataset.k].cost > h.sardines);
     });
     // Trinkets.
-    const tk = Object.entries(h.trinkets);
-    $('trinkets').innerHTML = tk.map(([k, n]) => `<span class="tk ${TRINKETS[k].tier}" title="${TRINKETS[k].name}: ${TRINKETS[k].desc}">${TRINKETS[k].name.split(' ').map(w => w[0]).join('')}${n > 1 ? '<b>' + n + '</b>' : ''}</span>`).join('');
+    const tk = Object.entries(h.trinkets), key = JSON.stringify(tk);
+    if (key !== this.lastTk) {
+      this.lastTk = key;
+      $('trinkets').innerHTML = tk.map(([k, n]) => `<div class="tk ${TRINKETS[k].tier}">${TRINKETS[k].name}${n > 1 ? ' <b>×' + n + '</b>' : ''}<small>${TRINKETS[k].desc}</small></div>`).join('');
+    }
     let prompt = '';
     if (!h.alive) prompt = `Respawning in ${Math.ceil(h.respawnT)}…`;
     else if (h.nearStall && h.tails > 0) prompt = `E — trade ${h.tails} tails for sardines`;
-    else if (sel) prompt = `Right click to place ${TRAPS[sel].name} · R rotate · X sell · Q put away`;
+    else if (sel) prompt = `Right click to place · R rotate · X sell · Q put away`;
     $('prompt').textContent = prompt;
     this.msgT -= dt; if (this.msgT <= 0) $('msg').classList.remove('show');
     this.subT -= dt; if (this.subT <= 0) $('sub').classList.remove('show');
@@ -109,19 +166,20 @@ export class Hud {
   }
 
   message(text) { $('msg').textContent = text; $('msg').classList.add('show'); this.msgT = 2.5; }
-  bark(who, text) { $('sub').innerHTML = `<b>${who}:</b> ${text}`; $('sub').classList.add('show'); this.subT = 3.2; }
+  bark(who, text, kind) { $('sub').innerHTML = `<b class="${kind || ''}">${who}:</b> ${text}`; $('sub').classList.add('show'); this.subT = 3.2; }
   flashHurt() { const v = $('hurt'); v.classList.remove('go'); void v.offsetWidth; v.classList.add('go'); }
 
   showEnd(won, rating, sim, profile) {
     const el = $('end'); el.classList.add('show');
-    let html = `<h1>${won ? 'The hall holds' : 'They got through'}</h1>`;
+    const quip = won ? ['Fred: Told you. Easy.', "Puddin: Wake me for the next castle."] : ["Fred: That was the toy block's fault. Not mine.", "Puddin: I blame Fred."];
+    let html = `<h1>${won ? 'The hall holds' : 'They got through'}</h1><p class="quip">${quip[Math.floor(Math.random() * 2)]}</p>`;
     html += `<p>${won ? `All ${RULES.winWave} waves cleared` : `Fell on wave ${sim.wave}`} · ${sim.stats.kills} mice killed · ${sim.yarn} yarn</p>`;
     if (won && rating) {
       html += `<div class="paws">${Array.from({ length: 5 }, (_, i) => PAW(i < rating.base)).join('')}</div>`;
       html += '<ul class="bonus">' + rating.bonus.map(b => `<li class="${b.got ? 'got' : ''}">${PAW(b.got)} ${b.name}</li>`).join('') + '</ul>';
       html += `<p>+${rating.total} paw prints</p>`;
     }
-    html += `<p class="dim">Saved: ${profile.paws} paw prints · ${profile.yarn} yarn (unlock shop & yarn crafting coming next)</p>`;
+    html += `<p class="dim">Saved: ${profile.paws} paw prints · ${profile.yarn} yarn (the unlock shop and yarn crafting come next)</p>`;
     html += `<button onclick="location.reload()">Back to menu</button>`;
     el.innerHTML = html;
   }

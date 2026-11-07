@@ -198,7 +198,7 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   const s2 = new Sim({ seed: 25 }); s2.addPlayer('p1'); const c2 = s2.cats.get('p1'); c2.x = 20; c2.z = 110;
   s2.spawnMouse('plague', 1, 1, 0);
   const ev = run(s2, 4, () => inp(s2, 'p1'));
-  ok(ev.some(e => e.t === 'spit'), 'plague rat spits at the cat');
+  ok(ev.some(e => e.t === 'ratSpit'), 'plague rat spits at the cat');
 }
 // 18. Splitter bursts into two pups.
 {
