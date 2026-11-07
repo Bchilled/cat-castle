@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.3 — 2026-11-07
+Fixed
+- Route arrows pointed backward (toward the entrances); they now point the way the mice run. `src/render/scene.js` buildRoute().
+- Puddin's bite cone sat mostly under his body so it looked beside/behind him; it now starts at his nose and is brighter. Bite reach raised 1.4 → 2.1 (from his centre) so it actually reaches past his face. `src/render/models.js` catRig; `src/config.js` CAT.biteRange; `src/render/scene.js` cat sync.
+Added
+- Kenney Castle Kit (CC0) models in `assets/castle-kit/` (added by Kanye; not wired in yet).
+
 ## 0.4.2 — 2026-11-03
 Changed
 - Starting sardines 300 → 1000 (enough for ~15–20 traps on the first build). `src/config.js` RULES.

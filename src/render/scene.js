@@ -199,7 +199,7 @@ export class Scene {
   // Glowing chevrons on the floor showing where the mice will run right now.
   buildRoute() {
     const shape = new THREE.Shape(); shape.moveTo(-0.3, -0.15); shape.lineTo(0, 0.15); shape.lineTo(0.3, -0.15); shape.lineTo(0.3, -0.02); shape.lineTo(0, 0.28); shape.lineTo(-0.3, -0.02);
-    const geo = new THREE.ShapeGeometry(shape); geo.rotateX(-Math.PI / 2);
+    const geo = new THREE.ShapeGeometry(shape); geo.rotateX(-Math.PI / 2); geo.rotateY(Math.PI);   // tip points +z, i.e. along the route
     this.routeMat = new THREE.MeshBasicMaterial({ color: 0xb48aff, transparent: true, opacity: 0.6, depthWrite: false });
     this.routeMesh = new THREE.InstancedMesh(geo, this.routeMat, 600); this.routeMesh.count = 0; this.routeMesh.frustumCulled = false;
     this.scene.add(this.routeMesh); this.routeRef = null;
@@ -363,7 +363,7 @@ export class Scene {
       ud.jaw.rotation.x = c.atkT > 0.07 ? 0.6 : 0;
       ud.head.rotation.x = -camPitch * 0.3 + (c.atkT > 0 ? 0.2 : 0);
       ud.slash.children.forEach(st => { st.material.opacity = 0; });
-      if (ud.reach) ud.reach.material.opacity = cat.attacking ? 0.28 : 0.1;
+      if (ud.reach) ud.reach.material.opacity = cat.attacking ? 0.4 : 0.18;
       ud.body.rotation.x = cat.pouncing ? -0.35 : cat.charge > 0 ? 0.25 : 0;      // stretch mid-pounce, crouch when charging
       ud.body.position.y = cat.charge > 0 ? -0.08 * cat.charge / 0.8 : cat.hurtT > 0 ? 0.05 : 0;
       // Tail: idle sway, lifts and swishes faster when running, flicks on turns, droops when hurt.

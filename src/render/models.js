@@ -72,8 +72,9 @@ function catRig(look) {
   // (claw scratch streaks removed: Fred is ranged now)
   // Faint claw-reach wedge on the floor so you can see what a swipe will hit.
   // Ring sector centred on +z (theta -PI/2 maps to +z once laid flat).
-  const reach = new THREE.Mesh(new THREE.RingGeometry(0.25, look.reach || 0.3, 16, 1, -Math.PI / 2 - 0.9, 1.8),
-    new THREE.MeshBasicMaterial({ color: 0xffe0b0, transparent: true, opacity: 0.12, depthWrite: false }));
+  // Starts at the nose (not under the body) so it reads as "in front of the cat".
+  const reach = new THREE.Mesh(new THREE.RingGeometry(0.85 * look.scale, look.reach || 0.3, 16, 1, -Math.PI / 2 - 0.9, 1.8),
+    new THREE.MeshBasicMaterial({ color: 0xffd080, transparent: true, opacity: 0.18, depthWrite: false }));
   reach.rotation.x = -Math.PI / 2; reach.position.y = 0.03; reach.visible = !!look.reach; g.add(reach);
   g.userData = { body, head, jaw, legs, tail, slash, reach, scale: s };
   return g;
@@ -93,7 +94,7 @@ export function makeFred() {
 // fluffy ruff and tail, heavy-set.
 export function makePuddin() {
   const s = 1.3;
-  const g = catRig({ reach: 1.4, scale: s, girth: 1.15, base: 0xeee7da, head: 0xeee7da, muzzle: 0xfaf6ee, eye: 0x7fae3a, tailFluff: 2.2,
+  const g = catRig({ reach: 2.1, scale: s, girth: 1.15, base: 0xeee7da, head: 0xeee7da, muzzle: 0xfaf6ee, eye: 0x7fae3a, tailFluff: 2.2,
     tail: 0x2b2420, tailTip: 0xd27a34, ear: 0xd27a34, legs: 0xeee7da });
   const b = g.userData.body;
   // Calico patches.

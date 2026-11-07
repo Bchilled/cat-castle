@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.4.2';
+export const VERSION = '0.4.3';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
 // is what lets a future multiplayer host run the one true copy of the game.
@@ -59,7 +59,7 @@ export const CAT = {
   // Puddin, left click: heavy bite. Killing with a bite eats the mouse: heal, no tail.
   biteInterval: 0.55,
   biteDamage: 34,
-  biteRange: 1.4,
+  biteRange: 2.1,           // measured from the cat's centre; ~1 unit past Puddin's nose
   biteArc: 0.9,
   eatHeal: 0.15,             // fraction of max HP
   eatCooldown: 6,
