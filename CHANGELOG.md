@@ -6,7 +6,7 @@ Added
 - Cheese Chunk (trap 9, 25 sardines): mice within 6 units leave their route to nibble it for a few seconds, standing still on whatever you put around it. Shrinks as it's eaten, restocks after 12 s, lamp shows when it's empty. Bosses ignore it. `src/config.js` 224-228; `src/sim/sim.js` 699-709, 1067-1087, 1343-1348; `src/render/models.js` 223-231; `src/render/scene.js` 499, 514.
 - Sense of smell (hold F): every mouse leaves a scent trail; while sniffing, the last ~12 s of trails glow green, mice show through walls, and every route lights up through walls. `src/render/scene.js` 236-237, 281-310; `src/main.js` 137, 148-149; `index.html` 43-45.
 - ROADMAP.md: the big systems from Brent's notes (climbable furniture and infesting, more traps, unlock/upgrade shop with 2-choice specials, elements, items, smarter mice) with a suggested order and open questions.
-Tests: 67 checks, all passing.
+Tests: 66 checks, all passing.
 
 ## 0.7.0 — 2026-11-07
 New cats (6 total)
