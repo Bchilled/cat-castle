@@ -13,8 +13,14 @@ Orcs Must Die at heart, but it's cats and mice in a human castle. These are the 
 - Mice climb and jump between levels. Pathing becomes multi-level, with jump links between floor, tabletops and shelves. Mice still never go over a barricade.
 - Infesting: mice stop at food (stalls, sacks, the kitchen) to eat. That holds them in place and buys time to build.
 - Things break or fall over: stalls collapse, barrels roll, shelves tip, all with physics. That opens or closes routes.
-- Humans (cooks, market sellers) as moving hazards or scenery, at true human size.
-- Maps: castle entrance (now), then the market, kitchens, cellar, great hall and the king's chamber.
+- **Humans stay out of zone.** The main human spaces (the market square, the hall floor, the cooks' work area) are out of bounds and lit. Cats and mice live in the side areas and shadows: behind and under the stalls, along the walls, gutters and drains, crawlspaces, back rooms, inside the walls. Humans pass by in the background at full size to sell the scale. They are scenery, not hazards.
+- **The campaign is one journey**, entrance to kitchen. Each map is the next stretch:
+  1. Castle Entrance: the gatehouse sidings and the drain gate (now).
+  2. Market Back Alleys: behind and under the stalls, crates, sacks and awnings to climb, dropped food the mice stop to eat.
+  3. Stables and Yard: hay lofts, troughs (water), barrels, cart wheels.
+  4. Cellar and Storerooms: shelves, wine racks, cheese wheels (a big infest target).
+  5. Servants' Passages: narrow runs inside the walls, ceilings everywhere.
+  6. The Kitchen: under the counters, behind the ovens (fire), the pantry. The last stand.
 
 ## B. Many more traps (each with its own size, surface and ability)
 Ideas still to pick from, cat-and-mouse versions of Orcs Must Die traps:
@@ -74,5 +80,5 @@ Equippable actives with cooldowns, for example:
 
 ## Open questions for Brent
 1. Which of A–F comes first? Suggested order: A (climbing and infesting, because everything else sits on it), then C (shop and upgrades), with B, D and E filling in alongside.
-2. Humans: hazards that can hurt mice and cats, or just scenery?
+2. ~~Humans: hazards or scenery?~~ Decided: out of zone, scenery in the lit areas; we play in the shadows.
 3. How many traps can you bring into a map (Orcs Must Die uses a limited loadout)?
