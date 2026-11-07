@@ -92,15 +92,23 @@ function start(mode) {
     const def = TRAPS[selected];
     if (aim.surface !== def.surface) return { ok: false, cells: aim.cell >= 0 && aim.surface !== 'none' ? sim.footprint(selected, aim.cell % W, (aim.cell / W) | 0, rot, aim.wallDir) : null, ax: 0, az: 0, wallDir: aim.wallDir };
     let [w, d] = def.size; if (def.surface !== 'wall' && rot % 2) [w, d] = [d, w];
+    // Traps snap to half-tiles (2 cells). If that spot clips a wall, try nudging one cell
+    // so a trap still fits snug against walls that aren't on the half-tile grid.
+    const half = (v) => 2 * Math.round(v / 2);
     let ax, az;
     if (def.surface === 'wall') {
       const alongZ = aim.wallDir === 0 || aim.wallDir === 1;
-      ax = alongZ ? aim.cell % W : Math.round(aim.point.x / CELL - w / 2);
-      az = alongZ ? Math.round(aim.point.z / CELL - w / 2) : (aim.cell / W) | 0;
+      ax = alongZ ? aim.cell % W : half(aim.point.x / CELL - w / 2);
+      az = alongZ ? half(aim.point.z / CELL - w / 2) : (aim.cell / W) | 0;
     } else {
-      ax = Math.round(aim.point.x / CELL - w / 2); az = Math.round(aim.point.z / CELL - d / 2);
+      ax = half(aim.point.x / CELL - w / 2); az = half(aim.point.z / CELL - d / 2);
     }
-    const res = sim.canPlace(selected, ax, az, rot, aim.wallDir);
+    let res = sim.canPlace(selected, ax, az, rot, aim.wallDir);
+    if (res !== true) {
+      const along = def.surface === 'wall' ? ((aim.wallDir === 0 || aim.wallDir === 1) ? [[0, -1], [0, 1]] : [[-1, 0], [1, 0]])
+        : [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]];
+      for (const [ox, oz] of along) { if (sim.canPlace(selected, ax + ox, az + oz, rot, aim.wallDir) === true) { ax += ox; az += oz; res = true; break; } }
+    }
     return { ok: res === true && sim.sardines >= def.cost, cells: sim.footprint(selected, ax, az, rot, aim.wallDir), ax, az, wallDir: aim.wallDir };
   }
   function placeSelected() {

@@ -74,6 +74,14 @@ export const ROAD_HALF = 5;
 export const SPAWNS = [{ x: 20, z: 118.8 }, { x: 76, z: 118.8 }];   // Y1, Y2
 export const SPAWN = SPAWNS[0];
 export const CAT_SPAWN = { x: 48, z: 8 };
+// Route choices north of the courtyard (Orcs Must Die style: several near-equal lanes).
+// Each pack picks one when it spawns, weighted toward the cheapest right now — so
+// barricading a lane pushes the mobs onto the others. Bosses ignore these and go direct.
+export const VIAS = [
+  { name: 'Colonnade',     x: 18, z: 10, weight: 1 },
+  { name: 'Guard passage', x: 48, z: 20, weight: 1 },
+  { name: 'East lane',     x: 76, z: 7,  weight: 1 },
+];
 // Tail stashes (trophy lines): sell points.
 export const STALLS = [
   { name: 'Hall stash',      rect: [54, 3, 57, 5],    sell: [55.5, 6.5] },
@@ -156,10 +164,18 @@ export function buildMap() {
     const i = z * W + x;
     if (!miceWalkable(type[i])) continue;
     if (slabBot[i] > 0 && slabBot[i] < 2.0) continue;
+    // Bosses are big: they need 2 cells (1 unit) of clearance on every side.
     let ok = true;
-    for (const [dx, dz] of DIRS4) { const n = (z + dz) * W + x + dx; if (!miceWalkable(type[n])) { ok = false; break; } }
+    for (let dz = -2; dz <= 2 && ok; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const xx = x + dx, zz = z + dz;
+      if (xx < 0 || zz < 0 || xx >= W || zz >= H || !miceWalkable(type[zz * W + xx])) { ok = false; break; }
+    }
     if (ok) bigOk[i] = 1;
   }
+  // The hole is in the wall itself, so let bosses squeeze up to it.
+  for (let z = Math.round(HOLE.z0 / CELL); z < Math.round(HOLE.z0 / CELL) + 6; z++)
+    for (let x = Math.round(HOLE.x0 / CELL) - 3; x < Math.round(HOLE.x1 / CELL) + 3; x++)
+      if (miceWalkable(type[z * W + x])) bigOk[z * W + x] = 1;
   return { type, solid, slabBot, slabTop, furn, covered, wallDir, bigOk, forest };
 }
 

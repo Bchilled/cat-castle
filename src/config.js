@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.4.3';
+export const VERSION = '0.5.0';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
 // is what lets a future multiplayer host run the one true copy of the game.
@@ -68,9 +68,9 @@ export const CAT = {
   pounceCooldown: 2.5,
   pounceH: 11,
   pounceV: 6,
-  pounceDamage: 40,
-  pounceRadius: 1.6,
-  pounceStun: 1.8,
+  pounceDamage: 50,
+  pounceRadius: 2.6,         // a full trap tile around where he lands
+  pounceStun: 3.0,           // seconds; bosses get 40%. Stars over their heads drain as it runs out
   // Puddin, Space: hold to charge a leap, heavy landing flings small mice.
   leapMaxCharge: 0.8,
   leapExtra: 7,
@@ -93,30 +93,42 @@ export const CATS = {
 };
 
 // Mouse types. tails = tail value dropped (big rat tails count for several); tailChance = odds it drops.
+// aggro = how far (units) it will turn off its route to go bite a cat; spit = ranged plague glob.
+// split = what it bursts into when it dies. intro = the wave it first shows up (it arrives alone
+// first so players learn it). Speed tiers: pup/runner fast, mouse normal, tank/fatty slow.
 export const MICE = {
-  pup:     { hp: 7,    speed: 3.0, size: 0.28, tails: 1, tailChance: 0.5, bite: 2,  gateDmg: 3,  color: 0x948a82 },
-  mouse:   { hp: 26,   speed: 2.6, size: 0.45, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x8a8580 },
-  runner:  { hp: 16,   speed: 4.4, size: 0.4,  tails: 1, tailChance: 1,   bite: 4,  gateDmg: 6,  color: 0x7a5a3a },
-  tank:    { hp: 100,  speed: 1.8, size: 0.7,  tails: 1, tailChance: 1,   bite: 12, gateDmg: 25, color: 0x4f4b48 },
-  lobber:  { hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45 },
-  miniboss:{ hp: 450,  speed: 1.6, size: 1.1,  tails: 6, tailChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true },
-  bigboss: { hp: 1400, speed: 1.3, size: 1.7,  tails: 15, tailChance: 1,   bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true },
+  pup:     { name: 'Pup',         hp: 7,    speed: 3.0, size: 0.28, tails: 1, tailChance: 0.5, bite: 2,  gateDmg: 3,  color: 0x948a82, aggro: 0 },
+  mouse:   { name: 'Mouse',       hp: 26,   speed: 2.6, size: 0.45, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x8a8580, aggro: 2.5 },
+  runner:  { name: 'Runner',      hp: 16,   speed: 4.6, size: 0.4,  tails: 1, tailChance: 1,   bite: 4,  gateDmg: 6,  color: 0x7a5a3a, aggro: 0, intro: 3 },
+  splitter:{ name: 'Splitter',    hp: 40,   speed: 2.4, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x9a6a8a, aggro: 2.5, split: 'pup', splitN: 2, intro: 4 },
+  tank:    { name: 'Sewer rat',   hp: 100,  speed: 1.8, size: 0.75, tails: 1, tailChance: 1,   bite: 12, gateDmg: 25, color: 0x4f4b48, aggro: 3.5, intro: 5 },
+  lobber:  { name: 'Siege mouse', hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45, aggro: 0 },
+  plague:  { name: 'Plague rat',  hp: 45,   speed: 2.2, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 8,  color: 0x6f7a4a, aggro: 0, spit: { range: 7, dmg: 7, every: 2.2, speed: 11 }, intro: 7 },
+  fatty:   { name: 'Fat rat',     hp: 260,  speed: 1.3, size: 1.0,  tails: 2, tailChance: 1,   bite: 18, gateDmg: 40, color: 0x5a4a40, aggro: 3, split: 'mouse', splitN: 3, intro: 9 },
+  miniboss:{ name: 'Rat captain', hp: 900,  speed: 2.1, size: 2.0,  tails: 6, tailChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true, aggro: 6,
+             stomp: { every: 5, radius: 3.5, dmg: 15, stun: 1.0, fling: 7 } },
+  bigboss: { name: 'King rat',    hp: 2600, speed: 1.6, size: 2.8,  tails: 15, tailChance: 1,  bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true, aggro: 7,
+             stomp: { every: 4, radius: 4.5, dmg: 22, stun: 1.4, fling: 9 } },
 };
 
-// Traps. surface: floor | wall | ceiling. size: [w, d] in half-tiles (cells).
+// Traps. Footprints follow Orcs Must Die: one trap = one TILE = 4x4 cells (2x2 units, ~60 cm,
+// two cats wide). Traps snap to half-tiles. Wall traps cover one tile of wall and reach one
+// tile out into the lane. surface: floor | wall | ceiling. size: [w, d] in cells.
+// cooldown = reset time; every trap shows a lamp (green armed / red resetting) and animates its reset.
 // Costs are sardines. Selling refunds the full price (barricades: by health left).
+export const TILE = 4;
 export const TRAPS = {
-  barricade: { name: 'Barricade',     cost: 20,  surface: 'floor',   size: [2, 2], hp: 120 },
-  mousetrap: { name: 'Mousetrap',     cost: 25,  surface: 'floor',   size: [1, 1], damage: 60, cooldown: 1.4, pathCost: 0 },
-  flipper:   { name: 'Floor flipper', cost: 60,  surface: 'floor',   size: [2, 2], cooldown: 2.5, launchH: 11, launchV: 14, launchDamage: 10, pathCost: 0 },
-  grinder:   { name: 'Wall grinder',  cost: 80,  surface: 'wall',    size: [2, 1], dps: 45, pathCost: 0 },
-  zapper:    { name: 'Bug zapper',    cost: 90,  surface: 'ceiling', size: [1, 1], damage: 30, cooldown: 1.2, radius: 2.4, pathCost: 0 },
-  gluepad:   { name: 'Glue pad',      cost: 30,  surface: 'floor',   size: [2, 2], stickSecs: 2.5, charges: 6, recharge: 6, pathCost: 0 },
-  tacks:     { name: 'Tack strip',    cost: 35,  surface: 'floor',   size: [1, 2], damage: 3, tick: 0.4, pathCost: 0 },
-  hairdryer: { name: 'Hairdryer',     cost: 70,  surface: 'wall',    size: [2, 1], cooldown: 2.4, reach: 3.5, push: 8, pathCost: 0 },
+  barricade: { name: 'Barricade',     cost: 20,  surface: 'floor',   size: [4, 4], hp: 160, height: 1.4 },
+  mousetrap: { name: 'Mousetrap',     cost: 30,  surface: 'floor',   size: [4, 4], damage: 70, cooldown: 3, maxHits: 6, pathCost: 0 },   // OMD spike trap
+  flipper:   { name: 'Floor flipper', cost: 60,  surface: 'floor',   size: [4, 4], cooldown: 3.5, launchH: 11, launchV: 14, launchDamage: 10, pathCost: 0 },
+  grinder:   { name: 'Wall grinder',  cost: 80,  surface: 'wall',    size: [4, 1], dps: 45, reach: 2, pathCost: 0 },
+  zapper:    { name: 'Bug zapper',    cost: 90,  surface: 'ceiling', size: [4, 4], damage: 35, cooldown: 2, radius: 2.4, pathCost: 0 },
+  gluepad:   { name: 'Glue pad',      cost: 30,  surface: 'floor',   size: [4, 4], stickSecs: 2.5, charges: 10, recharge: 6, pathCost: 0 },   // OMD tar
+  tacks:     { name: 'Tack strip',    cost: 35,  surface: 'floor',   size: [4, 4], damage: 3, tick: 0.4, pathCost: 0 },                      // OMD briar
+  glove:     { name: 'Spring glove',  cost: 70,  surface: 'wall',    size: [4, 1], cooldown: 3, reach: 4, push: 10, damage: 15, bigStun: 1.2, pathCost: 0 },   // OMD push trap
 };
 // Trap bar order = keys 1..8.
-export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'hairdryer'];
+export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove'];
 
 export const GATE = { hp: 60 };   // falls in a few bites, stays down once broken
 

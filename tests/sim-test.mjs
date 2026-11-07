@@ -17,7 +17,17 @@ const s = new Sim({ seed: 7 });
 ok(s.flow[s.spawnCell] < Infinity, `spawn reaches exit (cost ${s.flow[s.spawnCell].toFixed(1)})`);
 ok(s.flowBig[s.spawnCell] < Infinity, 'big bosses also have a route');
 ok(s.routes().every(r => r.some(([x, z]) => x > 40 && x < 56 && z > 60 && z < 76)), 'both entrances route through the gatehouse');
-ok(s.routes().length === 2, 'two entrances');
+ok(new Set(s.routes().map(r => r[0].join())).size === 2, 'two entrances');
+{
+  // Lanes diverge north of the courtyard: colonnade (west), guard passage, east lane.
+  const rs = s.routes();
+  const west = rs.some(r => r.some(([x, z]) => x > 10 && x < 26 && z > 10 && z < 28));
+  const mid = rs.some(r => r.some(([x, z]) => x > 44 && x < 52 && z > 12 && z < 28));
+  const east = rs.some(r => r.some(([x, z]) => x > 66 && x < 84 && z > 8 && z < 28));
+  ok(west && mid && east, `routes split three ways north (west ${west}, passage ${mid}, east ${east})`);
+  const picks = new Set(); for (let k = 0; k < 40; k++) picks.add(s.chooseVia(k % 2));
+  ok(picks.size >= 2, `packs pick different lanes (${[...picks].join(',')})`);
+}
 
 // 2. Untouched wave: board gate gets chewed down, mice leak, lives drop.
 s.addPlayer('p1', 'fred');
@@ -29,13 +39,13 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
 // 3. Barricades reroute; sealing the only tunnel is refused.
 {
   const s2 = new Sim({ seed: 3 }); s2.addPlayer('p1'); s2.sardines = 1e6;
-  const route = s2.route(); const target = route.find(([x, z]) => z > 34 && z < 40);   // in the courtyard
-  s2.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(target[0]) - 1, az: q(target[1]), rot: 0 });
+  const route = s2.route(); const target = route.find(([x, z]) => z > 48 && z < 52);   // in the courtyard, south of the well
+  s2.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(target[0]) - 2, az: q(target[1]) - 2, rot: 0 });
   s2.step();
   const b = [...s2.traps.values()][0];
   ok(b && !s2.route().some(([x, z]) => b.cells.includes(idx(q(x), q(z)))), 'mice reroute around a barricade on their path');
   const evs = [];
-  for (let x = q(40); x < q(56); x += 2) { s2.command({ type: 'place', id: 'p1', trap: 'barricade', ax: x, az: q(66) }); evs.push(...s2.events); s2.events.length = 0; }
+  for (let x = q(40); x < q(56); x += 4) { s2.command({ type: 'place', id: 'p1', trap: 'barricade', ax: x, az: q(66) }); evs.push(...s2.events); s2.events.length = 0; }
   ok(evs.some(e => e.text === 'Leave them a way through'), 'sealing the gatehouse is refused');
 }
 
@@ -137,14 +147,81 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
 // 13. Long run with swarms: no crashes.
 {
   const s15 = new Sim({ seed: 11 }); s15.addPlayer('p1'); s15.sardines = 1e6;
-  for (let z = q(60); z < q(76); z += 2) s15.command({ type: 'place', id: 'p1', trap: 'grinder', ax: q(40), az: z, wallDir: 1 });
-  for (let z = q(60); z < q(76); z += 2) s15.command({ type: 'place', id: 'p1', trap: 'grinder', ax: q(55.5), az: z, wallDir: 0 });
-  for (let z = q(60); z < q(76); z += 3) for (let x = q(42); x < q(54); x += 3) s15.command({ type: 'place', id: 'p1', trap: 'zapper', ax: x, az: z });
+  for (let z = q(60); z < q(76); z += 4) s15.command({ type: 'place', id: 'p1', trap: 'grinder', ax: q(40), az: z, wallDir: 1 });
+  for (let z = q(60); z < q(76); z += 4) s15.command({ type: 'place', id: 'p1', trap: 'grinder', ax: q(55.5), az: z, wallDir: 0 });
+  for (let z = q(60); z < q(76); z += 4) for (let x = q(40); x < q(56); x += 4) s15.command({ type: 'place', id: 'p1', trap: 'zapper', ax: x, az: z });
+  for (let z = q(62); z < q(74); z += 4) for (let x = q(42); x < q(54); x += 4) s15.command({ type: 'place', id: 'p1', trap: 'tacks', ax: x, az: z });
   let steps = 0, maxMice = 0; const t0 = Date.now();
   while (s15.phase !== 'won' && s15.phase !== 'lost' && steps < TICK_HZ * 60 * 40) {
     if (s15.phase === 'build') s15.command({ type: 'startWave' });
     s15.step(); s15.events.length = 0; steps++; maxMice = Math.max(maxMice, s15.mice.length);
   }
   ok(s15.phase === 'won' || s15.phase === 'lost', `long run ended: ${s15.phase} at wave ${s15.wave}, kills ${s15.stats.kills}, peak ${maxMice} mice, ${((Date.now() - t0) / steps).toFixed(2)} ms/tick`);
+}
+
+// 14. Tile traps: one mousetrap snaps every mouse standing on its 2x2 tile.
+{
+  const s = new Sim({ seed: 21 }); s.addPlayer('p1'); s.sardines = 9999;
+  s.command({ type: 'place', id: 'p1', trap: 'mousetrap', ax: q(60), az: q(50) });
+  const tr = [...s.traps.values()][0];
+  ok(tr && tr.cells.length === 16, 'mousetrap covers a 4x4-cell tile');
+  for (let k = 0; k < 4; k++) { s.spawnMouse('mouse', 1); const m = s.mice[k]; m.x = 60.4 + (k % 2) * 1.1; m.z = 50.4 + (k >> 1) * 1.1; m.state = 'stuck'; m.stuckT = 99; }
+  s.stepTraps();
+  ok(s.mice.filter(m => m.hp < m.maxHp || m.dead).length === 4, 'mousetrap hits all 4 mice on it');
+  ok(tr.cd > 0 && tr.cdMax > 0, 'mousetrap shows a reset timer');
+}
+// 15. Wall grinder reaches a tile out from the wall.
+{
+  const s = new Sim({ seed: 22 }); s.addPlayer('p1'); s.sardines = 9999; s.gate.up = false; s.flowDirty = true;
+  s.command({ type: 'place', id: 'p1', trap: 'grinder', ax: q(40), az: q(64), wallDir: 1 });
+  ok(s.traps.size === 1, 'grinder placed');
+  s.spawnMouse('mouse', 1); const m = s.mice[0]; m.x = 41.6; m.z = 65; m.state = 'stuck'; m.stuckT = 99;
+  for (let t = 0; t < 10; t++) s.stepTraps();
+  ok(m.hp < m.maxHp, 'grinder hurts a mouse 1.6 units from the wall');
+}
+// 16. Mice spread across a lane instead of one file.
+{
+  const s = new Sim({ seed: 23 }); s.addPlayer('p1'); s.cats.get('p1').x = 90; s.cats.get('p1').z = 5;
+  for (let k = 0; k < 30; k++) s.spawnMouse('mouse', 1, 30, 0);
+  run(s, 6);
+  const xs = s.mice.filter(m => m.z > 98).map(m => m.x);
+  const spread = Math.max(...xs) - Math.min(...xs);
+  ok(spread > 4, `mob fills the road (spread ${spread.toFixed(1)} units across)`);
+}
+// 17. Mice turn to attack a nearby cat; plague rats spit.
+{
+  const s = new Sim({ seed: 24 }); s.addPlayer('p1'); const cat = s.cats.get('p1');
+  cat.x = 20; cat.z = 112; const hp0 = cat.hp;
+  s.spawnMouse('mouse', 1, 1, 0);
+  run(s, 3, () => inp(s, 'p1'));
+  ok(cat.hp < hp0, `mouse goes for the cat and bites (hp ${hp0} -> ${cat.hp})`);
+  const s2 = new Sim({ seed: 25 }); s2.addPlayer('p1'); const c2 = s2.cats.get('p1'); c2.x = 20; c2.z = 110;
+  s2.spawnMouse('plague', 1, 1, 0);
+  const ev = run(s2, 4, () => inp(s2, 'p1'));
+  ok(ev.some(e => e.t === 'spit'), 'plague rat spits at the cat');
+}
+// 18. Splitter bursts into two pups.
+{
+  const s = new Sim({ seed: 26 }); s.addPlayer('p1');
+  s.spawnMouse('splitter', 1); s.damageMouse(s.mice[0], 999, 'trap');
+  ok(s.mice.filter(m => !m.dead && m.type === 'pup').length === 2, 'splitter bursts into 2 pups');
+}
+// 19. New kinds are introduced alone; wave-6 boss stomps.
+{
+  const w4 = buildWave(4, () => 0.5, false).queue;
+  ok(w4[0].type === 'splitter' && w4[0].intro && !w4.slice(1).some(e => e.type === 'splitter'), 'wave 4 introduces the splitter alone');
+  const s = new Sim({ seed: 27 }); s.addPlayer('p1'); s.gate.up = false; s.flowDirty = true;
+  const cat = s.cats.get('p1'); cat.x = 48; cat.z = 50;
+  s.spawnMouse('miniboss', 1); const b = s.mice[0]; b.x = 48; b.z = 53;
+  const ev = run(s, 3, () => inp(s, 'p1'));
+  ok(ev.some(e => e.t === 'stompWarn') && ev.some(e => e.t === 'stomp'), 'rat captain winds up and stomps');
+  ok(cat.hp < cat.def.maxHp, 'stomp hurts the cat');
+}
+// 20. Pounce stun shows a timer (stunMax) and lasts 3 s.
+{
+  const s = new Sim({ seed: 28 }); s.addPlayer('p1', 'puddin'); const cat = s.cats.get('p1');
+  s.spawnMouse('mouse', 1); const m = s.mice[0]; m.x = cat.x + 1; m.z = cat.z; s.buildMouseGrid();
+  s.pounceLand(cat);
+  ok(m.dead || (m.stunT >= 2.9 && m.stunMax === m.stunT), `pounce stun ${m.stunT.toFixed(1)} s with timer`);
 }
 process.exit(fails ? 1 : 0);

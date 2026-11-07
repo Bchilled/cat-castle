@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import {
   W, H, CELL, T, FURNITURE, DRAIN, BRIDGE, GATE, HOLE, SPAWNS, STALLS, cellOf, WORLD_W, WORLD_H,
 } from '../sim/map.js';
-import { MICE, TRAPS, TRINKETS } from '../config.js';
+import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
 import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture } from './models.js';
 
@@ -29,7 +29,7 @@ export class Scene {
     this.camDist = null;                                            // set per cat on first frame; wheel zooms
 
     this.cats = new Map(); this.trapMeshes = new Map(); this.tailMeshes = new Map(); this.lootMeshes = new Map();
-    this.shotMeshes = new Map(); this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map();
+    this.shotMeshes = new Map(); this.globMeshes = new Map(); this.rings = []; this.shake = 0; this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map();
     this.particles = []; this.decals = [];
     this.aimProxies = new THREE.Group();
     this.buildWorld();
@@ -191,6 +191,8 @@ export class Scene {
       ear: mk(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 7), mat(0xc9a3a0), MAX_MICE * 2),
       tail: mk(new THREE.CylinderGeometry(0.02, 0.035, 0.9, 4), mat(0xc9a3a0)),
       eyes: mk(new THREE.BoxGeometry(0.26, 0.05, 0.03), new THREE.MeshBasicMaterial({ color: 0xffffff })),
+      // Stun stars circling a dazed mouse's head; the circle shrinks as the stun runs out (its timer).
+      stars: mk(new THREE.OctahedronGeometry(0.09, 0), new THREE.MeshBasicMaterial({ color: 0xffe040 }), MAX_MICE * 3),
     };
     this._m = new THREE.Matrix4(); this._l = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler();
     this._v = new THREE.Vector3(); this._s = new THREE.Vector3(); this._c = new THREE.Color(); this._w = new THREE.Color(0xffffff);
@@ -201,16 +203,18 @@ export class Scene {
     const shape = new THREE.Shape(); shape.moveTo(-0.3, -0.15); shape.lineTo(0, 0.15); shape.lineTo(0.3, -0.15); shape.lineTo(0.3, -0.02); shape.lineTo(0, 0.28); shape.lineTo(-0.3, -0.02);
     const geo = new THREE.ShapeGeometry(shape); geo.rotateX(-Math.PI / 2); geo.rotateY(Math.PI);   // tip points +z, i.e. along the route
     this.routeMat = new THREE.MeshBasicMaterial({ color: 0xb48aff, transparent: true, opacity: 0.6, depthWrite: false });
-    this.routeMesh = new THREE.InstancedMesh(geo, this.routeMat, 600); this.routeMesh.count = 0; this.routeMesh.frustumCulled = false;
+    this.routeMesh = new THREE.InstancedMesh(geo, this.routeMat, 1200); this.routeMesh.count = 0; this.routeMesh.frustumCulled = false;
     this.scene.add(this.routeMesh); this.routeRef = null;
   }
   updateRoute(now) {
     const routes = this.sim.routes();
     if (routes !== this.routeRef) {
       this.routeRef = routes;
-      let n = 0; const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
-      for (const pts of routes) for (let k = 0; k < pts.length - 2 && n < 600; k += 3) {
-        const [x, z] = pts[k], [x2, z2] = pts[k + 2];
+      // Several lanes share stretches (both entrances, every route choice): draw each spot once.
+      let n = 0; const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), used = new Set();
+      for (const pts of routes) for (let k = 0; k < pts.length - 2 && n < 1200; k += 3) {
+        const [x, z] = pts[k], [x2, z2] = pts[k + 2], key = Math.round(x) * 1000 + Math.round(z);
+        if (used.has(key)) continue; used.add(key);
         q.setFromAxisAngle(up, Math.atan2(x2 - x, z2 - z));
         m4.compose(new THREE.Vector3(x, 0.04, z), q, new THREE.Vector3(1.4, 1, 1.4)); this.routeMesh.setMatrixAt(n++, m4);
       }
@@ -260,6 +264,12 @@ export class Scene {
       this.scene.add(p); this.particles.push(p);
     }
   }
+  // Flat ring on the floor: warn = pulsing danger zone; grow = shockwave expanding to r.
+  ring(x, z, r, color, life, warn = false, grow = false, y = 0) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(warn ? 0 : r * 0.85, r, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
+    m.rotation.x = -Math.PI / 2; m.position.set(x, y + 0.04, z); m.userData = { life, max: life, warn, grow };
+    this.scene.add(m); this.rings.push(m);
+  }
   decal(x, z, color, r, y = 0.02) {
     if (this.decals.length > 80) this.scene.remove(this.decals.shift());
     const d = new THREE.Mesh(new THREE.CircleGeometry(r, 9), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false }));
@@ -277,7 +287,12 @@ export class Scene {
         this.scene.add(g); this.trapMeshes.set(e.trap.id, g); break;
       }
       case 'trapRemove': { const g = trap(e.id); if (g) { this.spawnParticles(g.position.x, 0.4, g.position.z, 0xc4a46a, 10); this.scene.remove(g); this.trapMeshes.delete(e.id); } break; }
-      case 'snap': case 'flip': case 'blow': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
+      case 'snap': case 'flip': case 'punch': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
+      case 'stompWarn': this.ring(e.x, e.z, e.r, 0xe0302a, 0.7, true); break;
+      case 'stomp': this.ring(e.x, e.z, e.r, 0xd8d0c0, 0.5, false, true); this.spawnParticles(e.x, 0.2, e.z, 0x8a8478, 30, 7, 0.14); this.shake = 0.5; break;
+      case 'bossRoar': this.shake = 0.8; break;
+      case 'burst': this.spawnParticles(e.x, e.y + 0.3, e.z, 0x9a6a8a, 14, 5); break;
+      case 'globSplat': this.spawnParticles(e.x, e.y + 0.05, e.z, 0x9adf3a, 8, 2); this.decal(e.x, e.z, 0x6a8a2a, 0.35, Math.max(0.02, e.y + 0.02)); break;
       case 'zap': {
         const g = trap(e.id); if (!g) break; g.userData.anim = 1;
         for (const v of e.hits || []) {
@@ -302,7 +317,8 @@ export class Scene {
         break;
       }
       case 'spit': case 'bite': { const c = this.cats.get(e.id); if (c) { c.atkT = 0.14; c.side ^= 1; } break; }
-      case 'pounceLand': case 'slam': this.spawnParticles(e.x, e.y + 0.1, e.z, 0xd8d0c0, 18, 5); break;
+      case 'pounceLand': this.spawnParticles(e.x, e.y + 0.1, e.z, 0xd8d0c0, 18, 5); this.ring(e.x, e.z, CAT.pounceRadius, 0xfff0a0, 0.45, false, true, e.y); this.shake = Math.max(this.shake, 0.2); break;
+      case 'slam': this.spawnParticles(e.x, e.y + 0.1, e.z, 0xd8d0c0, 18, 5); break;
       case 'pelletHit': this.spawnParticles(e.x, e.y + 0.1, e.z, e.mouse ? 0x8a1c14 : 0x8a8a6a, 4, 2, 0.05); break;
       case 'hairSplat': this.spawnParticles(e.x, e.y + 0.1, e.z, 0x6a7a3a, 14, 4); this.decal(e.x, e.z, 0x5a6a2a, 0.9, Math.max(0.02, e.y + 0.02)); break;
       case 'wallkick': this.spawnParticles(e.x, e.y + 0.5, e.z, 0xd8d0c0, 6, 2); break;
@@ -382,21 +398,40 @@ export class Scene {
     }, (g, t) => { g.position.set(t.x, t.y, t.z); g.children[0].rotation.y += dt; g.scale.setScalar(1 + Math.min(t.amount, 10) * 0.08); });
     this.syncSimple(sim.loot, this.lootMeshes, (l) => makeTrinket(TRINKETS[l.key].tier), (g, l) => { g.position.set(l.x, l.y + Math.sin(now / 250 + l.id) * 0.08, l.z); g.rotation.y += dt * 3; });
     this.syncSimple(sim.shots, this.shotMeshes, () => outline(new THREE.Mesh(new THREE.DodecahedronGeometry(0.4, 0), mat(0x6f6a62))), (g, s) => { g.position.set(s.x, s.y, s.z); g.rotation.x += dt * 8; });
+    this.syncSimple(sim.globs, this.globMeshes, () => new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: 0x9adf3a })), (g, b) => { g.position.set(b.x, b.y, b.z); });
     this.syncSimple(sim.missiles, this.missileMeshes, (b) => b.kind === 'pellet'
       ? new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 0), mat(0x8a8a5a))
       : outline(new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), mat(0x6a7a3a))), (g, b) => { g.position.set(b.x, b.y, b.z); g.rotation.y += dt * 10; });
-    // Traps
+    // Traps. f = how far through its reset a trap is (1 = just fired, 0 = armed).
+    // Each trap's moving part follows f, and the lamp goes red -> green.
     for (const g of this.trapMeshes.values()) {
-      const ud = g.userData; ud.anim = Math.max(0, ud.anim - dt * 3);
-      const tr = sim.traps.get(ud.id);
-      if (ud.kind === 'mousetrap') ud.bar.rotation.x = ud.anim > 0 ? -0.1 : -2.6;
-      if (ud.kind === 'flipper') ud.hinge.rotation.x = -ud.anim * 1.3;
-      if (ud.kind === 'grinder' && tr && tr.active) ud.drum.rotation.x += dt * 25;
-      if (ud.kind === 'zapper') ud.glow.material.color.setHex(ud.anim > 0.5 ? 0xffffff : tr && tr.cd > 0 ? 0x2c4a6a : 0x6fb8ff);
-      if (ud.kind === 'hairdryer') ud.gust.material.opacity = ud.anim * 0.4;
-      if (ud.kind === 'gluepad' && tr) ud.goo.material.opacity = tr.charges > 0 ? 0.8 : 0.2;
-      if (ud.kind === 'barricade' && tr) g.scale.y = 0.55 + 0.45 * (tr.hp / tr.maxHp);
+      const ud = g.userData; ud.anim = Math.max(0, ud.anim - dt * 4);
+      const tr = sim.traps.get(ud.id); if (!tr) continue;
+      const f = tr.cdMax > 0 ? Math.min(1, tr.cd / tr.cdMax) : 0;
+      if (ud.lamp) {
+        const busy = tr.kind === 'gluepad' ? tr.charges <= 0 : tr.kind === 'grinder' ? false : tr.kind === 'tacks' ? false : f > 0;
+        ud.lamp.material.color.setHex(busy ? 0xe0402a : 0x5ee06a);
+        ud.lamp.scale.setScalar(busy ? 1 : 1 + Math.sin(now / 200) * 0.15);
+      }
+      if (ud.kind === 'mousetrap') ud.bar.rotation.x = f > 0 ? -0.15 - (2.75 * Math.max(0, (1 - f - 0.15) / 0.85)) : -2.9;   // slams, then cranks back
+      if (ud.kind === 'flipper') ud.hinge.rotation.x = -Math.max(ud.anim, f > 0.8 ? 1 : f / 0.8) * 1.2;   // flips up, eases down
+      if (ud.kind === 'grinder') { if (tr.active) ud.drum.rotation.x += dt * 25; }
+      if (ud.kind === 'zapper') ud.glow.material.color.setHex(ud.anim > 0.5 ? 0xffffff : f > 0 ? new THREE.Color(0x1c2a3a).lerp(new THREE.Color(0x6fb8ff), 1 - f).getHex() : 0x6fb8ff);
+      if (ud.kind === 'glove') {
+        const out = ud.anim > 0 ? 1 : f > 0 ? Math.max(0, (f - 0.2) / 0.8) : 0;     // punch out, wind back in
+        const len = 0.1 + out * 1.6;
+        ud.glove.position.z = len; ud.spring.scale.z = Math.max(0.05, len);
+      }
+      if (ud.kind === 'gluepad') ud.goo.material.opacity = tr.charges > 0 ? 0.25 + 0.55 * tr.charges / TRAPS.gluepad.charges : 0.1;
+      if (ud.kind === 'barricade') g.scale.y = 0.55 + 0.45 * (tr.hp / tr.maxHp);
     }
+    // Warning/shockwave rings on the floor (boss stomps, pounce landings).
+    this.rings = this.rings.filter(r => {
+      r.userData.life -= dt; const u = r.userData;
+      if (u.grow) r.scale.setScalar(Math.max(0.01, 1 - u.life / u.max)); 
+      r.material.opacity = u.warn ? 0.35 + 0.35 * Math.sin(now / 60) : Math.max(0, u.life / u.max) * 0.7;
+      if (u.life <= 0) { this.scene.remove(r); return false; } return true;
+    });
     // Particles, decals, water, route
     this.particles = this.particles.filter(p => {
       const u = p.userData; u.life -= dt; if (!p.isLine) u.vy -= 9 * dt;
@@ -440,6 +475,7 @@ export class Scene {
       }
       const sh = shoulder * Math.min(1, d / 2);
       this.camera.position.copy(target).addScaledVector(back, d).addScaledVector(right, sh);
+      if (this.shake > 0) { this.shake = Math.max(0, this.shake - dt); const a = this.shake * 0.35; this.camera.position.x += (Math.random() - 0.5) * a; this.camera.position.y += (Math.random() - 0.5) * a; }
       this.camera.lookAt(target.clone().addScaledVector(back, -14).addScaledVector(right, sh));
       // Fade the cat when the camera is squeezed right up against it.
       const close = d < 1.6;
@@ -459,7 +495,8 @@ export class Scene {
   }
 
   drawMice(dt, k, now) {
-    const { body, bodyO, head, ear, tail, eyes } = this.mi;
+    const { body, bodyO, head, ear, tail, eyes, stars } = this.mi;
+    let ns = 0;
     const M = this._m, L = this._l, q = this._q, e = this._e, v = this._v, sc = this._s, col = this._c;
     let n = 0;
     const set = (mesh, i, ox, oy, oz, rx, sx, sy, sz) => { L.compose(v.set(ox, oy, oz), q.setFromEuler(e.set(rx, 0, 0)), sc.set(sx, sy, sz)); L.premultiply(M); mesh.setMatrixAt(i, L); };
@@ -489,6 +526,14 @@ export class Scene {
       body.setColorAt(n, col); head.setColorAt(n, col);
       eyes.setColorAt(n, col.setHex(d.boss ? 0xff2a1a : 0x111111));
       n++;
+      if (mo.stunT > 0 && ns < MAX_MICE * 3 - 3) {
+        const left = Math.min(1, mo.stunT / (mo.stunMax || 1)), rad = (0.25 + 0.35 * left) * Math.max(1, s * 1.4);
+        for (let k = 0; k < 3; k++) {
+          const a = now / 180 + k * 2.094;
+          L.compose(v.set(p.x + Math.cos(a) * rad, p.y + s * 1.05 + 0.25, p.z + Math.sin(a) * rad), q.identity(), sc.set(0.6 + left, 0.6 + left, 0.6 + left));
+          stars.setMatrixAt(ns++, L);
+        }
+      }
       if (d.boss) {
         let bar = this.bossBars.get(mo.id);
         if (!bar) {
@@ -504,6 +549,7 @@ export class Scene {
     }
     for (const mesh of [body, bodyO, head, tail, eyes]) { mesh.count = n; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; }
     ear.count = n * 2; ear.instanceMatrix.needsUpdate = true;
+    stars.count = ns; stars.instanceMatrix.needsUpdate = true;
     for (const id of this.mouseLerp.keys()) if (!seen.has(id)) this.mouseLerp.delete(id);
     for (const [id, bar] of this.bossBars) if (!seen.has(id)) { this.scene.remove(bar); this.bossBars.delete(id); }
   }

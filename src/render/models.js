@@ -115,63 +115,96 @@ export function makePuddin() {
 export const makeCat = (kind) => kind === 'puddin' ? makePuddin() : makeFred();
 
 // ---------- traps (built at their real footprint, centred on the origin) ----------
+// Traps are built at tile scale: one tile = 2x2 units (Orcs Must Die footprint), so a
+// trap is about two cats wide. Origin = tile centre on the floor (wall traps: local -z is
+// the wall; ceiling traps: origin is on the ceiling and they hang down).
+// Every trap except the barricade carries a status lamp (green = armed, red = resetting);
+// the scene also animates each trap's reset so you can see when it's ready again.
 export function makeTrap(kind, ghost = false) {
   const g = new THREE.Group();
   const add = (m) => { g.add(m); return m; };
   const P = (geo, c, x, y, z, sx = 1, sy = 1, sz = 1) => add(part(geo, c, x, y, z, sx, sy, sz, !ghost));
   const B = (c, x, y, z, sx, sy, sz) => P(BOX, c, x, y, z, sx, sy, sz);
-  const u = CELL;
+  const S = 4 * CELL, h = S / 2;          // tile size (2 units) and half
+  const lamp = (x, y, z) => {
+    if (ghost) return;
+    B(0x3a3632, x, y - 0.14, z, 0.05, 0.28, 0.05);
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), new THREE.MeshBasicMaterial({ color: 0x5ee06a }));
+    l.position.set(x, y, z); add(l); g.userData.lamp = l;
+  };
   if (kind === 'barricade') {
-    // A child's wooden alphabet block: solid, chunky, 1x1 unit.
-    B(0xc4a46a, 0, 0.6, 0, 2 * u * 0.98, 1.2, 2 * u * 0.98);
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), mat(0xa8442e));
-    face.position.set(0, 0.6, u + 0.001); add(face);
-    const face2 = face.clone(); face2.material = mat(0x3e6a8a); face2.rotation.y = Math.PI / 2; face2.position.set(u + 0.001, 0.6, 0); add(face2);
-  } else if (kind === 'mousetrap') {
-    B(0xb08a58, 0, 0.03, 0, u * 0.95, 0.06, u * 0.7);
-    const bar = new THREE.Group(); bar.position.set(0, 0.07, 0); add(bar);
-    bar.add(part(new THREE.BoxGeometry(u * 0.9, 0.025, 0.025), 0x9a9a9a, 0, 0, u * 0.3, 1, 1, 1, !ghost));
-    bar.rotation.x = -2.6; g.userData.bar = bar;
-    P(cyl(0.05, 0.05, 0.02, 3), 0xe0c040, 0, 0.07, -0.05);
-  } else if (kind === 'flipper') {
-    B(0x4d4a46, 0, 0.03, 0, 2 * u * 0.95, 0.06, 2 * u * 0.95);
-    const hinge = new THREE.Group(); hinge.position.set(0, 0.07, -u * 0.95); add(hinge);
-    hinge.add(part(BOX, 0x8d7a4f, 0, 0, u * 0.95, 2 * u * 0.88, 0.05, 2 * u * 0.9, !ghost));
-    const spring = part(cyl(0.06, 0.06, 0.12, 6), 0xaaaaaa, 0, 0.04, 0.15, 1, 1, 1, false); add(spring);
-    g.userData.hinge = hinge;
-    const arrow = P(new THREE.ConeGeometry(0.1, 0.22, 3), 0xd8c048, 0, 0.12, 0.2); arrow.rotation.x = Math.PI / 2;
-  } else if (kind === 'grinder') {
-    // Rotary cheese-grater drum on a wall bracket (local -z is the wall).
-    B(0x3c3a38, 0, 0.45, -u * 0.42, 2 * u * 0.95, 0.8, 0.08);
-    const drum = new THREE.Group(); drum.position.set(0, 0.28, -0.05); add(drum);
-    const c = part(cyl(0.2, 0.2, 2 * u * 0.9, 8), 0xa8a8ac, 0, 0, 0, 1, 1, 1, !ghost); c.rotation.z = Math.PI / 2; drum.add(c);
-    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; const tooth = part(new THREE.ConeGeometry(0.03, 0.09, 3), 0xdadade, ((i % 3) - 1) * 0.25, Math.cos(a) * 0.21, Math.sin(a) * 0.21, 1, 1, 1, false); tooth.rotation.x = a; drum.add(tooth); }
-    g.userData.drum = drum;
-  } else if (kind === 'zapper') {
-    // Hangs from the underside; the group origin is moved up to the ceiling by the scene.
-    B(0x2f2c29, 0, -0.12, 0, 0.04, 0.24, 0.04);
-    B(0x3a4458, 0, -0.38, 0, 0.36, 0.26, 0.36);
-    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.3), new THREE.MeshBasicMaterial({ color: 0x6fb8ff }));
-    glow.position.y = -0.4; add(glow); g.userData.glow = glow;
-  } else if (kind === 'gluepad') {
-    B(0xd8c24a, 0, 0.015, 0, 2 * u * 0.95, 0.03, 2 * u * 0.95);
-    const goo = new THREE.Mesh(new THREE.PlaneGeometry(2 * u * 0.85, 2 * u * 0.85), new THREE.MeshLambertMaterial({ color: 0xe9df8a, transparent: true, opacity: 0.8 }));
-    goo.rotation.x = -Math.PI / 2; goo.position.y = 0.032; add(goo); g.userData.goo = goo;
-  } else if (kind === 'tacks') {
-    B(0x6b5a44, 0, 0.015, 0, u * 0.8, 0.03, 2 * u * 0.95);
-    for (let i = 0; i < 6; i++) {
-      const x = ((i % 2) - 0.5) * 0.2, z = (Math.floor(i / 2) - 1) * 0.3;
-      P(cyl(0.06, 0.06, 0.02, 6), [0xc83a2a, 0x2a6ac8, 0xe0c040][i % 3], x, 0.05, z);
-      const pin = P(new THREE.ConeGeometry(0.015, 0.08, 4), 0xdadada, x, 0.1, z);
+    // A child's wooden alphabet block: solid, chunky, a full tile, painted letters on every side.
+    const H = 1.4;
+    B(0xc4a46a, 0, H / 2, 0, S * 0.98, H, S * 0.98);
+    const cols = [0xa8442e, 0x3e6a8a, 0x4f7a3a, 0xc08a20];
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2, face = new THREE.Group(); face.rotation.y = a; add(face);
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(S * 0.8, H * 0.8), mat(cols[k])); p.position.set(0, H / 2, h * 0.98 + 0.01); face.add(p);
+      // A chunky letter shape in cream.
+      const l1 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, H * 0.55), mat(0xf0e4c8)); l1.position.set(-0.22, H / 2, h * 0.98 + 0.02); l1.rotation.z = -0.35; face.add(l1);
+      const l2 = l1.clone(); l2.position.x = 0.22; l2.rotation.z = 0.35; face.add(l2);
+      const l3 = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.12), mat(0xf0e4c8)); l3.position.set(0, H * 0.42, h * 0.98 + 0.02); face.add(l3);
     }
-  } else if (kind === 'hairdryer') {
-    // Wall-mounted, blowing away from the wall (+z).
-    B(0x3c3a38, 0, 0.5, -u * 0.42, 0.5, 0.5, 0.06);
-    const body = P(cyl(0.18, 0.2, 0.55, 8), 0xd27aa0, 0, 0.55, -0.1); body.rotation.x = Math.PI / 2;
-    const nozzle = P(cyl(0.13, 0.17, 0.2, 8), 0x9a4a72, 0, 0.55, 0.25); nozzle.rotation.x = Math.PI / 2;
-    P(BOX, 0x9a4a72, 0, 0.3, -0.12, 0.1, 0.4, 0.12);
-    const gust = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.8, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }));
-    gust.rotation.x = -Math.PI / 2; gust.position.set(0, 0.55, 1.3); add(gust); g.userData.gust = gust;
+  } else if (kind === 'mousetrap') {
+    // A giant snap trap: wooden board, cheese on the trigger, a big kill bar on a hinge
+    // across the middle. Armed: bar laid back. Fired: bar slammed flat. It cranks back while resetting.
+    B(0xb08a58, 0, 0.06, 0, S * 0.96, 0.12, S * 0.96);
+    for (const x of [-0.6, 0.6]) { const c = P(cyl(0.09, 0.09, 0.22, 8), 0x9a9a9a, x, 0.2, 0); c.rotation.z = Math.PI / 2; }   // springs
+    const bar = new THREE.Group(); bar.position.set(0, 0.2, 0); add(bar);
+    bar.add(part(new THREE.BoxGeometry(S * 0.86, 0.06, 0.06), 0xb0b0b0, 0, 0, 0.85, 1, 1, 1, !ghost));
+    for (const x of [-S * 0.43, S * 0.43]) bar.add(part(new THREE.BoxGeometry(0.06, 0.06, 0.85), 0xb0b0b0, x, 0, 0.42, 1, 1, 1, !ghost));
+    bar.rotation.x = -2.9; g.userData.bar = bar;
+    B(0xd8a83a, 0, 0.16, 0.5, 0.4, 0.06, 0.3);                                            // trigger plate
+    P(cyl(0.16, 0.16, 0.14, 3), 0xe8c33a, 0, 0.26, 0.5);                                  // cheese bait
+    lamp(h - 0.15, 0.4, -h + 0.15);
+  } else if (kind === 'flipper') {
+    B(0x4d4a46, 0, 0.05, 0, S * 0.96, 0.1, S * 0.96);
+    const hinge = new THREE.Group(); hinge.position.set(0, 0.11, -h * 0.92); add(hinge);
+    hinge.add(part(BOX, 0x8d7a4f, 0, 0, h * 0.92, S * 0.9, 0.08, S * 0.9, !ghost));
+    for (const x of [-0.5, 0.5]) add(part(cyl(0.08, 0.08, 0.14, 6), 0xaaaaaa, x, 0.08, 0.3, 1, 1, 1, false));
+    g.userData.hinge = hinge;
+    const arrow = P(new THREE.ConeGeometry(0.22, 0.45, 3), 0xd8c048, 0, 0.18, 0.35); arrow.rotation.x = Math.PI / 2; g.userData.arrow = arrow;
+    lamp(h - 0.15, 0.4, -h + 0.15);
+  } else if (kind === 'grinder') {
+    // Rotary cheese-grater drum on a wall bracket, a tile long.
+    B(0x3c3a38, 0, 0.55, -0.21, S * 0.96, 1.0, 0.08);
+    const drum = new THREE.Group(); drum.position.set(0, 0.32, 0.05); add(drum);
+    const c = part(cyl(0.3, 0.3, S * 0.9, 10), 0xa8a8ac, 0, 0, 0, 1, 1, 1, !ghost); c.rotation.z = Math.PI / 2; drum.add(c);
+    for (let i = 0; i < 24; i++) { const a = i / 8 * Math.PI * 2; const tooth = part(new THREE.ConeGeometry(0.04, 0.12, 3), 0xdadade, ((i % 6) - 2.5) * 0.3, Math.cos(a) * 0.31, Math.sin(a) * 0.31, 1, 1, 1, false); tooth.rotation.x = a; drum.add(tooth); }
+    g.userData.drum = drum;
+    lamp(h - 0.15, 1.15, -0.15);
+  } else if (kind === 'zapper') {
+    // Hangs from the underside of a roof; a big blue bug zapper on a chain.
+    B(0x2f2c29, 0, -0.25, 0, 0.05, 0.5, 0.05);
+    B(0x3a4458, 0, -0.75, 0, 0.8, 0.55, 0.8);
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.7), new THREE.MeshBasicMaterial({ color: 0x6fb8ff }));
+    glow.position.y = -0.78; add(glow); g.userData.glow = glow;
+    lamp(0, -1.12, 0);
+  } else if (kind === 'gluepad') {
+    B(0xd8c24a, 0, 0.02, 0, S * 0.96, 0.04, S * 0.96);
+    const goo = new THREE.Mesh(new THREE.PlaneGeometry(S * 0.86, S * 0.86), new THREE.MeshLambertMaterial({ color: 0xe9df8a, transparent: true, opacity: 0.8 }));
+    goo.rotation.x = -Math.PI / 2; goo.position.y = 0.045; add(goo); g.userData.goo = goo;
+    lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'tacks') {
+    B(0x6b5a44, 0, 0.02, 0, S * 0.96, 0.04, S * 0.96);
+    for (let i = 0; i < 25; i++) {
+      const x = ((i % 5) - 2) * 0.36, z = (Math.floor(i / 5) - 2) * 0.36;
+      P(cyl(0.08, 0.08, 0.03, 6), [0xc83a2a, 0x2a6ac8, 0xe0c040][i % 3], x, 0.06, z);
+      P(new THREE.ConeGeometry(0.02, 0.12, 4), 0xdadada, x, 0.13, z);
+    }
+  } else if (kind === 'glove') {
+    // Tom & Jerry spring glove: wall plate, accordion spring, big red boxing glove.
+    // Punches out when it fires, then winds back in while it resets.
+    B(0x6e4e30, 0, 0.5, -0.21, S * 0.7, 0.9, 0.08);
+    const arm = new THREE.Group(); arm.position.set(0, 0.45, -0.15); add(arm);
+    const spring = new THREE.Group(); arm.add(spring); g.userData.spring = spring;
+    for (let k = 0; k < 6; k++) spring.add(part(BOX, k % 2 ? 0x8a8a8a : 0xb0b0b0, (k % 2 ? 0.08 : -0.08), 0, k / 5, 0.32, 0.06, 0.06, false));
+    const glove = new THREE.Group(); arm.add(glove); g.userData.glove = glove;
+    glove.add(part(new THREE.SphereGeometry(0.32, 10, 8), 0xc42a22, 0, 0, 0.3, 1, 0.85, 1.1, !ghost));
+    glove.add(part(new THREE.SphereGeometry(0.13, 8, 6), 0xc42a22, 0.27, 0.05, 0.22, 1, 1, 1, !ghost));   // thumb
+    const cuff = part(cyl(0.22, 0.24, 0.16, 10), 0xf0e4c8, 0, 0, 0.02, 1, 1, 1, !ghost); cuff.rotation.x = Math.PI / 2; glove.add(cuff);
+    g.userData.armLen = 0;
+    lamp(h - 0.15, 1.1, -0.15);
   }
   if (ghost) g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.5; o.material.depthWrite = false; } });
   return g;

@@ -7,10 +7,10 @@
 import { DT, GRAVITY, RULES, CAT, CATS, MICE, TRAPS, GATE as GATE_CFG, TRINKETS } from '../config.js';
 import {
   W, H, CELL, T, idx, cellOf, cellCenter, buildMap, floorish, miceWalkable, goalCells,
-  GATE, SPAWNS, CAT_SPAWN, STALLS, DIRS4, WORLD_W, WORLD_H,
+  GATE, SPAWNS, CAT_SPAWN, STALLS, DIRS4, WORLD_W, WORLD_H, VIAS,
 } from './map.js';
 import { computeFlow, nextCell, nearestReachable } from './path.js';
-import { buildWave, ratePaws } from './waves.js';
+import { buildWave, ratePaws, INTRO_TEXT } from './waves.js';
 
 // Cat lines. Original, crude, bleeped.
 const BARKS = {
@@ -61,6 +61,10 @@ export class Sim {
     this.tails = []; this.loot = [];   // tails + trinkets lying on the ground
     this.trinkets = {};                // collected this run (team-wide), key -> count
     this.shots = [];                   // lobber rocks
+    this.globs = [];                   // plague-rat spit flying at cats
+    this.viaFlow = VIAS.map(() => null); // flow fields to each route choice (see VIAS in map.js)
+    this.viaDirty = VIAS.map(() => true);
+    this.packVia = -1;                 // route the current pack is using
     this.missiles = [];                // cat projectiles: pellets + hairballs
     this.events = [];
     this.stats = { trapsPlaced: 0, damageTaken: 0, kills: 0, abilitiesUsed: 0, energyUsed: 0 };
@@ -144,7 +148,8 @@ export class Sim {
       const cx = (i % W + 0.5) * CELL, mid = (GATE.x0 + GATE.x1) / 2;
       h = forCat && Math.abs(cx - mid) < 0.6 ? 0 : 4.2;
     } else if (t === T.GATE) h = 0;
-    if (this.isBarricade(i)) h = Math.max(h, 1.2);
+    const bar = this.isBarricade(i);
+    if (bar) h = Math.max(h, TRAPS.barricade.height * (0.55 + 0.45 * bar.hp / bar.maxHp));   // same height as the model
     return h;
   }
   blocks(i, y, h, step, forCat) {
@@ -189,24 +194,66 @@ export class Sim {
     const base = { goals: this.goals, extra: (i) => extra[i], blocked: (i) => blk[i] === 1 };
     this.flow = computeFlow(this.map, { ...base, pass: this.passSmall });
     this.flowBig = computeFlow(this.map, { ...base, pass: this.passBig });
+    this.flowBase = base;
+    this.viaDirty.fill(true);          // route-choice fields refresh one per tick (spreads the cost)
     this.flowDirty = false; this.routeCache = null;
+  }
+  // Flow field toward one route choice (VIAS). Same costs as the main field.
+  viaField(k) {
+    if (this.viaDirty[k] || !this.viaFlow[k]) {
+      if (this.flowDirty || !this.flowBase) this.updateFlow();
+      const v = VIAS[k], goals = [];
+      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+        const c = cellOf(v.x + dx * CELL, v.z + dz * CELL); if (c >= 0 && this.passSmall(c)) goals.push(c);
+      }
+      this.viaFlow[k] = computeFlow(this.map, { ...this.flowBase, goals, pass: this.passSmall });
+      this.viaDirty[k] = false; this.routeCache = null;
+    }
+    return this.viaFlow[k];
+  }
+  // Total cost of going spawn -> route choice -> hole.
+  viaCost(k, door) {
+    const vf = this.viaField(k), c = cellOf(VIAS[k].x, VIAS[k].z);
+    return vf[this.spawnCells[door % this.spawnCells.length]] + this.flow[c];
+  }
+  // Path of least resistance, but not single file: packs split across routes that cost
+  // about the same; a lane made expensive (barricades, the gate) loses its share.
+  chooseVia(door) {
+    const costs = VIAS.map((_, k) => this.viaCost(k, door));
+    const min = Math.min(...costs);
+    if (!(min < Infinity)) return -1;
+    const w = costs.map((c, k) => (c < Infinity && c <= min * 1.6 + 30) ? VIAS[k].weight * Math.exp(-(c - min) / 40) : 0);
+    let r = this.rng() * w.reduce((a, b) => a + b, 0);
+    for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) return k; }
+    return -1;
   }
   // The routes mice will take right now, one per entrance, as world points.
   // Drawn on the floor and the radar so you can see the invisible pathing.
   routes() {
     if (this.routeCache) return this.routeCache;
-    this.routeCache = this.spawnCells.map(start => {
-      const pts = []; let i = start;
-      for (let k = 0; k < 6000 && i >= 0; k++) {
+    if (this.flowDirty) this.updateFlow();
+    const trace = (start, k) => {
+      const pts = []; let i = start, f = k >= 0 ? this.viaField(k) : this.flow;
+      for (let n = 0; n < 6000 && i >= 0; n++) {
         pts.push(cellCenter(i));
         if (this.map.type[i] === T.HOLE) break;
-        i = nextCell(this.map, this.flow, i, this.passSmall, this.isBlocker);
+        if (f !== this.flow && f[i] < 2) f = this.flow;      // reached the route choice: head for the hole
+        i = nextCell(this.map, f, i, this.passSmall, this.isBlocker);
+        if (i < 0 && f !== this.flow) { f = this.flow; i = cellOf(pts[pts.length - 1][0], pts[pts.length - 1][1]); }
       }
       return pts;
+    };
+    const out = [];
+    this.spawnCells.forEach((start, door) => {
+      const costs = VIAS.map((_, k) => this.viaCost(k, door)), min = Math.min(...costs);
+      // Direct route first (the one route() returns), then every lane packs may take.
+      out.push(trace(start, -1));
+      costs.forEach((c, k) => { if (c < Infinity && c <= min * 1.6 + 30) out.push(trace(start, k)); });
     });
-    return this.routeCache;
+    this.routeCache = out;
+    return out;
   }
-  route() { return this.routes()[0]; }
+  route() { return this.routes()[0]; }   // direct route from entrance 1
 
   // ---------- traps ----------
   footprint(kind, ax, az, rot, wallDir) {
@@ -255,7 +302,7 @@ export class Sim {
     this.sardines -= def.cost;
     const xs = cells.map(i => i % W), zs = cells.map(i => (i / W) | 0);
     const tr = { id: this.nextId++, kind, cells, layer: def.surface, rot, wallDir, cd: 0, hp: def.hp || 0, maxHp: def.hp || 0,
-      cost: def.cost, charges: def.charges || 0, rechargeT: 0,
+      cost: def.cost, charges: def.charges || 0, rechargeT: 0, cdMax: def.cooldown || 1,
       x0: Math.min(...xs) * CELL, x1: (Math.max(...xs) + 1) * CELL, z0: Math.min(...zs) * CELL, z1: (Math.max(...zs) + 1) * CELL };
     for (const i of cells) this.occ[tr.layer][i] = tr.id;
     this.traps.set(tr.id, tr);
@@ -321,12 +368,14 @@ export class Sim {
     this.time += DT; this.tick++;
     this.barkCooldown -= DT;
     if (this.flowDirty) this.updateFlow();
+    const vd = this.viaDirty.indexOf(true); if (vd >= 0) this.viaField(vd);
     this.stepPhase();
     for (const cat of this.cats.values()) this.stepCat(cat);
     this.stepTraps();
     this.buildMouseGrid();
     for (const m of this.mice) this.stepMouse(m);
     this.stepShots();
+    this.stepGlobs();
     this.stepMissiles();
     if (this.mice.some(m => m.dead)) this.mice = this.mice.filter(m => !m.dead);
     if (this.lives <= 0 && this.phase !== 'lost') {
@@ -339,7 +388,7 @@ export class Sim {
       this.phaseTimer -= DT;
       if (this.phaseTimer <= 0) {
         this.wave++; this.phase = 'wave';
-        this.spawn = { ...buildWave(this.wave, this.rng, this.gate.up), t: 0 };
+        this.spawn = { ...buildWave(this.wave, this.rng, this.gate.up), t: 0 }; this.packVia = -2;
         this.emit({ t: 'msg', text: `Wave ${this.wave}` + (this.wave % 12 === 0 ? ' — BIG BOSS RAT' : this.wave % 6 === 0 ? ' — mini boss' : '') });
         this.bark(this.wave % 6 === 0 ? 'boss' : 'wave', this.anyCatName(), true);
       }
@@ -350,8 +399,12 @@ export class Sim {
     if (s.queue.length) {
       s.t -= DT;
       while (s.queue.length && s.t <= 0) {
-        const e = s.queue.shift(); this.spawnMouse(e.type, s.hpMul, e.pack, this.door); s.t += e.gap;
-        if (e.gap > 0.1) this.door = (this.door + 1) % SPAWNS.length;   // next pack uses the other entrance
+        const e = s.queue.shift();
+        if (this.packVia === -2) this.packVia = this.chooseVia(this.door);    // first mouse of a pack picks the lane
+        this.spawnMouse(e.type, s.hpMul, e.pack, this.door, this.packVia);
+        if (e.intro) this.emit({ t: 'msg', text: `NEW: ${MICE[e.type].name} — ${INTRO_TEXT[e.type] || ''}` });
+        s.t += e.gap;
+        if (e.gap > 0.1) { this.door = (this.door + 1) % SPAWNS.length; this.packVia = -2; }   // next pack: other entrance, new lane
       }
     } else if (this.mice.length === 0 && this.shots.length === 0) {
       if (this.mode === 'normal' && this.wave >= RULES.winWave) {
@@ -367,16 +420,25 @@ export class Sim {
     }
   }
 
-  spawnMouse(type, hpMul, packSize = 1, door = 0) {
+  spawnMouse(type, hpMul, packSize = 1, door = 0, via = -1) {
     const SPAWN = SPAWNS[door % SPAWNS.length];
-    const d = MICE[type];
-    const hp = Math.max(1, Math.round(d.hp * hpMul));
-    // Random variation so no two look alike (size, shade); packs spawn in a clump.
+    const hp = Math.max(1, Math.round(MICE[type].hp * hpMul));
+    // Packs spawn in a clump; stragglers come out alone.
     const spread = packSize > 1 ? 2.2 : 0.6;
-    this.mice.push({ id: this.nextId++, type, x: SPAWN.x + (this.rng() - 0.5) * spread * 2, y: 0, z: SPAWN.z - 0.4 - this.rng() * spread,
+    const m = this.spawnAt(type, SPAWN.x + (this.rng() - 0.5) * spread * 2, SPAWN.z - 0.4 - this.rng() * spread, hp, via);
+    if (MICE[type].boss) { this.emit({ t: 'bossRoar' }); this.emit({ t: 'msg', text: `${MICE[type].name.toUpperCase()} IS COMING` }); }
+    return m;
+  }
+  // Put one mouse in the world. lane: where across the corridor it likes to run
+  // (-1 left wall .. +1 right wall) so a mob fills the lane instead of a single file.
+  spawnAt(type, x, z, hp, via = -1) {
+    const m = { id: this.nextId++, type, x, y: 0, z,
       vx: 0, vy: 0, vz: 0, yaw: Math.PI, hp, maxHp: hp, state: 'walk', bleed: [], biteT: 0, attackT: 0,
-      lobbed: false, lobT: 0, dead: false, flash: 0, slowT: 0, stuckT: 0, stunT: 0, glueId: 0, tackT: 0, onGround: true,
-      scale: 0.88 + this.rng() * 0.24, shade: (this.rng() - 0.5) * 0.25, wander: this.rng() * 6.28, packed: false });
+      lobbed: false, lobT: 0, dead: false, flash: 0, slowT: 0, stuckT: 0, stunT: 0, stunMax: 1, glueId: 0, tackT: 0, onGround: true,
+      scale: 0.88 + this.rng() * 0.24, shade: (this.rng() - 0.5) * 0.25, wander: this.rng() * 6.28, packed: false,
+      lane: (this.rng() * 2 - 1) * 0.9, via, spitT: 1 + this.rng() * 2, stompT: 1.5, windT: 0 };
+    this.mice.push(m);
+    return m;
   }
 
   damageMouse(m, n, source, crit = false) {
@@ -400,6 +462,16 @@ export class Sim {
       }
     }
     if (d.yarn) { this.yarn += d.yarn; this.emit({ t: 'msg', text: `+${d.yarn} yarn` }); }
+    // Splitters burst into smaller mice (not if eaten or drowned — that's the counter-play).
+    if (d.split && !drowned && !eaten && !stranded) {
+      const hp = Math.max(1, Math.round(MICE[d.split].hp * (m.maxHp / d.hp)));
+      for (let k = 0; k < d.splitN; k++) {
+        const a = this.rng() * Math.PI * 2;
+        const c = this.spawnAt(d.split, m.x, m.z, hp, m.via);
+        this.launch(c, Math.cos(a) * 2.5, 4, Math.sin(a) * 2.5);
+      }
+      this.emit({ t: 'burst', x: m.x, y: m.y, z: m.z });
+    }
     this.emit({ t: 'kill', x: m.x, y: m.y, z: m.z, type: m.type, drowned, eaten, splat: source === 'splat' });
     const who = this.anyCatName();
     if (source === 'trap' || source === 'splat') this.bark('trap', who); else if (source === 'cat') this.bark('kill', who);
@@ -419,8 +491,10 @@ export class Sim {
     cat.energy = Math.min(CAT.maxEnergy, cat.energy + def.energyRegen * mods.regen * DT);
     cat.attackT = Math.max(0, cat.attackT - DT); cat.secT = Math.max(0, cat.secT - DT); cat.eatT = Math.max(0, cat.eatT - DT);
 
+    // Knocked silly by a boss stomp: no moving or attacking until it wears off.
+    if (cat.stunT > 0) { cat.stunT -= DT; inp.primary = false; inp.secondary = false; inp.jump = false; }
     // Movement: snappy on the ground, partial in the air. Charging a leap slows you.
-    if (!cat.pouncing) {
+    if (!cat.pouncing && !(cat.stunT > 0)) {
       const sp = def.speed * mods.speed * (cat.charge > 0 ? 0.4 : 1);
       const k = cat.onGround ? 0.55 : def.airControl;   // quick but not instant: no ice-skating, no robot stops
       cat.vx += (inp.mx * sp - cat.vx) * k; cat.vz += (inp.mz * sp - cat.vz) * k;
@@ -563,7 +637,8 @@ export class Sim {
     this.emit({ t: 'pounceLand', x: cat.x, z: cat.z, y: cat.y });
     for (const m of this.nearMice(cat.x, cat.z, CAT.pounceRadius + 0.5)) {
       if (m.dead || Math.hypot(m.x - cat.x, m.z - cat.z) > CAT.pounceRadius || Math.abs(m.y - cat.y) > 1.2) continue;
-      m.stunT = MICE[m.type].boss ? CAT.pounceStun * 0.4 : CAT.pounceStun;
+      m.stunT = m.stunMax = MICE[m.type].boss ? CAT.pounceStun * 0.4 : CAT.pounceStun;
+      m.windT = 0;                                   // interrupts a boss stomp wind-up
       this.damageMouse(m, CAT.pounceDamage, 'splat');
     }
   }
@@ -709,8 +784,14 @@ export class Sim {
       this.emit({ t: 'msg', text: d.boss ? 'A boss got into the great hall!' : 'A mouse got into the great hall' });
       return;
     }
-    const flow = d.big ? this.flowBig : this.flow, pass = d.big ? this.passBig : this.passSmall;
+    const pass = d.big ? this.passBig : this.passSmall;
+    let flow = d.big ? this.flowBig : this.flow;
     if (i < 0 || !(flow[i] < Infinity)) { m.state = 'stranded'; return; }
+    // Follow the pack's lane choice until it's reached, then head straight for the hole.
+    if (!d.big && m.via >= 0) {
+      const vf = this.viaFlow[m.via];
+      if (!vf || !(vf[i] < Infinity) || vf[i] < 2) m.via = -1; else flow = vf;
+    }
 
     // Siege lobber: stops in range of a standing gate and lobs a rock at it.
     if (m.type === 'lobber' && this.gate.up && !m.lobbed) {
@@ -727,17 +808,53 @@ export class Sim {
       }
     }
 
+    // Nearest cat on (roughly) our level — what we fight.
+    let foe = null, foeD = Infinity;
+    for (const cat of this.cats.values()) {
+      if (!cat.alive || Math.abs(cat.y - m.y) > 1.2) continue;
+      const dd = Math.hypot(cat.x - m.x, cat.z - m.z);
+      if (dd < foeD) { foe = cat; foeD = dd; }
+    }
+
+    // Boss stomp: wind up (red ring warning), then slam — hurts, stuns and flings cats.
+    if (d.stomp) {
+      m.stompT -= DT;
+      if (m.windT > 0) {
+        m.windT -= DT;
+        if (m.windT <= 0) {
+          this.emit({ t: 'stomp', x: m.x, z: m.z, r: d.stomp.radius });
+          for (const cat of this.cats.values()) {
+            if (!cat.alive || cat.y > m.y + 1.5) continue;
+            const dx = cat.x - m.x, dz = cat.z - m.z, dd = Math.hypot(dx, dz) || 0.1;
+            if (dd > d.stomp.radius) continue;
+            this.hurtCat(cat, d.stomp.dmg);
+            cat.stunT = d.stomp.stun; cat.vx = dx / dd * d.stomp.fling; cat.vz = dz / dd * d.stomp.fling; cat.vy = 6; cat.onGround = false;
+          }
+        }
+        return;                                   // stands still while winding up
+      }
+      if (m.stompT <= 0 && foe && foeD < d.stomp.radius * 0.8) {
+        m.stompT = d.stomp.every; m.windT = 0.7;
+        this.emit({ t: 'stompWarn', id: m.id, x: m.x, z: m.z, r: d.stomp.radius });
+      }
+    }
+
+    // Plague rats spit at cats in range while they keep walking.
+    if (d.spit) {
+      m.spitT -= DT;
+      if (m.spitT <= 0 && foe && foeD < d.spit.range) {
+        m.spitT = d.spit.every;
+        const tf = foeD / d.spit.speed, ty = foe.y + 0.5;
+        this.globs.push({ id: this.nextId++, x: m.x, y: 0.5, z: m.z, vx: (foe.x + foe.vx * tf - m.x) / tf, vz: (foe.z + foe.vz * tf - m.z) / tf,
+          vy: (ty - 0.5 + 0.5 * GRAVITY * tf * tf) / tf, dmg: d.spit.dmg, t: 3 });
+        this.emit({ t: 'spit', x: m.x, z: m.z });
+      }
+    }
+
     // Bite any cat we bump into.
     m.biteT -= DT;
-    if (m.biteT <= 0) for (const cat of this.cats.values()) {
-      if (!cat.alive) continue;
-      if (Math.hypot(cat.x - m.x, cat.z - m.z) < d.size * 0.5 + cat.def.radius + 0.1 && Math.abs(cat.y - m.y) < 0.8) {
-        m.biteT = 1.0; const dmg = d.bite * this.mods.bite;
-        cat.hp -= dmg; cat.hurtT = 0.3; this.stats.damageTaken += dmg;
-        this.emit({ t: 'catHurt', id: cat.id });
-        if (cat.hp <= 0) this.killCat(cat, false);
-        break;
-      }
+    if (m.biteT <= 0 && foe && foeD < d.size * 0.5 + foe.def.radius + 0.15) {
+      m.biteT = 1.0; this.hurtCat(foe, d.bite * this.mods.bite);
     }
 
     // Neighbours: count packmates (strength in numbers) and push apart (collision).
@@ -751,37 +868,81 @@ export class Sim {
     }
     m.packed = packN >= RULES.packCount;
 
-    // Follow the flow field.
-    const n = nextCell(this.map, flow, i, pass, this.isBlocker);
-    if (n < 0) return;
-    const [cx, cz] = cellCenter(n);
-    const dx = cx - m.x, dz = cz - m.z, dist = Math.hypot(dx, dz) || 1;
-    if (this.isBlocker(n) && dist < 0.6) {
-      m.attackT -= DT;
-      if (m.attackT <= 0) {
-        m.attackT = 1.0;
-        // Re-path only when a blocker breaks (re-pathing on every bite would lag).
-        if (this.map.type[n] === T.GATE && this.gate.up) {
-          this.gate.hp -= d.gateDmg; this.emit({ t: 'gateHit' });
-          if (this.gate.hp <= 0) this.breakGate();
-        } else {
-          const b = this.isBarricade(n);
-          if (b) { b.hp -= d.gateDmg; this.emit({ t: 'barricadeHit', id: b.id }); if (b.hp <= 0) this.removeTrap(b); }
+    const ok = (x, z) => { const c = cellOf(x, z); return c >= 0 && pass(c) && !this.isBlocker(c); };
+    const sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * (m.packed ? RULES.packSpeed : 1);
+    let mx, mz;
+    if (foe && d.aggro && foeD < d.aggro && foe.onGround !== false) {
+      // Go for the cat. Stop at biting distance (no pushing into it).
+      const dx = foe.x - m.x, dz = foe.z - m.z, dd = foeD || 1, reach = d.size * 0.5 + foe.def.radius;
+      const go = dd > reach ? 1.15 : 0;
+      mx = dx / dd * go; mz = dz / dd * go; m.yaw = Math.atan2(dx, dz);
+    } else {
+      // Follow the flow field.
+      const n = nextCell(this.map, flow, i, pass, this.isBlocker);
+      if (n < 0) return;
+      const [cx, cz] = cellCenter(n);
+      const dx = cx - m.x, dz = cz - m.z, dist = Math.hypot(dx, dz) || 1;
+      if (this.isBlocker(n) && dist < 0.75) {
+        m.attackT -= DT;
+        if (m.attackT <= 0) {
+          m.attackT = 1.0;
+          // Re-path only when a blocker breaks (re-pathing on every bite would lag).
+          if (this.map.type[n] === T.GATE && this.gate.up) {
+            this.gate.hp -= d.gateDmg; this.emit({ t: 'gateHit' });
+            if (this.gate.hp <= 0) this.breakGate();
+          } else {
+            const b = this.isBarricade(n);
+            if (b) { b.hp -= d.gateDmg; this.emit({ t: 'barricadeHit', id: b.id }); if (b.hp <= 0) this.removeTrap(b); }
+          }
+        }
+        m.yaw = Math.atan2(dx, dz);
+        return;
+      }
+      // Heading = the flow's cell-to-cell direction (not "aim at the next cell centre",
+      // which funnels everyone into one file). Then steer sideways toward this mouse's
+      // lane across the corridor, measured by probing to the walls each side.
+      const [ix, iz] = cellCenter(i);
+      let fx = cx - ix, fz = cz - iz; const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
+      const px = -fz, pz = fx;
+      let dp = 0, dn = 0;
+      for (let k = 1; k <= 8; k++) { if (ok(m.x + px * k * 0.5, m.z + pz * k * 0.5)) dp = k * 0.5; else break; }
+      for (let k = 1; k <= 8; k++) { if (ok(m.x - px * k * 0.5, m.z - pz * k * 0.5)) dn = k * 0.5; else break; }
+      const half = (dp + dn) / 2, pos = (dn - dp) / 2;           // where we are across the corridor (+ = toward +perp)
+      const want = m.lane * Math.max(0, Math.min(half - r - 0.25, 3.5));
+      const lat = Math.max(-0.7, Math.min(0.7, (want - pos) * 1.2));
+      m.wander += DT * 2;
+      const wob = Math.sin(m.wander) * 0.12;
+      mx = fx + px * (lat + wob); mz = fz + pz * (lat + wob);
+      m.yaw = Math.atan2(fx, fz);
+    }
+    const ox = m.x, oz = m.z;
+    m.x += mx * sp * DT + sx; m.z += mz * sp * DT + sz;
+    // Walls: mice can't be shoved into solid tiles; slide along them instead.
+    if (!ok(m.x, m.z)) { if (ok(m.x, oz)) m.z = oz; else if (ok(ox, m.z)) m.x = ox; else { m.x = ox; m.z = oz; } }
+    m.y = 0;
+  }
+
+  // One place for "a mouse hurt a cat" (bites, spit, stomps).
+  hurtCat(cat, dmg) {
+    if (!cat.alive) return;
+    cat.hp -= dmg; cat.hurtT = 0.3; this.stats.damageTaken += dmg;
+    this.emit({ t: 'catHurt', id: cat.id });
+    if (cat.hp <= 0) this.killCat(cat, false);
+  }
+
+  // Plague spit: arcs at a cat, hurts on contact, splats on the floor.
+  stepGlobs() {
+    for (const g of this.globs) {
+      g.vy -= GRAVITY * DT; g.x += g.vx * DT; g.y += g.vy * DT; g.z += g.vz * DT; g.t -= DT;
+      for (const cat of this.cats.values()) {
+        if (cat.alive && Math.hypot(cat.x - g.x, cat.z - g.z) < cat.def.radius + 0.25 && g.y > cat.y - 0.2 && g.y < cat.y + cat.def.height + 0.2) {
+          this.hurtCat(cat, g.dmg); g.done = true; break;
         }
       }
-      return;
+      if (!g.done && (g.y <= this.colH(cellOf(g.x, g.z), false) || g.t <= 0)) g.done = true;
+      if (g.done) this.emit({ t: 'globSplat', x: g.x, y: Math.max(0, g.y), z: g.z });
     }
-    const sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * (m.packed ? RULES.packSpeed : 1);
-    // Small sideways wander so a mob spreads across the lane instead of a single file.
-    m.wander += DT * 2;
-    const wx = -dz / dist * Math.sin(m.wander) * 0.35, wz = dx / dist * Math.sin(m.wander) * 0.35;
-    const ox = m.x, oz = m.z;
-    m.x += (dx / dist + wx) * sp * DT + sx; m.z += (dz / dist + wz) * sp * DT + sz;
-    // Walls: mice can't be shoved into solid tiles; slide along them instead.
-    const ok = (x, z) => { const c = cellOf(x, z); return c >= 0 && pass(c) && !this.isBlocker(c); };
-    if (!ok(m.x, m.z)) { if (ok(m.x, oz)) m.z = oz; else if (ok(ox, m.z)) m.x = ox; else { m.x = ox; m.z = oz; } }
-    m.yaw = Math.atan2(dx, dz);
-    m.y = 0;
+    if (this.globs.some(g => g.done)) this.globs = this.globs.filter(g => !g.done);
   }
 
   breakGate() {
@@ -835,18 +996,26 @@ export class Sim {
     const mods = this.mods;
     const inRect = (b, tr, pad = 0.1) => b.x > tr.x0 - pad && b.x < tr.x1 + pad && b.z > tr.z0 - pad && b.z < tr.z1 + pad;
     const grounded = (m) => (m.state === 'walk' || m.state === 'stuck') && m.y < 0.3;
+    // Wall traps work on the strip of floor in front of them, `reach` units out from the wall.
+    const lane = (tr, reach) => {
+      const [wx, wz] = DIRS4[tr.wallDir], nx = -wx, nz = -wz;
+      return { x0: Math.min(tr.x0, tr.x0 + nx * reach), x1: Math.max(tr.x1, tr.x1 + nx * reach),
+               z0: Math.min(tr.z0, tr.z0 + nz * reach), z1: Math.max(tr.z1, tr.z1 + nz * reach), nx, nz };
+    };
+    const reset = (tr, secs) => { tr.cd = tr.cdMax = secs * mods.trapCd; };
     for (const tr of this.traps.values()) {
       tr.cd = Math.max(0, tr.cd - DT);
       const def = TRAPS[tr.kind];
       if (tr.kind === 'mousetrap' && tr.cd === 0) {
-        const m = this.mice.find(m => !m.dead && grounded(m) && inRect(m, tr, 0));
-        if (m) { tr.cd = def.cooldown * mods.trapCd; this.emit({ t: 'snap', id: tr.id }); this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); }
+        // Like a spike trap: snaps everything standing on the tile.
+        const vs = this.mice.filter(m => !m.dead && grounded(m) && inRect(m, tr, 0)).slice(0, def.maxHits);
+        if (vs.length) { reset(tr, def.cooldown); this.emit({ t: 'snap', id: tr.id }); for (const m of vs) this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); }
       } else if (tr.kind === 'flipper' && tr.cd === 0) {
         const [dx, dz] = DIRS4[ROT_DIR[tr.rot % 4]];
         const victims = this.mice.filter(m => !m.dead && grounded(m) && inRect(m, tr));
         const cats = [...this.cats.values()].filter(c => c.alive && c.onGround && c.y < 0.3 && inRect(c, tr, 0));
         if (victims.length || cats.length) {
-          tr.cd = def.cooldown * mods.trapCd; this.emit({ t: 'flip', id: tr.id });
+          reset(tr, def.cooldown); this.emit({ t: 'flip', id: tr.id });
           for (const m of victims) {
             const s = MICE[m.type].size, mul = Math.min(1, 0.5 / (s * s));   // bosses barely budge
             this.launch(m, dx * def.launchH * mul + (this.rng() - 0.5) * 2, def.launchV * mul * (0.85 + this.rng() * 0.3), dz * def.launchH * mul + (this.rng() - 0.5) * 2);
@@ -855,19 +1024,19 @@ export class Sim {
           for (const c of cats) { c.vx = dx * def.launchH; c.vz = dz * def.launchH; c.vy = def.launchV; c.onGround = false; }
         }
       } else if (tr.kind === 'grinder') {
-        let hit = false;
-        for (const m of this.mice) if (!m.dead && grounded(m) && inRect(m, tr)) { this.damageMouse(m, def.dps * mods.trapDmg * DT, 'trap'); hit = true; }
+        const L = lane(tr, def.reach); let hit = false;
+        for (const m of this.mice) if (!m.dead && grounded(m) && inRect(m, L, 0)) { this.damageMouse(m, def.dps * mods.trapDmg * DT, 'trap'); hit = true; }
         tr.active = hit;
       } else if (tr.kind === 'zapper' && tr.cd === 0) {
         const cx = (tr.x0 + tr.x1) / 2, cz = (tr.z0 + tr.z1) / 2;
         const vs = this.mice.filter(m => !m.dead && Math.hypot(m.x - cx, m.z - cz) < def.radius && m.y < 1);
-        if (vs.length) { tr.cd = def.cooldown * mods.trapCd; this.emit({ t: 'zap', id: tr.id, hits: vs.slice(0, 6).map(m => [m.x, m.z]) }); for (const m of vs) this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); }
+        if (vs.length) { reset(tr, def.cooldown); this.emit({ t: 'zap', id: tr.id, hits: vs.slice(0, 6).map(m => [m.x, m.z]) }); for (const m of vs) this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); }
       } else if (tr.kind === 'gluepad') {
-        if (tr.charges <= 0) { tr.rechargeT -= DT; if (tr.rechargeT <= 0) tr.charges = def.charges; continue; }
+        if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) tr.charges = def.charges; continue; }
         for (const m of this.mice) {
           if (m.dead || m.state !== 'walk' || m.glueId === tr.id || !inRect(m, tr, 0)) continue;
           m.state = 'stuck'; m.stuckT = def.stickSecs * (MICE[m.type].boss ? 0.4 : 1); m.glueId = tr.id;
-          if (--tr.charges <= 0) { tr.rechargeT = def.recharge * mods.trapCd; break; }
+          if (--tr.charges <= 0) { tr.rechargeT = tr.cdMax = def.recharge * mods.trapCd; break; }
         }
       } else if (tr.kind === 'tacks') {
         for (const m of this.mice) {
@@ -879,14 +1048,19 @@ export class Sim {
             this.damageMouse(m, def.damage * mods.trapDmg, 'trap');
           }
         }
-      } else if (tr.kind === 'hairdryer' && tr.cd === 0) {
-        const [wx, wz] = DIRS4[tr.wallDir], nx = -wx, nz = -wz;
-        const lane = { x0: Math.min(tr.x0, tr.x0 + nx * def.reach), x1: Math.max(tr.x1, tr.x1 + nx * def.reach),
-                       z0: Math.min(tr.z0, tr.z0 + nz * def.reach), z1: Math.max(tr.z1, tr.z1 + nz * def.reach) };
-        const vs = this.mice.filter(m => !m.dead && grounded(m) && inRect(m, lane, 0));
+      } else if (tr.kind === 'glove' && tr.cd === 0) {
+        // Spring-loaded boxing glove: punches small mice across the lane (into walls,
+        // water, other traps); big ones just get dazed.
+        const L = lane(tr, def.reach);
+        const vs = this.mice.filter(m => !m.dead && grounded(m) && inRect(m, L, 0));
         if (vs.length) {
-          tr.cd = def.cooldown * mods.trapCd; this.emit({ t: 'blow', id: tr.id });
-          for (const m of vs) { const s = MICE[m.type].size, mul = Math.min(1, 0.4 / (s * s)); this.launch(m, nx * def.push * mul, 3.5 * mul, nz * def.push * mul); }
+          reset(tr, def.cooldown); this.emit({ t: 'punch', id: tr.id });
+          for (const m of vs) {
+            const md = MICE[m.type];
+            this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); if (m.dead) continue;
+            if (md.boss || md.size >= 0.9) { m.stunT = m.stunMax = def.bigStun; continue; }
+            this.launch(m, L.nx * def.push, 4, L.nz * def.push);
+          }
         }
       }
     }

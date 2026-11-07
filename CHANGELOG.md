@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 — 2026-11-07
+Traps (Orcs Must Die footprints)
+- Every trap is now one tile = 4x4 cells (2x2 units, two cats wide); barricade is a full-tile, 1.4-tall block whose collision matches its model. Traps snap to half-tiles and nudge one cell to fit against walls. `src/config.js` 114-131; `src/main.js` 95-110; `src/sim/sim.js` 151-152.
+- Traps actually hit: mousetrap snaps everything on its tile (spike-trap style, up to 6); wall grinder reaches 2 units out from the wall. `src/sim/sim.js` 999-1063.
+- Hairdryer removed → Spring glove (wall, Tom & Jerry boxing glove): punches small mice across the lane, dazes big ones. Same files + `src/render/models.js` 195-207.
+- Reset cues: every trap has a lamp (green armed, red resetting) and its moving part animates the reset (mousetrap bar cranks back, flipper eases down, zapper glow refills, glove winds back in, glue fades by charges). `src/render/models.js` 118-207; `src/render/scene.js` 408-434.
+Mice
+- Lanes: mice follow the flow's direction and steer to their own spot across the corridor, so mobs fill the road instead of one file. `src/sim/sim.js` 871-919.
+- Route divergence: three lanes north of the courtyard (colonnade, guard passage, east lane). Each pack picks one weighted toward the cheapest; barricading a lane pushes mobs to the others. Floor arrows/radar show every live lane. `src/sim/map.js` 77-84; `src/sim/sim.js` 197-256; `src/render/scene.js` 206-217.
+- Mice fight: they turn off the route to go bite a nearby cat; plague rats spit at range while walking. `src/sim/sim.js` 811-857, 925-947.
+- New kinds: Splitter (bursts into 2 pups), Plague rat (ranged), Fat rat (huge, slow, bursts into 3 mice); speed/size tiers. Each new kind is introduced ALONE the first time with a "NEW:" message. `src/config.js` 96-111; `src/sim/waves.js` 7-54; `src/sim/sim.js` 465-497.
+- Wave-6 Rat captain: 2x bigger, faster, 900 HP, telegraphed stomp (red ring) that hurts, stuns and flings cats; King rat bigger again. Escort mob behind bosses, roar + camera shake. Bosses need wider clearance. `src/config.js` 104-111; `src/sim/map.js` 167-178; `src/sim/sim.js` 811-853; `src/render/scene.js` 267-295.
+Puddin
+- Pounce: radius 1.6 → 2.6, stun 1.8 → 3.0 s, damage 40 → 50; shockwave ring on landing; stunned mice show circling stars that shrink as the stun runs out. `src/config.js` 71-73; `src/sim/sim.js` 640-641; `src/render/scene.js` 194-195, 529-552.
+Tests
+- New checks for tile traps, grinder reach, lane spread, three-way routes, aggro bites, spit, splitter, intros, boss stomp, pounce stun timer (42 checks). `tests/sim-test.mjs`.
+
 ## 0.4.3 — 2026-11-07
 Fixed
 - Route arrows pointed backward (toward the entrances); they now point the way the mice run. `src/render/scene.js` buildRoute().
