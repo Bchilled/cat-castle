@@ -134,6 +134,7 @@ function start(mode) {
     keys.add(k);
     if (k === ' ') { jumpQ = true; jumpHeld = true; }
     if (e.key === 'Shift' && !e.repeat) altQ = true;   // Scary Cat: leap back
+    if (k === 'f') { scene.sniff = true; document.body.classList.add('sniffing'); }   // hold F: sense of smell
     const n = parseInt(k, 10);
     if (n >= 1 && n <= TRAP_ORDER.length) { const t = TRAP_ORDER[n - 1]; selected = selected === t ? null : t; sfx.play('click'); }
     if (k === 'm') { sfx.toggleMute(); showMute(); }
@@ -144,7 +145,8 @@ function start(mode) {
     if (k === 'g') net.send({ type: 'startWave', id: LOCAL_ID });
     if (k === 'h') document.getElementById('controls').classList.toggle('hidden');
   });
-  document.addEventListener('keyup', e => { const k = e.key.toLowerCase(); keys.delete(k); if (k === ' ') jumpHeld = false; });
+  document.addEventListener('keyup', e => {
+    if (e.key.toLowerCase() === 'f') { scene.sniff = false; document.body.classList.remove('sniffing'); } const k = e.key.toLowerCase(); keys.delete(k); if (k === ' ') jumpHeld = false; });
 
   // Turn the crosshair hit into a trap anchor + footprint.
   function placement() {

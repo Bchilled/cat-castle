@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.7.0';
+export const VERSION = '0.8.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -214,17 +214,18 @@ export const MICE = {
 // Costs are sardines. Selling refunds the full price (barricades: by health left).
 export const TILE = 4;
 export const TRAPS = {
-  barricade: { name: 'Toy Block', desc: "A child's alphabet block. Solid — mice must chew through or go round. Use them to choose the route.",     cost: 20,  surface: 'floor',   size: [4, 4], hp: 160, height: 1.4 },
+  barricade: { name: 'Poison Box', desc: "A crate of rat poison. Mice hate it: they only chew through if there's no other way, and the poison eats them while they do.", cost: 20, surface: 'floor', size: [4, 4], hp: 160, height: 1.4, poisonDps: 9 },
   mousetrap: { name: 'Snapper', desc: "A proper human mousetrap. Snaps everything standing on the tile, then cranks back.",     cost: 30,  surface: 'floor',   size: [4, 4], damage: 70, cooldown: 3, maxHits: 6, pathCost: 0 },   // OMD spike trap
   flipper:   { name: 'Flinger', desc: "Spring plate. Throws mice the way the arrow points — into walls, the moat, other traps. Splat.", cost: 60,  surface: 'floor',   size: [4, 4], cooldown: 3.5, launchH: 11, launchV: 14, launchDamage: 10, pathCost: 0 },
   grinder:   { name: 'Cheese Grater', desc: "Spinning grater on a wall. Shreds anything walking within a tile of it.",  cost: 80,  surface: 'wall',    size: [4, 1], dps: 45, reach: 2, pathCost: 0 },
   zapper:    { name: 'Bug Zapper', desc: "Hangs under roofs, tables and benches. Fries the whole crowd underneath.",    cost: 90,  surface: 'ceiling', size: [4, 4], damage: 35, cooldown: 2, radius: 2.4, pathCost: 0 },
   gluepad:   { name: 'Glue Trap', desc: "Sticks mice in place. Holds ten, then needs to dry before it works again.",      cost: 30,  surface: 'floor',   size: [4, 4], stickSecs: 2.5, charges: 10, recharge: 6, pathCost: 0 },   // OMD tar
   tacks:     { name: 'Thumbtacks', desc: "A carpet of tacks. Everyone crossing it bleeds.",    cost: 35,  surface: 'floor',   size: [4, 4], damage: 3, tick: 0.4, pathCost: 0 },                      // OMD briar
+  bait:      { name: 'Cheese Chunk', desc: 'A big lump of cheese. Mice nearby leave their route to nibble it, standing still on whatever traps you put around it.', cost: 25, surface: 'floor', size: [4, 4], lure: 6, nibbles: 30, eatSecs: 2.5, recharge: 12, pathCost: 0 },
   glove:     { name: 'Boxing Glove', desc: "Spring-loaded wall punch. Knocks small mice across the lane, dazes the big ones.",  cost: 70,  surface: 'wall',    size: [4, 1], cooldown: 3, reach: 4, push: 10, damage: 15, bigStun: 1.2, pathCost: 0 },   // OMD push trap
 };
 // Trap bar order = keys 1..8.
-export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove'];
+export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove', 'bait'];
 
 export const GATE = { hp: 60 };   // falls in a few bites, stays down once broken
 

@@ -134,6 +134,7 @@ export class Sim {
     this.cats = new Map();
     this.mice = [];
     this.traps = new Map();
+    this.baits = [];                    // Cheese Chunks (refreshed each tick in stepTraps)
     const N = W * H;
     this.occ = { floor: new Int32Array(N), wall: new Int32Array(N), ceiling: new Int32Array(N) };
     this.tails = []; this.loot = [];   // tails + trinkets lying on the ground
@@ -385,7 +386,7 @@ export class Sim {
     this.sardines -= def.cost;
     const xs = cells.map(i => i % W), zs = cells.map(i => (i / W) | 0);
     const tr = { id: this.nextId++, kind, cells, layer: def.surface, rot, wallDir, cd: 0, hp: def.hp || 0, maxHp: def.hp || 0,
-      cost: def.cost, charges: def.charges || 0, rechargeT: 0, cdMax: def.cooldown || 1,
+      cost: def.cost, charges: def.charges || def.nibbles || 0, rechargeT: 0, cdMax: def.cooldown || def.recharge || 1,
       x0: Math.min(...xs) * CELL, x1: (Math.max(...xs) + 1) * CELL, z0: Math.min(...zs) * CELL, z1: (Math.max(...zs) + 1) * CELL };
     for (const i of cells) this.occ[tr.layer][i] = tr.id;
     this.traps.set(tr.id, tr);
@@ -693,6 +694,17 @@ export class Sim {
       }
     }
     if (this.loot.some(l => l.taken)) this.loot = this.loot.filter(l => !l.taken);
+  }
+
+  // Nearest Cheese Chunk with cheese left, within its lure radius of this mouse.
+  nearestBait(m) {
+    let best = null, bd = Infinity;
+    for (const tr of this.baits) {
+      if (tr.charges <= 0) continue;
+      const dd = Math.hypot((tr.x0 + tr.x1) / 2 - m.x, (tr.z0 + tr.z1) / 2 - m.z);
+      if (dd < TRAPS.bait.lure && dd < bd) { bd = dd; best = tr; }
+    }
+    return best;
   }
 
   // Nebbie's purr makes every buffed cat hit harder.
@@ -1045,6 +1057,34 @@ export class Sim {
       m.yaw = Math.atan2(fx, fz);
       return;
     }
+    // Rat poison: a mouse that has chewed a Poison Box keeps taking damage while it chews
+    // (bosses are hardier). Wears off a second after it stops.
+    if (m.poisoned) {
+      m.poisonT = 1;
+      m.poisoned = false;
+    }
+    if (m.poisonT > 0) { m.poisonT -= DT; this.damageMouse(m, TRAPS.barricade.poisonDps * (d.boss ? 0.4 : 1) * this.mods.trapDmg * DT, 'poison'); if (m.dead) return; }
+    // Cheese Chunk: if one with cheese left is close, go and nibble it (not bosses, not if full).
+    if (!d.boss && !m.fed && !(m.baitIgnoreT > 0) && m.state === 'walk') {
+      const bait = this.nearestBait(m);
+      if (bait) {
+        const bx = (bait.x0 + bait.x1) / 2, bz = (bait.z0 + bait.z1) / 2, dx = bx - m.x, dz = bz - m.z, dd = Math.hypot(dx, dz);
+        m.yaw = Math.atan2(dx, dz);
+        if (dd < 1.1 + d.size * 0.3) {
+          m.eatT = (m.eatT || 0) + DT; bait.charges -= DT;
+          if (bait.charges <= 0) { bait.charges = 0; bait.rechargeT = bait.cdMax = TRAPS.bait.recharge; this.emit({ t: 'baitGone', id: bait.id }); }
+          if (m.eatT > TRAPS.bait.eatSecs) m.fed = true;      // full: back to the route
+          return;
+        }
+        const ox = m.x, oz = m.z, sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * DT;
+        const okb = (x, z) => { const c = cellOf(x, z); return c >= 0 && pass(c) && !this.isBlocker(c); };
+        const nx = m.x + dx / dd * sp, nz = m.z + dz / dd * sp;
+        if (okb(nx, nz)) { m.x = nx; m.z = nz; } else if (okb(nx, m.z)) m.x = nx; else if (okb(m.x, nz)) m.z = nz;
+        if (Math.hypot(m.x - ox, m.z - oz) < sp * 0.2) m.baitIgnoreT = 3;   // can't get there: forget it for a bit
+        return;
+      }
+    }
+    if (m.baitIgnoreT > 0) m.baitIgnoreT -= DT;
     // Follow the pack's lane choice until it's reached, then head straight for the hole.
     if (!d.big && m.via >= 0) {
       const vf = this.viaFlow[m.via];
@@ -1154,6 +1194,7 @@ export class Sim {
           } else {
             const b = this.isBarricade(n);
             if (b) { b.hp -= d.gateDmg; this.emit({ t: 'barricadeHit', id: b.id }); if (b.hp <= 0) this.removeTrap(b); }
+            m.poisoned = true;   // chewing a Poison Box: see the poison tick below
           }
         }
         m.yaw = Math.atan2(dx, dz);
@@ -1299,6 +1340,12 @@ export class Sim {
   // ---------- trap behaviour ----------
   stepTraps() {
     const mods = this.mods;
+    this.baits = [];
+    for (const tr of this.traps.values()) if (tr.kind === 'bait') {
+      // Eaten-out cheese grows back (well, someone restocks it) after a while.
+      if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) { tr.charges = TRAPS.bait.nibbles; tr.cd = 0; } }
+      this.baits.push(tr);
+    }
     const inRect = (b, tr, pad = 0.1) => b.x > tr.x0 - pad && b.x < tr.x1 + pad && b.z > tr.z0 - pad && b.z < tr.z1 + pad;
     const grounded = (m) => (m.state === 'walk' || m.state === 'stuck') && m.y < 0.3;
     // Wall traps work on the strip of floor in front of them, `reach` units out from the wall.

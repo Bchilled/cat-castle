@@ -206,18 +206,29 @@ export function makeTrap(kind, ghost = false) {
     l.position.set(x, y, z); add(l); g.userData.lamp = l;
   };
   if (kind === 'barricade') {
-    // A child's wooden alphabet block: solid, chunky, a full tile, painted letters on every side.
+    // Poison Box: a big cardboard crate of rat poison, a full tile, green labels with a
+    // skull and crossbones on every side, taped lid. Shrinks as it gets chewed.
     const H = 1.4;
-    B(0xc4a46a, 0, H / 2, 0, S * 0.98, H, S * 0.98);
-    const cols = [0xa8442e, 0x3e6a8a, 0x4f7a3a, 0xc08a20];
+    B(0xb89a6a, 0, H / 2, 0, S * 0.98, H, S * 0.98);
+    B(0xd8c8a0, 0, H + 0.005, 0, 0.3, 0.01, S * 0.98);                                     // tape on the lid
     for (let k = 0; k < 4; k++) {
-      const a = k * Math.PI / 2, face = new THREE.Group(); face.rotation.y = a; add(face);
-      const p = new THREE.Mesh(new THREE.PlaneGeometry(S * 0.8, H * 0.8), mat(cols[k])); p.position.set(0, H / 2, h * 0.98 + 0.01); face.add(p);
-      // A chunky letter shape in cream.
-      const l1 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, H * 0.55), mat(0xf0e4c8)); l1.position.set(-0.22, H / 2, h * 0.98 + 0.02); l1.rotation.z = -0.35; face.add(l1);
-      const l2 = l1.clone(); l2.position.x = 0.22; l2.rotation.z = 0.35; face.add(l2);
-      const l3 = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.12), mat(0xf0e4c8)); l3.position.set(0, H * 0.42, h * 0.98 + 0.02); face.add(l3);
+      const face = new THREE.Group(); face.rotation.y = k * Math.PI / 2; add(face);
+      const z = h * 0.98 + 0.01;
+      const lab = new THREE.Mesh(new THREE.PlaneGeometry(S * 0.78, H * 0.7), mat(0x3a8a3a)); lab.position.set(0, H / 2, z); face.add(lab);
+      const skull = new THREE.Mesh(new THREE.CircleGeometry(0.22, 12), mat(0xf0ece0)); skull.position.set(0, H * 0.58, z + 0.01); face.add(skull);
+      const jaw = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.12), mat(0xf0ece0)); jaw.position.set(0, H * 0.45, z + 0.01); face.add(jaw);
+      for (const ex of [-0.08, 0.08]) { const e = new THREE.Mesh(new THREE.CircleGeometry(0.055, 8), mat(0x1a1a1a)); e.position.set(ex, H * 0.6, z + 0.02); face.add(e); }
+      for (const r of [-0.7, 0.7]) { const bone = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.08), mat(0xf0ece0)); bone.position.set(0, H * 0.3, z + 0.01); bone.rotation.z = r; face.add(bone); }
     }
+  } else if (kind === 'bait') {
+    // Cheese Chunk: a big wedge of holey cheese on a board. Gets smaller as it's nibbled.
+    B(0x8a6a48, 0, 0.04, 0, S * 0.8, 0.08, S * 0.8);
+    const wedge = new THREE.Group(); wedge.position.y = 0.08; add(wedge); g.userData.cheese = wedge;
+    const geo = new THREE.CylinderGeometry(0.85, 0.85, 1.1, 3, 1); geo.rotateY(Math.PI);   // one flat face toward +z
+    wedge.add(part(geo, 0xf0c838, 0, 0.55, 0, 1, 1, 1, !ghost));
+    for (const [x, y, z, r] of [[0.2, 0.7, 0.42, 0.12], [-0.25, 0.35, 0.42, 0.09], [0.05, 0.25, 0.42, 0.07], [-0.1, 0.85, 0.42, 0.06]])
+      { const hole = new THREE.Mesh(new THREE.CircleGeometry(r, 8), mat(0xc89a20)); hole.position.set(x, y, z); wedge.add(hole); }
+    lamp(h - 0.15, 0.4, -h + 0.15);
   } else if (kind === 'mousetrap') {
     // A giant snap trap: wooden board, cheese on the trigger, a big kill bar on a hinge
     // across the middle. Armed: bar laid back. Fired: bar slammed flat. It cranks back while resetting.

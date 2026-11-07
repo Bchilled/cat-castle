@@ -233,7 +233,8 @@ export class Scene {
       }
       this.routeMesh.count = n; this.routeMesh.instanceMatrix.needsUpdate = true;
     }
-    this.routeMat.opacity = (this.sim.phase === 'build' ? 0.55 : 0.2) + Math.sin(now / 300) * 0.08;
+    this.routeMat.opacity = this.sniff ? 0.9 : (this.sim.phase === 'build' ? 0.55 : 0.2) + Math.sin(now / 300) * 0.08;
+    this.routeMat.depthTest = !this.sniff;   // sniffing: the routes show through walls
   }
 
   ensureCat(cat) {
@@ -277,6 +278,36 @@ export class Scene {
       this.scene.add(p); this.particles.push(p);
     }
   }
+  // Cat's sense of smell (hold F): every mouse leaves a scent trail. While sniffing,
+  // the last ~12 s of trails glow through walls, mice glow through walls, and the
+  // routes the mice will take light up. Trails are always recorded, only drawn when sniffing.
+  drawScent(dt, now) {
+    if (!this.scent) {
+      const N = 4000;
+      this.scent = { N, x: new Float32Array(N), z: new Float32Array(N), t: new Float64Array(N), head: 0, sampleT: 0 };
+      const geo = new THREE.CircleGeometry(0.22, 8); geo.rotateX(-Math.PI / 2);
+      const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
+      this.scentMesh = new THREE.InstancedMesh(geo, m, N); this.scentMesh.count = 0; this.scentMesh.frustumCulled = false; this.scentMesh.renderOrder = 5;
+      this.scentMesh.setColorAt(0, new THREE.Color(0)); this.scene.add(this.scentMesh);
+    }
+    const sc = this.scent;
+    sc.sampleT -= dt;
+    if (sc.sampleT <= 0) {
+      sc.sampleT = 0.35;
+      for (const m of this.sim.mice) { if (m.dead) continue; sc.x[sc.head] = m.x; sc.z[sc.head] = m.z; sc.t[sc.head] = now; sc.head = (sc.head + 1) % sc.N; }
+    }
+    const mice = this.mi;
+    for (const k of ['body', 'head', 'ear', 'tail', 'eyes']) { mice[k].material.depthTest = !this.sniff; mice[k].renderOrder = this.sniff ? 6 : 0; }
+    if (!this.sniff) { this.scentMesh.count = 0; return; }
+    const L = this._l, col = this._c; let n = 0;
+    for (let i = 0; i < sc.N; i++) {
+      const age = (now - sc.t[i]) / 12000; if (!sc.t[i] || age > 1) continue;
+      L.makeTranslation(sc.x[i], 0.06, sc.z[i]); this.scentMesh.setMatrixAt(n, L);
+      col.setRGB(0.35 * (1 - age), 0.9 * (1 - age), 0.3 * (1 - age)); this.scentMesh.setColorAt(n, col); n++;
+    }
+    this.scentMesh.count = n; this.scentMesh.instanceMatrix.needsUpdate = true; this.scentMesh.instanceColor.needsUpdate = true;
+  }
+
   // Flat ring on the floor: warn = pulsing danger zone; grow = shockwave expanding to r.
   ring(x, z, r, color, life, warn = false, grow = false, y = 0) {
     const m = new THREE.Mesh(new THREE.RingGeometry(warn ? 0 : r * 0.85, r, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
@@ -443,6 +474,7 @@ export class Scene {
       if (c.clawT > 0) { c.clawT -= dt; ud.legs[c.side & 1].rotation.x = -1.6 * Math.sin((1 - c.clawT / 0.15) * Math.PI); }
     }
     this.drawMice(dt, k, now);
+    this.drawScent(dt, now);
     this.syncSimple(sim.tails, this.tailMeshes, () => {
       const g = new THREE.Group(); const t = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.045, 0.6, 4), mat(0xc9a3a0)); t.rotation.z = Math.PI / 2; t.position.y = 0.05; g.add(t);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 12), new THREE.MeshBasicMaterial({ color: 0xe0b030, transparent: true, opacity: 0.6 })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.02; g.add(ring); return g;
@@ -464,7 +496,7 @@ export class Scene {
       const tr = sim.traps.get(ud.id); if (!tr) continue;
       const f = tr.cdMax > 0 ? Math.min(1, tr.cd / tr.cdMax) : 0;
       if (ud.lamp) {
-        const busy = tr.kind === 'gluepad' ? tr.charges <= 0 : tr.kind === 'grinder' ? false : tr.kind === 'tacks' ? false : f > 0;
+        const busy = tr.kind === 'gluepad' || tr.kind === 'bait' ? tr.charges <= 0 : tr.kind === 'grinder' ? false : tr.kind === 'tacks' ? false : f > 0;
         ud.lamp.material.color.setHex(busy ? 0xe0402a : 0x5ee06a);
         ud.lamp.scale.setScalar(busy ? 1 : 1 + Math.sin(now / 200) * 0.15);
       }
@@ -479,6 +511,7 @@ export class Scene {
       }
       if (ud.kind === 'gluepad') ud.goo.material.opacity = tr.charges > 0 ? 0.25 + 0.55 * tr.charges / TRAPS.gluepad.charges : 0.1;
       if (ud.kind === 'barricade') g.scale.y = 0.55 + 0.45 * (tr.hp / tr.maxHp);
+      if (ud.kind === 'bait') ud.cheese.scale.setScalar(Math.max(0.05, tr.charges / TRAPS.bait.nibbles));
     }
     // Warning/shockwave rings on the floor (boss stomps, pounce landings).
     this.rings = this.rings.filter(r => {

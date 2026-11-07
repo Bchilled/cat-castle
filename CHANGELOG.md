@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 — 2026-11-07
+Added
+- Poison Box replaces the Toy Block barricade: a crate of rat poison. Mice route around it if they possibly can; if forced to chew through, the poison hurts them every second they chew (bosses take 40%). `src/config.js` 217; `src/sim/sim.js` 1060-1066, 1197; `src/render/models.js` 209-221.
+- Cheese Chunk (trap 9, 25 sardines): mice within 6 units leave their route to nibble it for a few seconds, standing still on whatever you put around it. Shrinks as it's eaten, restocks after 12 s, lamp shows when it's empty. Bosses ignore it. `src/config.js` 224-228; `src/sim/sim.js` 699-709, 1067-1087, 1343-1348; `src/render/models.js` 223-231; `src/render/scene.js` 499, 514.
+- Sense of smell (hold F): every mouse leaves a scent trail; while sniffing, the last ~12 s of trails glow green, mice show through walls, and every route lights up through walls. `src/render/scene.js` 236-237, 281-310; `src/main.js` 137, 148-149; `index.html` 43-45.
+- ROADMAP.md: the big systems from Brent's notes (climbable furniture and infesting, more traps, unlock/upgrade shop with 2-choice specials, elements, items, smarter mice) with a suggested order and open questions.
+Tests: 67 checks, all passing.
+
 ## 0.7.0 — 2026-11-07
 New cats (6 total)
 - Scary Cat: scrawny beat-up black cat (55 HP). Tail Whip (long narrow line, hits 4), Hiss (arches up, mice in 5.5 units flee for ~2.5 s, bosses slowed), High Jump (highest in the game), Shift = Leap Back (backflip). `src/config.js` 80-104, 160-166; `src/sim/sim.js` 698-760, 1038-1047 (fear); `src/render/models.js` 116-140.

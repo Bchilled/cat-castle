@@ -40,6 +40,9 @@
   #pause .keys b { color: var(--ink); }
   .tip { color: var(--dim); font-size: 14px; min-height: 20px; margin-top: 14px; font-style: italic; }
   .quip { font-style: italic; }
+  /* Hold F to sniff: the world dims, scent trails glow green. */
+  body.sniffing canvas { filter: brightness(0.7) contrast(1.15); }
+  body.sniffing::after { content: "sniffing…"; position: fixed; top: 46%; left: 50%; transform: translateX(-50%); color: #9af08a; font-size: 13px; letter-spacing: 3px; pointer-events: none; }
   #me b { color: var(--accent); }
   /* Whisker crosshair */
   #crosshair { position: fixed; top: 50%; left: 50%; width: 120px; height: 44px; margin: -22px -60px; pointer-events: none; }
@@ -129,7 +132,7 @@
   <b>Left click</b> attack (hold) · <b>Right click</b> ability, or place the held trap<br>
   <b>Space</b> jump (each cat's is different) · <b>Shift</b> Scary Cat's leap back<br>
   <b>1–8</b> pick trap · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away<br>
-  <b>E</b> trade tails at a stash · <b>G</b> next wave<br>
+  <b>E</b> trade tails at a stash · <b>G</b> next wave · <b>F</b> (hold) sniff out mice<br>
   <b>M</b> sound on/off · <b>Esc</b> pause · <b>H</b> hide this
 </div>
 <div id="prompt"></div>
@@ -160,7 +163,7 @@
   <button id="mute">Mute</button>
   <div class="keys">
     <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom · <b>Left click</b> attack · <b>Right click</b> ability / place trap<br>
-    <b>Space</b> jump · <b>1–8</b> traps · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away · <b>E</b> trade tails · <b>G</b> next wave · <b>M</b> mute
+    <b>Space</b> jump · <b>1–8</b> traps · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away · <b>E</b> trade tails · <b>G</b> next wave · <b>F</b> sniff · <b>M</b> mute
   </div>
   <button id="quit">Quit to menu</button>
 </div>

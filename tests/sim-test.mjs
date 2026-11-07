@@ -1,5 +1,6 @@
 // Headless rules tests: runs the sim with no graphics.
 // Run: node tests/sim-test.mjs
+import { TRAPS } from '../src/config.js';
 import { Sim } from '../src/sim/sim.js';
 import { W, CELL, idx, STALLS } from '../src/sim/map.js';
 import { nextCell } from '../src/sim/path.js';
@@ -293,5 +294,21 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   const t = new Sim({ seed: 62 }); t.addPlayer('p1', 'meow'); const c = t.cats.get('p1'); c.x = 48; c.z = 48; t.step(); let jumps = 0;
   for (let k = 0; k < 4; k++) { t.command({ type: 'input', id: 'p1', mx: 0, mz: 0, yaw: 0, jump: true }); const ev = []; for (let i = 0; i < 6; i++) { t.step(); ev.push(...t.events); t.events.length = 0; } if (ev.some(e => e.t === 'jump')) jumps++; }
   ok(jumps === 3, `triple jump (${jumps} jumps before landing)`);
+}
+// 25. Poison Box hurts the mice that chew it; Cheese Chunk lures mice off their route.
+{
+  const s = new Sim({ seed: 71 }); s.addPlayer('p1'); s.sardines = 1e6; s.gate.up = false; s.flowDirty = true;
+  // A mouse that bites a Poison Box gets poisoned and keeps losing health while it chews.
+  s.spawnMouse('tank', 1); const m = s.mice[0]; m.x = 48; m.z = 70;
+  for (let t = 0; t < TICK_HZ * 3; t++) { m.poisoned = true; s.buildMouseGrid(); s.stepMouse(m); }
+  ok(m.hp < m.maxHp - 20, `chewing a Poison Box poisons the mouse (hp ${Math.round(m.hp)}/${m.maxHp} after 3 s)`);
+  const s2 = new Sim({ seed: 72 }); s2.addPlayer('p1'); s2.sardines = 1e6; s2.gate.up = false; s2.flowDirty = true;
+  s2.command({ type: 'place', id: 'p1', trap: 'bait', ax: q(62), az: q(50) });
+  const bait = [...s2.traps.values()][0];
+  ok(bait && bait.kind === 'bait' && bait.charges > 0, 'Cheese Chunk placed with cheese on it');
+  s2.spawnMouse('mouse', 1); const mm = s2.mice[0]; mm.x = 59; mm.z = 51;
+  run(s2, 2.5, () => {});
+  ok(Math.hypot(mm.x - 63, mm.z - 51) < 2, `mouse walked over to the cheese (${Math.hypot(mm.x - 63, mm.z - 51).toFixed(1)} away)`);
+  ok(bait.charges < TRAPS.bait.nibbles, 'and is nibbling it');
 }
 process.exit(fails ? 1 : 0);
