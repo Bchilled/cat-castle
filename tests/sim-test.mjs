@@ -224,4 +224,74 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   s.pounceLand(cat);
   ok(m.dead || (m.stunT >= 2.9 && m.stunMax === m.stunT), `pounce stun ${m.stunT.toFixed(1)} s with timer`);
 }
+// 21. Scary Cat: whip hits a line of mice far ahead; hiss scatters; leap back goes backwards; jumps highest.
+{
+  const s = new Sim({ seed: 31 }); s.addPlayer('p1', 'scary'); const cat = s.cats.get('p1'); cat.x = 48; cat.z = 48; cat.yaw = 0;
+  for (const dz of [1.2, 2.2, 3.2]) { s.spawnMouse('mouse', 1); const m = s.mice[s.mice.length - 1]; m.x = 48; m.z = 48 + dz; }
+  s.spawnMouse('mouse', 1); const side = s.mice[3]; side.x = 50; side.z = 49;   // off to the side: not hit
+  s.buildMouseGrid(); s.whip(cat);
+  ok(s.mice.slice(0, 3).every(m => m.hp < m.maxHp) && side.hp === side.maxHp, 'tail whip hits 3 mice in a line out to 3.2 units, not one to the side');
+  const s2 = new Sim({ seed: 32 }); s2.addPlayer('p1', 'scary'); const c2 = s2.cats.get('p1'); c2.x = 48; c2.z = 48;
+  for (let k = 0; k < 6; k++) { s2.spawnMouse('mouse', 1); const m = s2.mice[k]; m.x = 48 + Math.cos(k) * 2; m.z = 48 + Math.sin(k) * 2; }
+  s2.buildMouseGrid(); s2.hiss(c2);
+  const before = s2.mice.map(m => Math.hypot(m.x - 48, m.z - 48));
+  for (let t = 0; t < 30; t++) { s2.buildMouseGrid(); for (const m of s2.mice) s2.stepMouse(m); }
+  const after = s2.mice.map(m => Math.hypot(m.x - 48, m.z - 48));
+  ok(after.every((d, k) => d > before[k] + 1), 'hiss makes every mouse run away');
+  const s3 = new Sim({ seed: 33 }); s3.addPlayer('p1', 'scary'); const c3 = s3.cats.get('p1'); c3.x = 58; c3.z = 52; s3.step();
+  const z0 = c3.z; s3.command({ type: 'input', id: 'p1', mx: 0, mz: 0, yaw: 0, alt: true }); run(s3, 0.6, () => inp(s3, 'p1', { yaw: 0 }));
+  ok(c3.z < z0 - 3, `leap back moves her backwards (${(z0 - c3.z).toFixed(1)} units)`);
+  const peak = (kind) => { const t = new Sim({ seed: 34 }); t.addPlayer('p1', kind); const c = t.cats.get('p1'); c.x = 48; c.z = 48; t.step(); let top = 0;
+    t.command({ type: 'input', id: 'p1', mx: 0, mz: 0, yaw: 0, jump: true }); for (let i = 0; i < 40; i++) { t.step(); top = Math.max(top, c.y); } return top; };
+  ok(peak('scary') > peak('fred') + 1, `Scary Cat jumps higher (${peak('scary').toFixed(1)} vs Fred ${peak('fred').toFixed(1)})`);
+}
+// 22. Nebbie: whiskers pierce, purr heals + buffs, dodges.
+{
+  const s = new Sim({ seed: 41 }); s.addPlayer('p1', 'nebbie'); const cat = s.cats.get('p1'); cat.x = 48; cat.z = 48; cat.yaw = 0;
+  for (const dz of [2, 3, 4]) { s.spawnMouse('mouse', 1); const m = s.mice[s.mice.length - 1]; m.x = 48; m.z = 48 + dz; m.state = 'stuck'; m.stuckT = 99; }
+  s.fireWhisker(cat, { aim: { x: 48, y: cat.y + 0.7, z: 60 } });
+  for (let t = 0; t < 15; t++) { s.buildMouseGrid(); s.stepMissiles(); }
+  ok(s.mice.filter(m => m.hp < m.maxHp).length === 3, 'one whisker dart pierces 3 mice');
+  cat.hp = 20; s.purr(cat); for (let t = 0; t < 30 * 5; t++) s.stepCat(cat);
+  ok(cat.hp > 20 + 75 * 0.25, `purr heals over time (hp ${Math.round(cat.hp)})`);
+  const s2 = new Sim({ seed: 42 }); s2.addPlayer('p1', 'nebbie'); const n = s2.cats.get('p1'); let missed = 0;
+  for (let k = 0; k < 200; k++) { n.hp = 75; if (!s2.hurtCat(n, 1)) missed++; }
+  ok(missed > 40 && missed < 80, `Nebbie dodges about 30% (${missed}/200)`);
+}
+// 23. Casper: rage builds and boosts damage; mice target him first; leap strike.
+{
+  const s = new Sim({ seed: 51 }); s.addPlayer('p1', 'casper'); const cat = s.cats.get('p1'); cat.x = 48; cat.z = 48; cat.yaw = 0;
+  s.spawnMouse('tank', 5); const m = s.mice[0]; m.x = 48; m.z = 49; m.state = 'stuck'; m.stuckT = 99;
+  s.buildMouseGrid(); s.claw(cat); const hit1 = m.maxHp - m.hp;
+  for (let k = 0; k < 10; k++) { s.buildMouseGrid(); s.claw(cat); }
+  const hp0 = m.hp; s.claw(cat); const hitN = hp0 - m.hp;
+  ok(cat.rage > 50 && hitN > hit1 * 1.5, `rage ${Math.round(cat.rage)} makes claws hit harder (${hit1.toFixed(0)} -> ${hitN.toFixed(0)})`);
+  const s2 = new Sim({ seed: 52 }); s2.addPlayer('fred', 'fred'); s2.addPlayer('casper', 'casper');
+  const f = s2.cats.get('fred'), c = s2.cats.get('casper'); f.x = 20; f.z = 110; c.x = 23; c.z = 110;
+  s2.spawnMouse('mouse', 1, 1, 0); const mm = s2.mice[0]; mm.x = 21; mm.z = 112;
+  run(s2, 1.5, () => { inp(s2, 'fred'); inp(s2, 'casper'); });
+  ok(Math.hypot(mm.x - c.x, mm.z - c.z) < Math.hypot(mm.x - f.x, mm.z - f.z), 'mice go for Casper over a closer cat');
+  const s3 = new Sim({ seed: 53 }); s3.addPlayer('p1', 'casper'); const c3 = s3.cats.get('p1'); c3.x = 48; c3.z = 48; s3.step();
+  s3.command({ type: 'input', id: 'p1', mx: 0, mz: 0, yaw: 0, jump: true }); for (let i = 0; i < 6; i++) { s3.step(); inp(s3, 'p1', { yaw: 0 }); }
+  s3.command({ type: 'input', id: 'p1', mx: 0, mz: 0, yaw: 0, jump: true }); const ev = run(s3, 1.2, () => inp(s3, 'p1', { yaw: 0 }));
+  ok(c3.z > 51 && ev.some(e => e.t === 'strike'), `leap strike carries him forward and lands a hit (${(c3.z - 48).toFixed(1)} units)`);
+}
+// 24. Meow Meow: burrs send a mouse to sleep, damage wakes it, yawn knocks out a crowd, naps heal, triple jump.
+{
+  const s = new Sim({ seed: 61 }); s.addPlayer('p1', 'meow'); const cat = s.cats.get('p1'); cat.x = 48; cat.z = 48; cat.yaw = 0;
+  s.spawnMouse('tank', 5); const m = s.mice[0]; m.x = 48; m.z = 52; m.state = 'stuck'; m.stuckT = 99;
+  for (let k = 0; k < 4; k++) { s.fireBurr(cat, { aim: { x: 48, y: 0.3, z: 52 } }); for (let t = 0; t < 30; t++) { s.buildMouseGrid(); s.stepMissiles(); } }
+  ok(m.asleep && m.stunT > 0, '4 burrs put a mouse to sleep');
+  s.damageMouse(m, 1, 'trap'); ok(!m.asleep && m.stunT === 0, 'damage wakes it up');
+  for (let k = 0; k < 5; k++) { s.spawnMouse('mouse', 1); const q2 = s.mice[s.mice.length - 1]; q2.x = 48 + k * 0.5; q2.z = 50; }
+  s.buildMouseGrid(); s.yawn(cat);
+  ok(s.mice.slice(1).every(q2 => q2.asleep), 'big yawn puts the crowd to sleep');
+  ok(cat.buffT > 0, 'yawn buffs her');
+  const sn = new Sim({ seed: 63 }); sn.addPlayer('p1', 'meow'); const cn = sn.cats.get('p1'); cn.hp = 30;
+  run(sn, 4, () => inp(sn, 'p1'));
+  ok(cn.napping && cn.hp > 40, `stands still -> naps and heals (hp ${Math.round(cn.hp)})`);
+  const t = new Sim({ seed: 62 }); t.addPlayer('p1', 'meow'); const c = t.cats.get('p1'); c.x = 48; c.z = 48; t.step(); let jumps = 0;
+  for (let k = 0; k < 4; k++) { t.command({ type: 'input', id: 'p1', mx: 0, mz: 0, yaw: 0, jump: true }); const ev = []; for (let i = 0; i < 6; i++) { t.step(); ev.push(...t.events); t.events.length = 0; } if (ev.some(e => e.t === 'jump')) jumps++; }
+  ok(jumps === 3, `triple jump (${jumps} jumps before landing)`);
+}
 process.exit(fails ? 1 : 0);

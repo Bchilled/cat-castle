@@ -1,6 +1,8 @@
 // main.js — wires input -> commands -> sim (fixed tick) -> renderer + HUD.
 
-import { DT, TRAPS, TRAP_ORDER, MICE } from './config.js';
+import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER } from './config.js';
+import { CAT_INFO } from './ui/catinfo.js';
+import { portraitURL } from './ui/portraits.js';
 import { Sfx } from './audio/sfx.js';
 import { Sim } from './sim/sim.js';
 import { W, CELL } from './sim/map.js';
@@ -38,26 +40,43 @@ const TIPS = [
 ];
 { let k = Math.floor(Math.random() * TIPS.length); const show = () => { const el = document.getElementById('tip'); if (el) el.textContent = 'Tip: ' + TIPS[k++ % TIPS.length]; }; show(); setInterval(show, 6000); }
 document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn`;
-let chosenCat = 'fred';
-document.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => {
-  chosenCat = b.dataset.cat; sfx.unlock(); sfx.play('click');
-  document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('picked', x === b));
-}));
-document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { previewOn = false; start(b.dataset.mode); }));
-
-// Splash: each cat turning slowly on its card.
-let previewOn = true;
-document.querySelectorAll('.catview').forEach(cv => {
+// Cat select: a grid of portraits, and a detail panel with the chosen cat turning in 3D.
+let chosenCat = CAT_ORDER.includes(localStorage.getItem('catcastle.cat')) ? localStorage.getItem('catcastle.cat') : 'fred';
+const catsEl = document.getElementById('cats');
+catsEl.innerHTML = CAT_ORDER.map(k => `<button class="catpick" data-cat="${k}"><img src="${portraitURL(k)}" alt=""><b>${CATS[k].name}</b><small>${CAT_INFO[k].role}</small></button>`).join('');
+let previewOn = true, previewCat = null;
+const pv = (() => {
+  const cv = document.getElementById('catview');
   const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
   const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffe8d0, 0x3a2a1c, 2)); const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(2, 3, 2); sc.add(dl);
   const cam = new THREE.PerspectiveCamera(35, cv.width / cv.height, 0.1, 50);
-  const cat = makeCat(cv.dataset.kind); sc.add(cat);
-  if (cat.userData.reach) cat.userData.reach.visible = false;   // no bite cone on the menu
-  const big = cv.dataset.kind === 'puddin';
-  cam.position.set(0, big ? 1.4 : 1.1, big ? 4.6 : 3.6); cam.lookAt(0, big ? 0.7 : 0.55, 0);
-  const tick = (t) => { if (!previewOn) { r.dispose(); return; } cat.rotation.y = t / 1600; cat.userData.tail.rotation.z = Math.sin(t / 400) * 0.3; r.render(sc, cam); requestAnimationFrame(tick); };
+  const tick = (t) => {
+    if (!previewOn) { r.dispose(); return; }
+    if (previewCat) { previewCat.rotation.y = t / 1600; previewCat.userData.tail.rotation.z = Math.sin(t / 400) * 0.3; }
+    r.render(sc, cam); requestAnimationFrame(tick);
+  };
   requestAnimationFrame(tick);
-});
+  return { show(kind) {
+    if (previewCat) sc.remove(previewCat);
+    previewCat = makeCat(kind); sc.add(previewCat);
+    if (previewCat.userData.reach) previewCat.userData.reach.visible = false;   // no attack markers on the menu
+    if (previewCat.userData.rage) previewCat.userData.rage.visible = false;
+    const big = kind === 'puddin';
+    cam.position.set(0, big ? 1.4 : 1.1, big ? 4.6 : 3.6); cam.lookAt(0, big ? 0.7 : 0.55, 0);
+  } };
+})();
+function pickCat(k) {
+  chosenCat = k; try { localStorage.setItem('catcastle.cat', k); } catch { /* private window */ }
+  document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('picked', x.dataset.cat === k));
+  const d = CATS[k], info = CAT_INFO[k];
+  document.getElementById('catdetail').innerHTML = `<h2>${d.name}</h2><p>${info.blurb}</p>` +
+    info.abil.map(([key, name, note]) => `<div class="ab-row"><i>${key}</i> <b>${name}</b> — ${note}</div>`).join('') +
+    `<div class="stats">Health ${d.maxHp} · Speed ${d.speed}</div>`;
+  pv.show(k);
+}
+document.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => { sfx.unlock(); sfx.play('click'); pickCat(b.dataset.cat); }));
+pickCat(chosenCat);
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { previewOn = false; start(b.dataset.mode); }));
 
 function start(mode) {
   document.getElementById('menu').classList.remove('show');
@@ -72,7 +91,7 @@ function start(mode) {
   // ---------- input ----------
   const keys = new Set();
   let yaw = Math.PI, pitch = 0.3;
-  let attackHeld = false, jumpQ = false, jumpHeld = false, secondaryQ = false;
+  let attackHeld = false, jumpQ = false, jumpHeld = false, secondaryQ = false, altQ = false;
   let selected = null, rot = 0, aim = null;
   canvas.addEventListener('click', () => { if (document.pointerLockElement !== canvas) canvas.requestPointerLock(); });
   // Pause: losing the mouse (Esc) pauses the game and shows volume + controls.
@@ -114,6 +133,7 @@ function start(mode) {
     if (e.repeat) return;
     keys.add(k);
     if (k === ' ') { jumpQ = true; jumpHeld = true; }
+    if (e.key === 'Shift' && !e.repeat) altQ = true;   // Scary Cat: leap back
     const n = parseInt(k, 10);
     if (n >= 1 && n <= TRAP_ORDER.length) { const t = TRAP_ORDER[n - 1]; selected = selected === t ? null : t; sfx.play('click'); }
     if (k === 'm') { sfx.toggleMute(); showMute(); }
@@ -169,8 +189,8 @@ function start(mode) {
     let face = yaw;
     const me = sim.cats.get(LOCAL_ID);
     if (a && me && Math.hypot(a.x - me.x, a.z - me.z) > 0.8) face = Math.atan2(a.x - me.x, a.z - me.z);
-    net.send({ type: 'input', id: LOCAL_ID, mx, mz, yaw: face, pitch, jump: jumpQ, jumpHeld, primary: attackHeld && !selected, secondary: secondaryQ, aim: a });
-    jumpQ = secondaryQ = false;
+    net.send({ type: 'input', id: LOCAL_ID, mx, mz, yaw: face, pitch, jump: jumpQ, jumpHeld, primary: attackHeld && !selected, secondary: secondaryQ, alt: altQ, aim: a });
+    jumpQ = secondaryQ = altQ = false;
   }
 
   // ---------- loop ----------
@@ -202,7 +222,8 @@ function start(mode) {
       case 'waveClear': sfx.play('waveClear'); break;
       case 'msg': if (e.text.startsWith('NEW:')) sfx.play('intro'); break;
       case 'end': sfx.play(e.won ? 'win' : 'lose'); sfx.setMusic('menu'); break;
-      case 'slam': sfx.play('pounceLand', x, z); break;
+      case 'slam': case 'strike': sfx.play('pounceLand', x, z); break;
+      case 'leapback': sfx.play('leap', x, z); break;
       case 'bossRoar': sfx.play('bossRoar', undefined, undefined, { vol: 0.9 }); break;
       default: sfx.play(e.t, x, z, e);   // names that match a sound directly (snap, flip, zap, splat, ...)
     }

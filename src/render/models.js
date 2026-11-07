@@ -113,7 +113,79 @@ export function makePuddin() {
   for (const k of [-1, 1]) { const ruff = part(new THREE.ConeGeometry(0.1 * s, 0.25 * s, 4), 0xfaf6ee, k * 0.28 * s, -0.12 * s, 0, 1, 1, 1, false); ruff.rotation.z = k * 1.9; head.add(ruff); }
   return g;
 }
-export const makeCat = (kind) => kind === 'puddin' ? makePuddin() : makeFred();
+// Scary Cat: scrawny, beat-up black cat. Thin body, torn ears, a scar over one
+// eye, mangy grey patches, ribs showing, a long thin kinked tail (it's her whip).
+export function makeScary() {
+  const s = 0.82;
+  const g = catRig({ reach: 0, scale: s, girth: 0.56, base: 0x1d1b1e, head: 0x232026, muzzle: 0x35303a, eye: 0xc8e030, chewedEar: true,
+    tailFluff: 0.55, tail: 0x1d1b1e, tailTip: 0x2a262c, legs: 0x1d1b1e, paw: 0x2a262c, ear: 0x2a262c });
+  const b = g.userData.body, head = g.userData.head;
+  for (let i = 0; i < 4; i++) b.add(box(0x3a363e, 0.13 * s, 0.42 * s, 0.2 * s - i * 0.09 * s, 0.03, 0.2 * s, 0.025, false));   // ribs showing
+  b.add(part(new THREE.IcosahedronGeometry(0.1, 0), 0x4a454e, -0.12 * s, 0.68 * s, -0.25 * s, 1.2, 0.5, 1.5, false));         // mangy patch
+  b.add(part(new THREE.IcosahedronGeometry(0.07, 0), 0x4a454e, 0.1 * s, 0.6 * s, 0.25 * s, 1, 0.5, 1.2, false));
+  for (let k = 0; k < 5; k++) { const sp = part(new THREE.ConeGeometry(0.035, 0.14, 3), 0x1d1b1e, 0, 0.82 * s, (0.25 - k * 0.13) * s, 1, 1, 1, false); sp.rotation.x = -0.3; b.add(sp); }   // spiky spine fur
+  const scar = box(0xb07a80, -0.12 * s, 0.07 * s, 0.32 * s, 0.025, 0.2 * s, 0.02, false); scar.rotation.z = 0.35; head.add(scar);
+  // Her tail is long: add a third, thin segment with a kink.
+  const t3 = part(cyl(0.025, 0.035, 0.42 * s, 4), 0x1d1b1e, 0, 0.82 * s, -0.08 * s, 1, 1, 1, false); t3.rotation.x = -0.5; t3.rotation.z = 0.4; g.userData.tail.add(t3);
+  // Whip reach: a long thin strip on the floor straight ahead.
+  const strip = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 3.0), new THREE.MeshBasicMaterial({ color: 0xc8e030, transparent: true, opacity: 0.15, depthWrite: false }));
+  strip.rotation.x = -Math.PI / 2; strip.position.set(0, 0.03, 0.6 + 1.5); g.add(strip); g.userData.reach = strip;
+  return g;
+}
+
+// Nebbie: sleek, clever grey cat. Slim and elegant, pale chest blaze, sharp blue
+// eyes, extra-long whiskers (she shoots them) and a smart blue collar with a tag.
+export function makeNebbie() {
+  const s = 0.86;
+  const g = catRig({ reach: 0, scale: s, girth: 0.64, base: 0x8a9199, head: 0x959ca4, muzzle: 0xdfe3e7, eye: 0x3ab0f0,
+    tailFluff: 0.8, tail: 0x8a9199, tailTip: 0x6a7179, legs: 0x8a9199, paw: 0xdfe3e7, ear: 0x7a8189 });
+  const b = g.userData.body, head = g.userData.head;
+  b.add(part(new THREE.IcosahedronGeometry(0.16, 0), 0xdfe3e7, 0, 0.45 * s, 0.42 * s, 0.9, 1.1, 0.6, false));   // chest blaze
+  for (let i = 0; i < 3; i++) b.add(box(0x6a7179, 0, 0.75 * s, (0.1 - i * 0.18) * s, 0.3 * s, 0.03, 0.05, false)); // faint stripes
+  const collar = part(new THREE.TorusGeometry(0.2 * s, 0.035, 5, 12), 0x2a6ab0, 0, 0.72 * s, 0.42 * s, 1, 1, 1, false); collar.rotation.x = 1.2; b.add(collar);
+  const tag = part(new THREE.CylinderGeometry(0.05, 0.05, 0.02, 8), 0xd8d8e0, 0, 0.56 * s, 0.6 * s, 1, 1, 1, false); tag.rotation.x = 1.4; b.add(tag);
+  for (const k of [-1, 1]) for (const y of [-0.06, -0.1]) {
+    const w = box(0xf4f4f4, k * 0.25 * s, y * s, 0.3 * s, 0.32 * s, 0.008, 0.008, false); w.rotation.z = k * (y + 0.08) * 2; head.add(w);   // long whiskers
+  }
+  return g;
+}
+
+// Casper: pure-white pedigree show cat. Fluffy ruff, odd eyes (blue and gold),
+// gold collar with a red gem. Red glow under him shows his rage.
+export function makeCasper() {
+  const s = 0.95;
+  const g = catRig({ reach: 1.5, scale: s, girth: 0.82, base: 0xf6f4f0, head: 0xfaf8f4, muzzle: 0xffffff, eye: 0x3a90f0,
+    tailFluff: 1.8, tail: 0xf6f4f0, tailTip: 0xffffff, legs: 0xf6f4f0, paw: 0xffffff, ear: 0xf0dcdc });
+  const b = g.userData.body, head = g.userData.head;
+  head.add(box(0xe0b020, 0.12 * s, 0.06 * s, 0.31 * s, 0.09 * s, 0.05 * s, 0.03 * s, false));   // gold right eye (odd-eyed)
+  for (let k = 0; k < 10; k++) {
+    const a = k / 10 * Math.PI * 2;
+    const tuft = part(new THREE.ConeGeometry(0.06 * s, 0.2 * s, 4), 0xffffff, Math.cos(a) * 0.3 * s, 0.45 * s, 0.38 * s + Math.sin(a) * 0.1 * s, 1, 1, 1, false);
+    tuft.rotation.z = Math.cos(a) * 1.2; tuft.rotation.x = 0.5; b.add(tuft);                 // show-cat ruff
+  }
+  const collar = part(new THREE.TorusGeometry(0.21 * s, 0.035, 5, 12), 0xd8a820, 0, 0.74 * s, 0.42 * s, 1, 1, 1, false); collar.rotation.x = 1.2; b.add(collar);
+  b.add(part(new THREE.OctahedronGeometry(0.05, 0), 0xd02030, 0, 0.58 * s, 0.6 * s, 1, 1, 1, false));   // ruby
+  const rage = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0, depthWrite: false }));
+  rage.rotation.x = -Math.PI / 2; rage.position.y = 0.04; g.add(rage); g.userData.rage = rage;
+  return g;
+}
+
+// Meow Meow: friendly grey outdoor cat with a white beard and chest, warm amber
+// eyes, tabby stripes, scruffy cheek tufts and a leaf stuck behind one ear.
+export function makeMeow() {
+  const s = 0.84;
+  const g = catRig({ reach: 0, scale: s, girth: 0.68, base: 0x7e7a76, head: 0x86827e, muzzle: 0xf6f4f0, eye: 0xe0a030,
+    tailFluff: 1.1, tail: 0x7e7a76, tailTip: 0x5c5854, legs: 0x7e7a76, paw: 0xf6f4f0, ear: 0x6e6a66 });
+  const b = g.userData.body, head = g.userData.head;
+  b.add(part(new THREE.IcosahedronGeometry(0.17, 0), 0xf6f4f0, 0, 0.45 * s, 0.42 * s, 1, 1.2, 0.6, false));     // white chest
+  head.add(part(new THREE.IcosahedronGeometry(0.13, 0), 0xf6f4f0, 0, -0.14 * s, 0.24 * s, 1.2, 0.9, 0.8, false));  // white beard
+  for (let i = 0; i < 4; i++) b.add(box(0x5c5854, 0, 0.74 * s, (0.2 - i * 0.15) * s, 0.36 * s, 0.03, 0.06, false));   // tabby stripes
+  for (const k of [-1, 1]) { const t = part(new THREE.ConeGeometry(0.06 * s, 0.16 * s, 4), 0x86827e, k * 0.3 * s, -0.08 * s, 0.05, 1, 1, 1, false); t.rotation.z = k * 1.8; head.add(t); }
+  const leaf = part(new THREE.ConeGeometry(0.06, 0.2, 3), 0x5a9a3a, -0.24 * s, 0.32 * s, -0.04, 1, 1, 0.3, false); leaf.rotation.z = 0.9; head.add(leaf);
+  return g;
+}
+
+export const makeCat = (kind) => ({ puddin: makePuddin, scary: makeScary, nebbie: makeNebbie, casper: makeCasper, meow: makeMeow }[kind] || makeFred)();
 
 // ---------- traps (built at their real footprint, centred on the origin) ----------
 // Traps are built at tile scale: one tile = 2x2 units (Orcs Must Die footprint), so a

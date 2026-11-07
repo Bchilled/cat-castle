@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0 — 2026-11-07
+New cats (6 total)
+- Scary Cat: scrawny beat-up black cat (55 HP). Tail Whip (long narrow line, hits 4), Hiss (arches up, mice in 5.5 units flee for ~2.5 s, bosses slowed), High Jump (highest in the game), Shift = Leap Back (backflip). `src/config.js` 80-104, 160-166; `src/sim/sim.js` 698-760, 1038-1047 (fear); `src/render/models.js` 116-140.
+- Nebbie: sleek clever grey cat (75 HP). Whisker Darts (fast, fly level, pierce 3), Purr (heal 30% over 5 s + damage/speed buff for every cat nearby), Long Jump, 30% dodge. `src/sim/sim.js` 760-790, 1232-1251; `src/render/models.js` 142-156.
+- Casper (he): pure-white pedigree show cat (115 HP). Claws (fast swipes, each hit builds rage), Rage (+1% damage per point up to +100%, drains when he stops fighting), Frenzy (3 s all-round fury), Leap Strike (jump, then Space again to leap forward and smash), mice target him first. `src/sim/sim.js` 579-648, 790-823; `src/render/models.js` 158-176.
+- Meow Meow: friendly grey outdoor cat with a white beard and chest (80 HP). Sticky Burrs (slow; 4 hits = asleep; any damage wakes), Big Yawn (crowd falls asleep, cats nearby buffed), Triple Jump, runs fast, Catnap (stand still to nap and heal). `src/sim/sim.js`; `src/render/models.js` 178-188.
+- Each new cat has its own voice lines, animations (arched hiss, scorpion tail whip, backflip, frenzy thrash, rage glow, napping with Zzz, buff shimmer), effects and sounds. Sleeping mice show blue Zzz stars instead of yellow stun stars. `src/render/scene.js`; `src/audio/sfx.js` 177-187.
+Art
+- Cartoon portraits for all six cats (hand-built SVG): cat-select cards, your HUD badge, and next to every voice line. `src/ui/portraits.js` (new).
+- New cat select: 3×2 portrait grid + detail panel (turning 3D model, abilities, health/speed); remembers your last pick. `src/main.js` 43-79; `index.html` 88-100, 130-145; `src/ui/catinfo.js` (new).
+- Ability panel shows a 4th box (Shift or passive), Casper's rage bar, Meow Meow's nap. `src/ui/hud.js` 106-128.
+Fixes
+- Fast projectiles move in sub-steps so they can't skip over a mouse between ticks. `src/sim/sim.js` 1189-1197.
+- Getting hit returns whether it landed (dodges skip boss-stomp stun too).
+Tests: 62 checks (16 new for the four cats), all passing.
+
 ## 0.6.0 — 2026-11-07
 Sound (new)
 - All sound and music synthesised live with WebAudio, no files: 46 effects (squeaks, spitballs, hairball hork, chomp/eat, pounce, belly flop, every trap, gate cracks, splats, splashes, boss roar and stomp, tails, stash ka-ching, wave horn and fanfare, win/lose). Positional (fades with distance, panned left/right), rate-limited so swarms don't clip. Music: sneaky plucked bass while building, drums for waves, heavier groove for bosses. `src/audio/sfx.js` 1-211 (new); wiring `src/main.js` 177-239.

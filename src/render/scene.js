@@ -205,7 +205,7 @@ export class Scene {
       tail: mk(new THREE.CylinderGeometry(0.02, 0.035, 0.9, 4), mat(0xc9a3a0)),
       eyes: mk(new THREE.BoxGeometry(0.26, 0.05, 0.03), new THREE.MeshBasicMaterial({ color: 0xffffff })),
       // Stun stars circling a dazed mouse's head; the circle shrinks as the stun runs out (its timer).
-      stars: mk(new THREE.OctahedronGeometry(0.09, 0), new THREE.MeshBasicMaterial({ color: 0xffe040 }), MAX_MICE * 3),
+      stars: mk(new THREE.OctahedronGeometry(0.09, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_MICE * 3),   // tinted per instance: yellow stun, blue sleep
     };
     this._m = new THREE.Matrix4(); this._l = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler();
     this._v = new THREE.Vector3(); this._s = new THREE.Vector3(); this._c = new THREE.Color(); this._w = new THREE.Color(0xffffff);
@@ -329,7 +329,23 @@ export class Scene {
         this.spawnParticles((GATE.x0 + GATE.x1) / 2, 2, (GATE.z0 + GATE.z1) / 2, 0x7a5a38, 40, 6, 0.15);
         break;
       }
-      case 'spit': case 'bite': { const c = this.cats.get(e.id); if (c) { c.atkT = 0.14; c.side ^= 1; } break; }
+      case 'spit': case 'bite': case 'whisker': case 'burr': { const c = this.cats.get(e.id); if (c) { c.atkT = 0.14; c.side ^= 1; } break; }
+      case 'claw': { const c = this.cats.get(e.id); if (c) { c.clawT = 0.15; c.side ^= 1; } const cat = this.sim.cats.get(e.id); if (cat && e.hits) this.spawnParticles(cat.x + Math.sin(cat.yaw), cat.y + 0.4, cat.z + Math.cos(cat.yaw), 0xffffff, 3, 3, 0.05); break; }
+      case 'whip': {
+        const c = this.cats.get(e.id), cat = this.sim.cats.get(e.id); if (c) c.whipT = 0.25;
+        if (cat) {   // a quick crack-line along the whip's reach
+          const len = CAT.whipRange, streak = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, len), new THREE.MeshBasicMaterial({ color: 0xe8f070, transparent: true, opacity: 0.8, depthWrite: false }));
+          streak.position.set(cat.x + Math.sin(cat.yaw) * len / 2, cat.y + 0.45, cat.z + Math.cos(cat.yaw) * len / 2); streak.rotation.y = cat.yaw;
+          streak.userData = { life: 0.15, max: 0.15 }; this.scene.add(streak); this.rings.push(streak);
+        }
+        break;
+      }
+      case 'hiss': this.ring(e.x, e.z, e.r, 0xa060ff, 0.5, false, true); break;
+      case 'purr': this.ring(e.x, e.z, e.r, 0xffd060, 0.8, false, true); for (const id of e.who) { const c2 = this.sim.cats.get(id); if (c2) this.spawnParticles(c2.x, c2.y + 0.5, c2.z, 0x9af08a, 10, 2, 0.06); } break;
+      case 'yawn': this.ring(e.x, e.z, e.r, 0x9ac8ff, 0.9, false, true); break;
+      case 'frenzy': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.5, cat.z, 0xff3a2a, 14, 4, 0.07); break; }
+      case 'strike': this.ring(e.x, e.z, e.r, 0xff6a4a, 0.4, false, true, e.y); this.spawnParticles(e.x, e.y + 0.1, e.z, 0xd8d0c0, 14, 4); break;
+      case 'dodge': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.5, cat.z, 0xc8e8ff, 6, 3, 0.05); break; }
       case 'pounceLand': this.spawnParticles(e.x, e.y + 0.1, e.z, 0xd8d0c0, 18, 5); this.ring(e.x, e.z, CAT.pounceRadius, 0xfff0a0, 0.45, false, true, e.y); this.shake = Math.max(this.shake, 0.2); break;
       case 'slam': this.spawnParticles(e.x, e.y + 0.1, e.z, 0xd8d0c0, 18, 5); break;
       case 'pelletHit': this.spawnParticles(e.x, e.y + 0.1, e.z, e.mouse ? 0x8a1c14 : 0x8a8a6a, 4, 2, 0.05); break;
@@ -382,7 +398,9 @@ export class Scene {
       m.visible = cat.alive;
       if (Math.hypot(cat.x - m.position.x, cat.z - m.position.z) > 3) m.position.set(cat.x, cat.y, cat.z);
       m.position.x += (cat.x - m.position.x) * k; m.position.y += (cat.y - m.position.y) * k; m.position.z += (cat.z - m.position.z) * k;
-      m.rotation.y = cat.yaw;
+      m.rotation.order = 'YXZ'; m.rotation.y = cat.yaw;
+      // Scary Cat's backflip: a full turn backwards over her local x axis.
+      m.rotation.x = cat.flipT > 0 ? -(1 - cat.flipT / 0.5) * Math.PI * 2 : 0;
       const speed = Math.hypot(cat.vx, cat.vz), moving = speed > 0.5 && cat.onGround;
       c.walk += moving ? dt * speed * 1.6 : 0;
       ud.legs.forEach((l, i) => { l.rotation.x = moving ? Math.sin(c.walk + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI / 2 : 0)) * 0.6 : 0; l.rotation.z = 0; });
@@ -393,8 +411,22 @@ export class Scene {
       ud.head.rotation.x = -camPitch * 0.3 + (c.atkT > 0 ? 0.2 : 0);
       ud.slash.children.forEach(st => { st.material.opacity = 0; });
       if (ud.reach) ud.reach.material.opacity = cat.attacking ? 0.4 : 0.18;
-      ud.body.rotation.x = cat.pouncing ? -0.35 : cat.charge > 0 ? 0.25 : 0;      // stretch mid-pounce, crouch when charging
+      ud.body.rotation.x = cat.pouncing || cat.striking ? -0.35 : cat.charge > 0 ? 0.25 : 0;      // stretch mid-pounce, crouch when charging
       ud.body.position.y = cat.charge > 0 ? -0.08 * cat.charge / 0.8 : cat.hurtT > 0 ? 0.05 : 0;
+      ud.body.scale.set(1, 1, 1); ud.body.rotation.y = 0; ud.tail.scale.setScalar(1);
+      // Scary Cat's hiss: back arched up high, fur on end, tail straight up and puffed.
+      if (cat.hissT > 0) { ud.body.position.y = 0.12 * ud.scale; ud.body.scale.set(1.1, 1.3, 0.9); ud.head.rotation.x = 0.35; ud.tail.scale.setScalar(1.5); }
+      // Casper's frenzy: furious side-to-side thrashing.
+      if (cat.frenzyT > 0) ud.body.rotation.y = Math.sin(now / 40) * 0.6;
+      // Casper's rage glows red under him.
+      if (ud.rage) ud.rage.material.opacity = (cat.rage || 0) / 100 * (0.35 + Math.sin(now / 120) * 0.1);
+      // Meow Meow napping: lies down, legs tucked, head down; little Zzz float up.
+      if (cat.napping) {
+        ud.body.position.y = -0.22 * ud.scale; ud.head.rotation.x = 0.5; ud.legs.forEach(l => { l.rotation.x = 1.4; });
+        c.zzT = (c.zzT || 0) - dt; if (c.zzT <= 0) { c.zzT = 0.8; this.spawnParticles(cat.x, cat.y + 0.8, cat.z, 0xddeeff, 1, 0.6, 0.08); }
+      }
+      // Buffed by a purr or a yawn: soft golden shimmer.
+      if (cat.buffT > 0 && Math.random() < dt * 6) this.spawnParticles(cat.x + (Math.random() - 0.5) * 0.6, cat.y + 0.3, cat.z + (Math.random() - 0.5) * 0.6, 0xffe080, 1, 1, 0.05);
       // Tail: idle sway, lifts and swishes faster when running, flicks on turns, droops when hurt.
       const run = Math.min(1, speed / cat.def.speed);
       const targetX = (cat.hurtT > 0 ? 0.6 : 0) - run * 0.7 + (cat.onGround ? 0 : -0.4);
@@ -403,6 +435,12 @@ export class Scene {
       const targetZ = Math.sin(c.tailSwish) * (0.25 + run * 0.25) - turnFlick * 0.6;
       c.tailX += (targetX - c.tailX) * Math.min(1, dt * 8); c.tailZ += (targetZ - c.tailZ) * Math.min(1, dt * 10);
       ud.tail.rotation.x = c.tailX; ud.tail.rotation.z = c.tailZ;
+      // Tail whip: the tail cracks forward over her back like a scorpion's.
+      c.whipT = Math.max(0, (c.whipT || 0) - dt);
+      if (c.whipT > 0) ud.tail.rotation.x = 2.3 * Math.sin(c.whipT / 0.25 * Math.PI);
+      if (cat.hissT > 0) { ud.tail.rotation.x = -0.1; ud.tail.rotation.z = 0; }
+      // Claw swipe: a front leg slashes.
+      if (c.clawT > 0) { c.clawT -= dt; ud.legs[c.side & 1].rotation.x = -1.6 * Math.sin((1 - c.clawT / 0.15) * Math.PI); }
     }
     this.drawMice(dt, k, now);
     this.syncSimple(sim.tails, this.tailMeshes, () => {
@@ -412,9 +450,13 @@ export class Scene {
     this.syncSimple(sim.loot, this.lootMeshes, (l) => makeTrinket(TRINKETS[l.key].tier), (g, l) => { g.position.set(l.x, l.y + Math.sin(now / 250 + l.id) * 0.08, l.z); g.rotation.y += dt * 3; });
     this.syncSimple(sim.shots, this.shotMeshes, () => outline(new THREE.Mesh(new THREE.DodecahedronGeometry(0.4, 0), mat(0x6f6a62))), (g, s) => { g.position.set(s.x, s.y, s.z); g.rotation.x += dt * 8; });
     this.syncSimple(sim.globs, this.globMeshes, () => new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: 0x9adf3a })), (g, b) => { g.position.set(b.x, b.y, b.z); });
-    this.syncSimple(sim.missiles, this.missileMeshes, (b) => b.kind === 'pellet'
-      ? new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 0), mat(0x8a8a5a))
-      : outline(new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), mat(0x6a7a3a))), (g, b) => { g.position.set(b.x, b.y, b.z); g.rotation.y += dt * 10; });
+    this.syncSimple(sim.missiles, this.missileMeshes, (b) => b.kind === 'pellet' ? new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 0), mat(0x8a8a5a))
+      : b.kind === 'whisker' ? new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.7), new THREE.MeshBasicMaterial({ color: 0xffffff }))
+      : b.kind === 'burr' ? new THREE.Mesh(new THREE.OctahedronGeometry(0.1, 1), mat(0x7a5a2a))
+      : outline(new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), mat(0x6a7a3a))), (g, b) => {
+        g.position.set(b.x, b.y, b.z);
+        if (b.kind === 'whisker') g.rotation.set(0, Math.atan2(b.vx, b.vz), 0); else g.rotation.y += dt * 10;   // needles fly point-first
+      });
     // Traps. f = how far through its reset a trap is (1 = just fired, 0 = armed).
     // Each trap's moving part follows f, and the lamp goes red -> green.
     for (const g of this.trapMeshes.values()) {
@@ -541,11 +583,12 @@ export class Scene {
       eyes.setColorAt(n, col.setHex(d.boss ? 0xff2a1a : 0x111111));
       n++;
       if (mo.stunT > 0 && ns < MAX_MICE * 3 - 3) {
+        const sleepy = mo.asleep;
         const left = Math.min(1, mo.stunT / (mo.stunMax || 1)), rad = (0.25 + 0.35 * left) * Math.max(1, s * 1.4);
         for (let k = 0; k < 3; k++) {
           const a = now / 180 + k * 2.094;
           L.compose(v.set(p.x + Math.cos(a) * rad, p.y + s * 1.05 + 0.25, p.z + Math.sin(a) * rad), q.identity(), sc.set(0.6 + left, 0.6 + left, 0.6 + left));
-          stars.setMatrixAt(ns++, L);
+          stars.setColorAt(ns, col.setHex(sleepy ? 0xa8d0ff : 0xffe040)); stars.setMatrixAt(ns++, L);
         }
       }
       if (d.boss) {
@@ -563,7 +606,7 @@ export class Scene {
     }
     for (const mesh of [body, bodyO, head, tail, eyes]) { mesh.count = n; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; }
     ear.count = n * 2; ear.instanceMatrix.needsUpdate = true;
-    stars.count = ns; stars.instanceMatrix.needsUpdate = true;
+    stars.count = ns; stars.instanceMatrix.needsUpdate = true; if (stars.instanceColor) stars.instanceColor.needsUpdate = true;
     for (const id of this.mouseLerp.keys()) if (!seen.has(id)) this.mouseLerp.delete(id);
     for (const [id, bar] of this.bossBars) if (!seen.has(id)) { this.scene.remove(bar); this.bossBars.delete(id); }
   }

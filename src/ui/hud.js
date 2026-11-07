@@ -8,8 +8,8 @@ import { W, H, CELL, T, STALLS, HOLE, SPAWNS, GATE } from '../sim/map.js';
 import { previewWave } from '../sim/waves.js';
 import { makeTrap } from '../render/models.js';
 
-// Ability names per cat: [left click, right click, space].
-const ABIL = { fred: ['Spitball', 'Hairball', 'Double Jump'], puddin: ['Chomp', 'Pounce', 'Belly Flop'] };
+import { CAT_INFO } from './catinfo.js';
+import { portraitURL } from './portraits.js';
 const SURFACE = { floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling (under roofs, tables, benches)' };
 
 // Little pictures of each trap for the trap bar, rendered once from the real 3D models.
@@ -103,16 +103,29 @@ export class Hud {
     for (const p of this.wen) p.style.strokeDasharray = `${Math.max(0, h.energy) * 100} 100`;
     $('crosshair').classList.toggle('bad', !!sel && !aimValid);
     // Ability panel, per cat.
-    const fred = h.kind === 'fred', ab = ABIL[h.kind] || ABIL.fred;
-    $('ab-pri-name').textContent = ab[0];
-    $('ab-pri-note').textContent = fred ? 'makes them bleed' : (h.eatCd > 0 ? `eat in ${Math.ceil(h.eatCd * CAT.eatCooldown)}s` : 'kill = eat + heal');
-    $('ab-sec-name').textContent = ab[1];
+    const info = CAT_INFO[h.kind] || CAT_INFO.fred, ab = info.abil;
+    $('ab-pri-name').textContent = ab[0][1];
+    $('ab-pri-note').textContent = h.kind === 'puddin' ? (h.eatCd > 0 ? `eat in ${Math.ceil(h.eatCd * CAT.eatCooldown)}s` : 'kill = eat + heal')
+      : h.kind === 'casper' ? `rage +${Math.round(h.rage * 100)}% dmg` : ab[0][2].split(',')[0];
+    $('ab-sec-name').textContent = ab[1][1];
     $('ab-sec-note').textContent = `${h.secCost} energy`;
     setCd($('ab-sec'), h.secCd, h.energy * CAT.maxEnergy >= h.secCost);
-    $('ab-jump-name').textContent = ab[2];
-    $('ab-jump-note').textContent = fred ? 'kick off walls' : 'hold to charge';
-    $('ab-charge').parentElement.style.display = fred ? 'none' : '';
-    $('ab-charge').style.width = `${Math.round(h.charge * 100)}%`;
+    $('ab-jump-k').textContent = ab[2][0];
+    $('ab-jump-name').textContent = ab[2][1];
+    $('ab-jump-note').textContent = h.napping ? 'napping… +HP' : ab[2][2].split(',')[0];
+    $('ab-charge').parentElement.style.display = h.kind === 'puddin' || h.kind === 'casper' ? '' : 'none';
+    $('ab-charge').style.width = `${Math.round((h.kind === 'casper' ? h.rage : h.charge) * 100)}%`;
+    $('ab-charge').style.background = h.kind === 'casper' ? '#e0402a' : '';
+    // Fourth box: Shift ability or passive.
+    const alt = ab[3];
+    $('ab-alt').style.display = alt ? '' : 'none';
+    if (alt) {
+      $('ab-alt-k').textContent = alt[0]; $('ab-alt-name').textContent = alt[1];
+      $('ab-alt-note').textContent = alt[0] === 'Shift' ? (h.altCd > 0 ? `${Math.ceil(h.altCd * CAT.leapBackCooldown)}s` : 'ready') : alt[2].split(';')[0];
+      setCd($('ab-alt'), alt[0] === 'Shift' ? h.altCd : 0, true);
+    }
+    if (this.portraitKind !== h.kind) { this.portraitKind = h.kind; $('me-face').src = portraitURL(h.kind); }
+    $('me').classList.toggle('buffed', h.buffT > 0);
     // Trap info card while a trap is in hand.
     if (sel) {
       const d = TRAPS[sel];
@@ -166,7 +179,7 @@ export class Hud {
   }
 
   message(text) { $('msg').textContent = text; $('msg').classList.add('show'); this.msgT = 2.5; }
-  bark(who, text, kind) { $('sub').innerHTML = `<b class="${kind || ''}">${who}:</b> ${text}`; $('sub').classList.add('show'); this.subT = 3.2; }
+  bark(who, text, kind) { $('sub').innerHTML = `<img class="face" src="${portraitURL(kind)}" alt=""><b class="${kind || ''}">${who}:</b> ${text}`; $('sub').classList.add('show'); this.subT = 3.2; }
   flashHurt() { const v = $('hurt'); v.classList.remove('go'); void v.offsetWidth; v.classList.add('go'); }
 
   showEnd(won, rating, sim, profile) {

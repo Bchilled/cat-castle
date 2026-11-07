@@ -85,9 +85,19 @@
   button.picked { border-color: var(--accent); background: #7a5630; }
   .title { font-size: 72px; font-weight: bold; color: var(--accent); letter-spacing: 2px; text-shadow: 0 4px 0 #3a2210, 0 8px 24px #000; }
   .tag { font-size: 18px; margin: 4px 0 22px; }
-  .cats { display: flex; gap: 18px; }
-  .catpick { width: 260px; text-align: center; padding: 10px; } .catpick b { display: block; font-size: 22px; margin-top: 4px; }
-  .catpick small { display: block; color: var(--dim); font-size: 13px; line-height: 1.4; }
+  .pick { display: flex; gap: 18px; align-items: stretch; }
+  .cats { display: grid; grid-template-columns: repeat(3, 150px); gap: 10px; }
+  .catpick { width: 150px; text-align: center; padding: 6px 6px 8px; }
+  .catpick img { display: block; width: 136px; height: 136px; border-radius: 14px; }
+  .catpick b { display: block; font-size: 17px; margin-top: 4px; } .catpick small { display: block; color: var(--dim); font-size: 11px; }
+  .detail { width: 330px; text-align: left; padding: 12px; background: var(--bg); border: 2px solid #0e0b09; border-radius: 8px; }
+  .detail canvas { display: block; margin: 0 auto; }
+  #catdetail h2 { margin: 2px 0; color: var(--accent); } #catdetail p { margin: 4px 0 8px; color: var(--dim); }
+  #catdetail .ab-row { font-size: 13px; margin: 3px 0; } #catdetail .ab-row b { color: var(--ink); } #catdetail .ab-row i { color: var(--accent); font-style: normal; }
+  #catdetail .stats { font-size: 12px; color: var(--dim); margin-top: 6px; }
+  #me-face { width: 44px; height: 44px; border-radius: 8px; vertical-align: middle; margin: -6px 8px -6px -4px; }
+  #me.buffed { box-shadow: 0 0 12px #ffd060; }
+  #sub .face { width: 40px; height: 40px; border-radius: 8px; vertical-align: middle; margin-right: 8px; }
   .catview { display: block; margin: 0 auto; width: 220px; height: 160px; }
   .modes { margin-top: 20px; } .play { font-size: 20px; padding: 12px 28px; background: #8a5a22; }
   .paws { display: flex; gap: 8px; margin: 10px; } .paw { width: 46px; height: 46px; } .bonus .paw { width: 22px; height: 22px; vertical-align: middle; }
@@ -105,18 +115,19 @@
 <div id="bossbar" class="panel" style="display:none"><span id="bossname"></span><div class="bar"><i id="bosshp"></i></div></div>
 <div id="trapinfo" class="panel" style="display:none"></div>
 <div id="radarbox" class="panel"><canvas id="radar" width="200" height="200"></canvas><div id="trinkets"></div></div>
-<div id="me" class="panel"><span id="catname"></span> · Tails <b id="tails">0</b></div>
+<div id="me" class="panel"><img id="me-face" alt=""><span id="catname"></span> · Tails <b id="tails">0</b></div>
 <div id="crosshair"></div>
 <div id="abilities">
   <div class="ab"><span class="k">Left click</span><span id="ab-pri-name"></span><small id="ab-pri-note"></small></div>
   <div class="ab" id="ab-sec"><span class="k">Right click</span><span id="ab-sec-name"></span><small id="ab-sec-note"></small></div>
-  <div class="ab"><span class="k">Space</span><span id="ab-jump-name"></span><small id="ab-jump-note"></small><div class="charge"><i id="ab-charge"></i></div></div>
+  <div class="ab"><span class="k" id="ab-jump-k">Space</span><span id="ab-jump-name"></span><small id="ab-jump-note"></small><div class="charge"><i id="ab-charge"></i></div></div>
+  <div class="ab" id="ab-alt" style="display:none"><span class="k" id="ab-alt-k">Shift</span><span id="ab-alt-name"></span><small id="ab-alt-note"></small></div>
 </div>
 <div id="trapbar"></div>
 <div id="controls" class="panel">
   <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom<br>
   <b>Left click</b> attack (hold) · <b>Right click</b> ability, or place the held trap<br>
-  <b>Space</b> Fred: double jump, wall kick · Puddin: hold for a belly flop<br>
+  <b>Space</b> jump (each cat's is different) · <b>Shift</b> Scary Cat's leap back<br>
   <b>1–8</b> pick trap · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away<br>
   <b>E</b> trade tails at a stash · <b>G</b> next wave<br>
   <b>M</b> sound on/off · <b>Esc</b> pause · <b>H</b> hide this
@@ -128,10 +139,10 @@
 
 <div id="menu" class="screen show">
   <div class="title">Nine Lives Keep</div>
-  <p class="tag">Two mean cats. One castle. Far too many mice.</p>
-  <div class="cats">
-    <button class="catpick picked" data-cat="fred"><canvas class="catview" data-kind="fred" width="220" height="160"></canvas><b>Fred</b><small>Scruffy ginger alley tom with a mouth on him. Fast and fragile: spitballs that make them bleed, a splashy hairball, double jumps and wall kicks.</small></button>
-    <button class="catpick" data-cat="puddin"><canvas class="catview" data-kind="puddin" width="220" height="160"></canvas><b>Puddin</b><small>Enormous long-haired calico. Posh, lazy, always hungry. Chomps (and eats) mice to heal, pounces to stun, belly flops to scatter.</small></button>
+  <p class="tag">Six mean cats. One castle. Far too many mice.</p>
+  <div class="pick">
+    <div class="cats" id="cats"></div>
+    <div class="detail"><canvas id="catview" width="300" height="220"></canvas><div id="catdetail"></div></div>
   </div>
   <div class="modes">
     <button class="play" data-mode="normal">Castle entrance · 24 waves</button>

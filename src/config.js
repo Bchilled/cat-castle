@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -77,6 +77,72 @@ export const CAT = {
   leapExtra: 7,
   slamRadius: 1.8,
   slamPush: 6,
+  // Scary Cat, left click: tail whip — a narrow line that reaches far and hits everything along it.
+  whipInterval: 0.5,
+  whipDamage: 16,
+  whipRange: 3.6,            // from her centre
+  whipWidth: 0.45,           // half-width of the line
+  whipMaxHits: 4,
+  // Scary Cat, right click: arches her back and hisses — mice nearby panic and scatter away.
+  hissCost: 40,
+  hissCooldown: 7,
+  hissRadius: 5.5,
+  hissFear: 2.5,             // seconds of running away (bosses are only slowed)
+  // Scary Cat, Shift: leap back out of trouble (a backflip).
+  leapBackCooldown: 2.5,
+  leapBackH: 11,
+  leapBackV: 6.5,
+  // Nebbie, left click: whisker darts — fast, straight, pierce through a few mice.
+  whiskerInterval: 0.32,
+  whiskerSpeed: 34,
+  whiskerDamage: 8,
+  whiskerPierce: 3,
+  // Nebbie, right click: purr — heals over time and buffs every cat around her.
+  purrCost: 45,
+  purrCooldown: 10,
+  purrRadius: 6,
+  purrHeal: 0.3,             // fraction of max HP, spread over purrSecs
+  purrSecs: 5,
+  purrBuffSecs: 6,
+  purrDamage: 1.25,          // damage multiplier while buffed
+  purrSpeed: 1.15,           // speed multiplier while buffed
+  // Nebbie, Space: long jump.
+  longJumpH: 12,
+  // Casper, left click: claw swipes in front of him. Every hit builds rage.
+  clawInterval: 0.28,
+  clawDamage: 11,
+  clawRange: 1.5,
+  clawArc: 1.0,
+  clawMaxHits: 3,
+  // Casper's rage: 0..100. Each point = +1% damage. Builds on hits, drains when he stops fighting.
+  ragePerHit: 7,
+  rageMax: 100,
+  rageDecay: 12,             // per second, after rageHold seconds without a hit
+  rageHold: 2,
+  // Casper, right click: frenzy — a few seconds of furious all-round swiping.
+  frenzyCost: 30,
+  frenzyCooldown: 8,
+  frenzySecs: 3,
+  frenzySpeed: 2.5,          // attack speed multiplier
+  // Casper, Space in the air: leap strike — a second jump forward that hits where he lands.
+  strikeH: 13,
+  strikeV: 4.5,
+  strikeDamage: 30,
+  strikeRadius: 1.6,
+  // Meow Meow, left click: sticky burrs — light damage, slow, and enough of them put a mouse to sleep.
+  burrInterval: 0.4,
+  burrSpeed: 20,
+  burrDamage: 5,
+  burrSlowSecs: 2,
+  burrDrowsy: 4,             // burr hits to fall asleep
+  sleepSecs: 3,              // asleep = can't move; any damage wakes it
+  // Meow Meow, right click: big contagious yawn — mice around her nod off, cats nearby get a buff.
+  yawnCost: 40,
+  yawnCooldown: 9,
+  yawnRadius: 5,
+  // Meow Meow: stand still for napDelay seconds and she naps, healing fast until she moves.
+  napDelay: 1.5,
+  napHeal: 0.08,             // fraction of max HP per second
 };
 
 // Playable cats. Fred: quick, fragile, ranged, parkour. Puddin: slow tank, melee.
@@ -91,7 +157,36 @@ export const CATS = {
     radius: 0.5, height: 1.25, stepHeight: 0.35, energyRegen: 8, push: 2.5,
     primary: 'bite', secondary: 'pounce', leap: true,
   },
+  // Scary Cat: scrawny, beat-up black cat. Fragile; jumps highest; long thin tail whip,
+  // a hiss that scatters mice, and a backflip (Shift) to get out of trouble.
+  scary: {
+    name: 'Scary Cat', maxHp: 55, speed: 9, airControl: 0.25, jumpVel: 12, airJumps: 0, wallKick: 0, mantle: 1.0,
+    radius: 0.33, height: 0.9, stepHeight: 0.3, energyRegen: 12, push: 0.8,
+    primary: 'whip', secondary: 'hiss', alt: 'leapback', leap: false,
+  },
+  // Nebbie: sleek, clever grey cat. Shoots whisker darts, purrs to heal and buff
+  // the cats around her, long-jumps, and dodges 30% of hits.
+  nebbie: {
+    name: 'Nebbie', maxHp: 75, speed: 9.5, airControl: 0.2, jumpVel: 8, airJumps: 0, wallKick: 0, mantle: 0.8,
+    radius: 0.34, height: 0.92, stepHeight: 0.3, energyRegen: 14, push: 1, dodge: 0.3,
+    primary: 'whisker', secondary: 'purr', longJump: true, leap: false,
+  },
 };
+// Casper: pampered pure-white show cat with a vicious temper. Mice go for him first;
+// claws build rage, rage means more damage; frenzy; jump twice to leap-strike forward.
+CATS.casper = {
+  name: 'Casper', maxHp: 115, speed: 8.5, airControl: 0.15, jumpVel: 8.5, airJumps: 0, wallKick: 0, mantle: 0.7,
+  radius: 0.4, height: 1.0, stepHeight: 0.3, energyRegen: 10, push: 1.6, taunt: 1.6,
+  primary: 'claw', secondary: 'frenzy', strike: true, leap: false,
+};
+// Meow Meow: friendly brown outdoor cat. Burrs slow mice and send them to sleep, her yawn
+// knocks out a crowd and buffs her friends, she triple-jumps, runs fast, and naps to heal.
+CATS.meow = {
+  name: 'Meow Meow', maxHp: 80, speed: 10.5, airControl: 0.22, jumpVel: 8.5, airJumps: 2, wallKick: 0, mantle: 0.9,
+  radius: 0.34, height: 0.92, stepHeight: 0.3, energyRegen: 12, push: 1, naps: true,
+  primary: 'burr', secondary: 'yawn', leap: false,
+};
+export const CAT_ORDER = ['fred', 'puddin', 'scary', 'nebbie', 'casper', 'meow'];
 
 // Mouse types (Pinkie = a baby mouse). tails = tail value dropped (big rat tails count for several); tailChance = odds it drops.
 // aggro = how far (units) it will turn off its route to go bite a cat; spit = ranged plague glob.

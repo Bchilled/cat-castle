@@ -42,6 +42,67 @@ const BARKS = {
     leak: ["One's slipped by. Not my fault.", "Someone's let one through. Fred."],
     clear: ['Lovely. Now, snacks.', "That'll do. I'm going for a lie down.", 'Was that all? How dreary.'],
   },
+  // Scary Cat: quiet, creepy, superstitious. Speaks in whispers.
+  scary: {
+    kill: ['Bad luck, little one.', 'Shhh. Sleep now.', "I've crossed worse paths than yours.", 'Another tail for the collection.', 'You saw me. That was your mistake.'],
+    trap: ['Ooh. Unlucky.', 'Snap. Crackle. Gone.', 'Some days the floor bites back.'],
+    wave: ['They always come back. So do I.', 'Smell that? Fear. Lovely.', 'Black cat crossing. Run.'],
+    boss: ['Big. Ugly. Doomed.', "He's not afraid of me yet. He will be."],
+    death: ['Eight down.', "That's... fine. I've got spares.", 'The dark takes me. Briefly.'],
+    gate: ["The gate's gone. Good. Let them come.", 'Door open. Dinner served.'],
+    sell: ['Tails for fish. Fair trade.', 'Sardines. The only thing I trust.'],
+    trinket: ['Shiny. Cursed, probably. Mine.', 'Lucky charm. For me, not them.'],
+    eat: ['Crunchy.'],
+    leak: ['One slipped into the dark.', "That one's luckier than it looks."],
+    clear: ['Silence. Finally.', 'They scattered. They always scatter.', 'Nothing left to hiss at.'],
+    hiss: ['HSSSSSSS.', 'Run, little ones.', 'Boo.'],
+  },
+  // Nebbie: clever, calm and a bit smug. The brains of the outfit.
+  nebbie: {
+    kill: ['Predictable.', 'Statistically, you were always going to lose.', 'Clean shot. Obviously.', 'Physics wins again.', 'Next.'],
+    trap: ['Exactly as calculated.', 'Textbook.', 'Mm. Efficient.'],
+    wave: ['I count roughly too many. Positions, please.', 'Here they come. Stay near me, you live longer.', 'Formation, everyone. Well. Me.'],
+    boss: ['Large. Slow. Weak spot: everywhere.', "That one's going to need a plan. Good thing I have one."],
+    death: ['A miscalculation.', 'Noted. Adjusting.', 'That was the statistically unlikely outcome.'],
+    gate: ['Gate breached. Plan B.', "They're inside. As I predicted."],
+    sell: ['A sound investment.', 'Tails to sardines. Basic economics.'],
+    trinket: ['Interesting. Useful.', "I'll study this later."],
+    eat: ['Crunchy.'],
+    leak: ['One got through. I did warn you.', 'A leak. Unacceptable.'],
+    clear: ['Wave cleared. Efficiency: acceptable.', 'Regroup. Heal. Repeat.', 'Was there any doubt?'],
+    dodge: ['Missed me.', 'Too slow.', 'Not even close.'],
+    purr: ['Purr. Better now?', 'Stay close. Heal up.', 'Everyone, on me.'],
+  },
+  // Casper: a pampered, pedigreed show cat with a terrifying temper.
+  casper: {
+    kill: ['Do you know what I COST?', 'Filth. On my fur. AGAIN.', "I'm a show cat. This is the show.", 'MORE.', 'Best in show. Best in KILLING.'],
+    trap: ['Fine. The furniture can help.', 'Adequate.', 'Messy. I like messy.'],
+    wave: ['Come here. All of you.', 'I was groomed for this. Literally.', 'Finally, some exercise.'],
+    boss: ['YOU. Me. Now.', "Big rat. I've had bigger tantrums."],
+    death: ['This is NOT how a champion lies down.', 'Get my groomer.', "I'll be back. Furious."],
+    gate: ["The door's down. Let them come to ME.", 'Good. Less walking.'],
+    sell: ["Sardines. I'm used to salmon, but fine.", 'Payment accepted.'],
+    trinket: ['Mine. Obviously.', 'It matches my collar.'],
+    eat: ['Crunchy.'],
+    leak: ['One ran past me? PAST ME?', "Coward. Come back here."],
+    clear: ['Is that all? I was just warming up.', 'Someone brush me.', 'Again. Send more.'],
+    frenzy: ['RAAAAAAH!', 'Hold my collar.', 'NOBODY TOUCHES THE FUR.'],
+  },
+  // Meow Meow: a friendly, sunny outdoor cat. Kills you nicely.
+  meow: {
+    kill: ['Night night!', 'Aw. Sorry, little guy.', 'Shh, shh. Sleep now.', "There we go. Wasn't so bad.", 'Oopsie!'],
+    trap: ['Ooh, wheee!', 'Bless.', 'Off you pop!'],
+    wave: ['Ooh, visitors! ...Oh. Rats.', 'Lovely day for it!', 'Everyone stay together, okay?'],
+    boss: ["Goodness, you're a big boy. Time for a nap.", 'Somebody needs a lie down.'],
+    death: ['Just a little nap...', 'Oof. Five more minutes.', "I'm fine! I'm fine. Mostly."],
+    gate: ['The door fell off! Oh dear.', "They're in! Places, everyone!"],
+    sell: ['Ooh, fishies!', 'Sardines for everyone!'],
+    trinket: ['Ooh, a pressie!', 'Found something shiny!'],
+    eat: ['Crunchy.'],
+    leak: ['Oh no, one got away!', "Come back, I wasn't finished!"],
+    clear: ['Nap time!', 'Well done, everyone!', 'Cuddles all round.'],
+    yawn: ['*Yaaaawn*', 'Sleepy time, everyone.', 'Shhhhh.'],
+  },
 };
 
 function mulberry32(seed) {
@@ -115,10 +176,11 @@ export class Sim {
     const def = CATS[kind];
     const cat = { id, kind, def, name: def.name, x: CAT_SPAWN.x, y: 0, z: CAT_SPAWN.z, vx: 0, vy: 0, vz: 0, yaw: Math.PI, pitch: 0,
       hp: def.maxHp, energy: CAT.maxEnergy, alive: true, respawnT: 0, onGround: true, airJumps: def.airJumps, tails: 0,
-      attackT: 0, secT: 0, eatT: 0, charge: 0, leaping: false, pouncing: false, attacking: false,
+      attackT: 0, secT: 0, eatT: 0, altT: 0, charge: 0, leaping: false, pouncing: false, dashing: false, attacking: false,
+      hissT: 0, flipT: 0, buffT: 0, healT: 0, healRate: 0, rage: 0, rageT: 0, frenzyT: 0, striking: false, strikeUsed: false, stillT: 0, napping: false,
       wallNormal: null, kicksLeft: 1, lastKick: null, hurtT: 0, isCat: true, turn: 0 };
     this.cats.set(id, cat);
-    this.inputs.set(id, { mx: 0, mz: 0, yaw: Math.PI, pitch: 0, jump: false, jumpHeld: false, primary: false, secondary: false, aim: null });
+    this.inputs.set(id, { mx: 0, mz: 0, yaw: Math.PI, pitch: 0, jump: false, jumpHeld: false, primary: false, secondary: false, alt: false, aim: null });
     return cat;
   }
 
@@ -132,6 +194,7 @@ export class Sim {
         Object.assign(inp, { mx: cmd.mx, mz: cmd.mz, yaw: cmd.yaw, pitch: cmd.pitch || 0, primary: !!cmd.primary, jumpHeld: !!cmd.jumpHeld, aim: cmd.aim || inp.aim });
         if (cmd.jump) inp.jump = true;           // edge-triggered: latched until consumed
         if (cmd.secondary) inp.secondary = true;
+        if (cmd.alt) inp.alt = true;             // Shift (Scary Cat's leap back)
         break;
       }
       case 'place': this.placeTrap(cat, cmd.trap, cmd.ax, cmd.az, cmd.rot || 0, cmd.wallDir); break;
@@ -467,6 +530,7 @@ export class Sim {
     if (m.dead) return;
     if (m.packed && source !== 'stranded') n *= RULES.packDamageTaken;
     m.hp -= n; m.flash = 0.12;
+    if (m.asleep && source !== 'bleed') { m.asleep = false; m.stunT = 0; }   // a hit wakes a sleeping mouse
     if (n >= 1) this.emit({ t: 'dmg', x: m.x, y: m.y + MICE[m.type].size, z: m.z, n: Math.round(n), crit });
     if (m.hp <= 0) this.killMouse(m, source);
   }
@@ -503,7 +567,7 @@ export class Sim {
   stepCat(cat) {
     const inp = this.inputs.get(cat.id), def = cat.def, mods = this.mods;
     if (!cat.alive) {
-      cat.respawnT -= DT; inp.jump = inp.secondary = false;
+      cat.respawnT -= DT; inp.jump = inp.secondary = inp.alt = false;
       if (cat.respawnT <= 0) Object.assign(cat, { alive: true, hp: def.maxHp, energy: CAT.maxEnergy, x: CAT_SPAWN.x, z: CAT_SPAWN.z, y: 0, vx: 0, vy: 0, vz: 0, charge: 0 });
       return;
     }
@@ -512,12 +576,25 @@ export class Sim {
     cat.hurtT = Math.max(0, cat.hurtT - DT);
     cat.energy = Math.min(CAT.maxEnergy, cat.energy + def.energyRegen * mods.regen * DT);
     cat.attackT = Math.max(0, cat.attackT - DT); cat.secT = Math.max(0, cat.secT - DT); cat.eatT = Math.max(0, cat.eatT - DT);
+    cat.altT = Math.max(0, cat.altT - DT); cat.hissT = Math.max(0, cat.hissT - DT); cat.flipT = Math.max(0, cat.flipT - DT);
+    cat.buffT = Math.max(0, cat.buffT - DT); cat.frenzyT = Math.max(0, cat.frenzyT - DT);
+    // Casper's rage drains once he stops landing hits.
+    cat.rageT += DT; if (cat.rageT > CAT.rageHold) cat.rage = Math.max(0, cat.rage - CAT.rageDecay * DT);
+    // Meow Meow naps when left alone: stand still (no input) and she curls up and heals.
+    if (def.naps) {
+      const idle = !inp.mx && !inp.mz && !inp.primary && !inp.secondary && !inp.jump && cat.onGround && !inp.jumpHeld;
+      cat.stillT = idle ? cat.stillT + DT : 0;
+      cat.napping = cat.stillT > CAT.napDelay;
+      if (cat.napping) cat.hp = Math.min(def.maxHp, cat.hp + def.maxHp * CAT.napHeal * DT);
+    }
+    // Nebbie's purr: heal over time.
+    if (cat.healT > 0) { cat.healT -= DT; cat.hp = Math.min(def.maxHp, cat.hp + cat.healRate * DT); }
 
     // Knocked silly by a boss stomp: no moving or attacking until it wears off.
     if (cat.stunT > 0) { cat.stunT -= DT; inp.primary = false; inp.secondary = false; inp.jump = false; }
     // Movement: snappy on the ground, partial in the air. Charging a leap slows you.
-    if (!cat.pouncing && !(cat.stunT > 0)) {
-      const sp = def.speed * mods.speed * (cat.charge > 0 ? 0.4 : 1);
+    if (!cat.pouncing && !cat.dashing && !(cat.stunT > 0)) {
+      const sp = def.speed * mods.speed * (cat.charge > 0 ? 0.4 : 1) * (cat.buffT > 0 ? CAT.purrSpeed : 1);
       const k = cat.onGround ? 0.55 : def.airControl;   // quick but not instant: no ice-skating, no robot stops
       cat.vx += (inp.mx * sp - cat.vx) * k; cat.vz += (inp.mz * sp - cat.vz) * k;
     }
@@ -534,9 +611,21 @@ export class Sim {
         cat.charge = 0;
       }
       inp.jump = false;
+    } else if (inp.jump && def.longJump && cat.onGround) {
+      // Nebbie: long jump — low and far, in the direction she's moving (or facing).
+      let dx = inp.mx, dz = inp.mz; const l = Math.hypot(dx, dz);
+      if (l < 0.2) { dx = Math.sin(cat.yaw); dz = Math.cos(cat.yaw); } else { dx /= l; dz /= l; }
+      cat.vx = dx * CAT.longJumpH; cat.vz = dz * CAT.longJumpH; cat.vy = def.jumpVel; cat.onGround = false; cat.dashing = true;
+      this.emit({ t: 'leap', id: cat.id, power: 0.5 });
+      inp.jump = false;
     } else if (inp.jump) {
       if (cat.onGround) { cat.vy = def.jumpVel; cat.onGround = false; this.emit({ t: 'jump', id: cat.id }); }
-      else if (def.wallKick && cat.wallNormal && cat.kicksLeft > 0 && !sameWall(cat.lastKick, cat.wallNormal)) {
+      else if (def.strike && !cat.strikeUsed) {
+        // Casper: second press in the air = leap strike forward; hits where he lands.
+        cat.strikeUsed = true; cat.striking = true; cat.dashing = true;
+        cat.vx = Math.sin(cat.yaw) * CAT.strikeH; cat.vz = Math.cos(cat.yaw) * CAT.strikeH; cat.vy = CAT.strikeV;
+        this.emit({ t: 'pounce', id: cat.id });
+      } else if (def.wallKick && cat.wallNormal && cat.kicksLeft > 0 && !sameWall(cat.lastKick, cat.wallNormal)) {
         cat.vy = def.jumpVel; cat.vx = cat.wallNormal[0] * def.wallKick; cat.vz = cat.wallNormal[1] * def.wallKick;
         cat.kicksLeft--; cat.lastKick = cat.wallNormal.slice();
         this.emit({ t: 'wallkick', x: cat.x, y: cat.y, z: cat.z });
@@ -549,11 +638,21 @@ export class Sim {
       inp.secondary = false;
       if (def.secondary === 'hairball') this.fireHairball(cat, inp);
       else if (def.secondary === 'pounce') this.pounce(cat, inp);
+      else if (def.secondary === 'hiss') this.hiss(cat);
+      else if (def.secondary === 'purr') this.purr(cat);
+      else if (def.secondary === 'frenzy') this.frenzy(cat);
+      else if (def.secondary === 'yawn') this.yawn(cat);
     }
-    // Left click (held): Fred spits pellets, Puddin bites.
+    // Shift: Scary Cat's leap back.
+    if (inp.alt) { inp.alt = false; if (def.alt === 'leapback') this.leapBack(cat); }
+    // Left click (held): Fred spits, Puddin bites, Scary Cat whips, Nebbie shoots whiskers.
     cat.attacking = inp.primary;
     if (inp.primary && cat.attackT <= 0) {
       if (def.primary === 'pellet') this.firePellet(cat, inp);
+      else if (def.primary === 'whip') this.whip(cat);
+      else if (def.primary === 'whisker') this.fireWhisker(cat, inp);
+      else if (def.primary === 'claw') this.claw(cat);
+      else if (def.primary === 'burr') this.fireBurr(cat, inp);
       else this.bite(cat);
     }
 
@@ -565,7 +664,8 @@ export class Sim {
       cat.airJumps = def.airJumps; cat.kicksLeft = 2; cat.lastKick = null;
       if (wasAir && cat.pouncing) this.pounceLand(cat);
       if (wasAir && cat.leaping && cat.landV > 9) this.slam(cat);
-      cat.pouncing = false; cat.leaping = false;
+      if (wasAir && cat.striking) this.strikeLand(cat);
+      cat.pouncing = false; cat.leaping = false; cat.dashing = false; cat.striking = false; cat.strikeUsed = false;
     }
     // Shove through crowds of mice.
     for (const m of this.nearMice(cat.x, cat.z, def.radius + 0.6)) {
@@ -595,6 +695,132 @@ export class Sim {
     if (this.loot.some(l => l.taken)) this.loot = this.loot.filter(l => !l.taken);
   }
 
+  // Nebbie's purr makes every buffed cat hit harder.
+  // Casper's rage adds +1% per point.
+  dmgMul(cat) { return cat ? (cat.buffT > 0 ? CAT.purrDamage : 1) * (1 + (cat.rage || 0) / 100) : 1; }
+  gainRage(cat, hits) { if (!cat.def.strike || !hits) return; cat.rage = Math.min(CAT.rageMax, cat.rage + CAT.ragePerHit * hits); cat.rageT = 0; }
+
+  // Casper: claw swipes. Front arc normally; all the way round during a frenzy.
+  claw(cat) {
+    const fr = cat.frenzyT > 0;
+    cat.attackT = CAT.clawInterval * this.mods.attackCd / (fr ? CAT.frenzySpeed : 1);
+    const fx = Math.sin(cat.yaw), fz = Math.cos(cat.yaw), hits = [];
+    for (const m of this.nearMice(cat.x, cat.z, CAT.clawRange + 1)) {
+      if (m.dead || Math.abs(m.y - cat.y) > 1.2) continue;
+      const dx = m.x - cat.x, dz = m.z - cat.z, dd = Math.hypot(dx, dz);
+      if (dd > CAT.clawRange + MICE[m.type].size * 0.4) continue;
+      const ang = Math.acos(Math.max(-1, Math.min(1, (dx * fx + dz * fz) / (dd || 1))));
+      if (!fr && dd > 0.4 && ang > CAT.clawArc) continue;
+      hits.push([dd, m]);
+    }
+    hits.sort((a, b) => a[0] - b[0]);
+    const list = hits.slice(0, fr ? CAT.clawMaxHits * 2 : CAT.clawMaxHits);
+    const mul = this.dmgMul(cat);
+    for (const [, m] of list) { const crit = this.rng() < this.mods.crit; this.damageMouse(m, CAT.clawDamage * mul * (crit ? 2 : 1), 'cat', crit); }
+    this.gainRage(cat, list.length);
+    this.emit({ t: 'claw', id: cat.id, hits: list.length, frenzy: fr });
+  }
+  frenzy(cat) {
+    if (cat.secT > 0 || cat.energy < CAT.frenzyCost) return;
+    cat.secT = CAT.frenzyCooldown * this.mods.abilityCd; cat.energy -= CAT.frenzyCost; cat.frenzyT = CAT.frenzySecs;
+    this.emit({ t: 'frenzy', id: cat.id }); this.bark('frenzy', cat.name);
+  }
+  strikeLand(cat) {
+    let n = 0; const mul = this.dmgMul(cat);
+    for (const m of this.nearMice(cat.x, cat.z, CAT.strikeRadius + 0.5)) {
+      if (m.dead || Math.hypot(m.x - cat.x, m.z - cat.z) > CAT.strikeRadius || Math.abs(m.y - cat.y) > 1.2) continue;
+      this.damageMouse(m, CAT.strikeDamage * mul, 'splat'); n++;
+    }
+    this.gainRage(cat, n);
+    this.emit({ t: 'strike', x: cat.x, y: cat.y, z: cat.z, r: CAT.strikeRadius });
+  }
+  // Meow Meow: sticky burr. Slows; enough burrs on one mouse and it falls asleep.
+  fireBurr(cat, inp) {
+    cat.attackT = CAT.burrInterval * this.mods.attackCd;
+    const a = this.aimFrom(cat, inp);
+    const sx = cat.x + Math.sin(cat.yaw) * 0.4, sy = cat.y + cat.def.height * 0.75, sz = cat.z + Math.cos(cat.yaw) * 0.4;
+    const dx = a.x - sx, dy = a.y - sy, dz = a.z - sz, d = Math.hypot(dx, dy, dz) || 1;
+    this.missiles.push({ id: this.nextId++, kind: 'burr', x: sx, y: sy, z: sz, vx: dx / d * CAT.burrSpeed, vy: dy / d * CAT.burrSpeed + 1, vz: dz / d * CAT.burrSpeed, life: 1.2, g: 4, mul: this.dmgMul(cat) });
+    this.emit({ t: 'burr', id: cat.id });
+  }
+  putToSleep(m, secs) {
+    if (MICE[m.type].boss) { m.slowT = Math.max(m.slowT, secs); return false; }
+    m.stunT = m.stunMax = secs; m.asleep = true; m.drowsy = 0; m.fearT = 0; return true;
+  }
+  // Meow Meow: a huge yawn. Mice around her nod off; cats around her get the buff.
+  yawn(cat) {
+    if (cat.secT > 0 || cat.energy < CAT.yawnCost) return;
+    cat.secT = CAT.yawnCooldown * this.mods.abilityCd; cat.energy -= CAT.yawnCost;
+    let n = 0;
+    for (const m of this.nearMice(cat.x, cat.z, CAT.yawnRadius)) {
+      if (m.dead || Math.hypot(m.x - cat.x, m.z - cat.z) > CAT.yawnRadius) continue;
+      if (this.putToSleep(m, CAT.sleepSecs)) n++;
+    }
+    for (const c of this.cats.values()) if (c.alive && Math.hypot(c.x - cat.x, c.z - cat.z) < CAT.purrRadius) c.buffT = CAT.purrBuffSecs;
+    this.emit({ t: 'yawn', id: cat.id, x: cat.x, z: cat.z, r: CAT.yawnRadius, n }); this.bark('yawn', cat.name);
+  }
+
+  // Scary Cat: tail whip. A narrow line straight ahead; hits up to whipMaxHits mice along it.
+  whip(cat) {
+    cat.attackT = CAT.whipInterval * this.mods.attackCd;
+    const fx = Math.sin(cat.yaw), fz = Math.cos(cat.yaw), hits = [];
+    for (const m of this.nearMice(cat.x + fx * CAT.whipRange / 2, cat.z + fz * CAT.whipRange / 2, CAT.whipRange / 2 + 1.5)) {
+      if (m.dead || Math.abs(m.y - cat.y) > 1.2) continue;
+      const dx = m.x - cat.x, dz = m.z - cat.z, along = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx), r = MICE[m.type].size * 0.35;
+      if (along < 0 || along > CAT.whipRange + r || side > CAT.whipWidth + r) continue;
+      hits.push([along, m]);
+    }
+    hits.sort((a, b) => a[0] - b[0]);
+    for (const [, m] of hits.slice(0, CAT.whipMaxHits)) {
+      const crit = this.rng() < this.mods.crit;
+      this.damageMouse(m, CAT.whipDamage * this.dmgMul(cat) * (crit ? 2 : 1), 'cat', crit);
+      if (!m.dead && !MICE[m.type].boss) { m.x += fx * 0.3; m.z += fz * 0.3; }
+    }
+    this.emit({ t: 'whip', id: cat.id, hits: hits.length });
+  }
+  // Scary Cat: arch + hiss. Mice in range run away from her for a few seconds (bosses just slow).
+  hiss(cat) {
+    if (cat.secT > 0 || cat.energy < CAT.hissCost) return;
+    cat.secT = CAT.hissCooldown * this.mods.abilityCd; cat.energy -= CAT.hissCost; cat.hissT = 0.8;
+    let n = 0;
+    for (const m of this.nearMice(cat.x, cat.z, CAT.hissRadius)) {
+      if (m.dead || Math.hypot(m.x - cat.x, m.z - cat.z) > CAT.hissRadius) continue;
+      if (MICE[m.type].boss) { m.slowT = CAT.hissFear; continue; }
+      m.fearT = CAT.hissFear * (0.8 + this.rng() * 0.4); m.fearX = cat.x; m.fearZ = cat.z; n++;
+    }
+    this.emit({ t: 'hiss', id: cat.id, x: cat.x, z: cat.z, r: CAT.hissRadius, n }); this.bark('hiss', cat.name);
+  }
+  // Scary Cat: backflip away from where she's facing.
+  leapBack(cat) {
+    if (cat.altT > 0 || !cat.onGround) return;
+    cat.altT = CAT.leapBackCooldown * this.mods.abilityCd;
+    cat.vx = -Math.sin(cat.yaw) * CAT.leapBackH; cat.vz = -Math.cos(cat.yaw) * CAT.leapBackH; cat.vy = CAT.leapBackV;
+    cat.onGround = false; cat.dashing = true; cat.flipT = 0.5;
+    this.emit({ t: 'leapback', id: cat.id });
+  }
+  // Nebbie: whisker dart. Straight and fast; passes through up to whiskerPierce mice.
+  fireWhisker(cat, inp) {
+    cat.attackT = CAT.whiskerInterval * this.mods.attackCd;
+    const a = this.aimFrom(cat, inp);
+    // Darts fly low and level (mouse height) so they can skewer a row; aim up only at raised targets.
+    const sx = cat.x + Math.sin(cat.yaw) * 0.4, sy = cat.y + 0.3, sz = cat.z + Math.cos(cat.yaw) * 0.4;
+    const dx = a.x - sx, dy = a.y > cat.y + 1 ? a.y - sy : 0, dz = a.z - sz, d = Math.hypot(dx, dy, dz) || 1;
+    this.missiles.push({ id: this.nextId++, kind: 'whisker', x: sx, y: sy, z: sz, vx: dx / d * CAT.whiskerSpeed, vy: dy / d * CAT.whiskerSpeed, vz: dz / d * CAT.whiskerSpeed,
+      life: 0.8, g: 0, pierce: CAT.whiskerPierce, hit: [], mul: this.dmgMul(cat) });
+    this.emit({ t: 'whisker', id: cat.id });
+  }
+  // Nebbie: purr. Heals over time and buffs (damage + speed) every cat in range, herself included.
+  purr(cat) {
+    if (cat.secT > 0 || cat.energy < CAT.purrCost) return;
+    cat.secT = CAT.purrCooldown * this.mods.abilityCd; cat.energy -= CAT.purrCost;
+    const who = [];
+    for (const c of this.cats.values()) {
+      if (!c.alive || Math.hypot(c.x - cat.x, c.z - cat.z) > CAT.purrRadius) continue;
+      c.healT = CAT.purrSecs; c.healRate = c.def.maxHp * CAT.purrHeal / CAT.purrSecs; c.buffT = CAT.purrBuffSecs; who.push(c.id);
+    }
+    this.emit({ t: 'purr', id: cat.id, x: cat.x, z: cat.z, r: CAT.purrRadius, who }); this.bark('purr', cat.name);
+  }
+
   aimFrom(cat, inp) {
     // Fall back to straight ahead if the client sent no aim point.
     return inp.aim || { x: cat.x + Math.sin(cat.yaw) * 20, y: cat.y + 0.5, z: cat.z + Math.cos(cat.yaw) * 20 };
@@ -604,7 +830,7 @@ export class Sim {
     const a = this.aimFrom(cat, inp);
     const sx = cat.x + Math.sin(cat.yaw) * 0.4, sy = cat.y + cat.def.height * 0.75, sz = cat.z + Math.cos(cat.yaw) * 0.4;
     const dx = a.x - sx, dy = a.y - sy, dz = a.z - sz, d = Math.hypot(dx, dy, dz) || 1;
-    this.missiles.push({ id: this.nextId++, kind: 'pellet', x: sx, y: sy, z: sz, vx: dx / d * CAT.pelletSpeed, vy: dy / d * CAT.pelletSpeed, vz: dz / d * CAT.pelletSpeed, life: 0.9, g: 2 });
+    this.missiles.push({ id: this.nextId++, kind: 'pellet', x: sx, y: sy, z: sz, vx: dx / d * CAT.pelletSpeed, vy: dy / d * CAT.pelletSpeed, vz: dz / d * CAT.pelletSpeed, life: 0.9, g: 2, mul: this.dmgMul(cat) });
     this.emit({ t: 'spit', id: cat.id });
   }
   fireHairball(cat, inp) {
@@ -633,7 +859,7 @@ export class Sim {
     this.emit({ t: 'bite', id: cat.id });
     if (!best) return;
     const crit = this.rng() < this.mods.crit;
-    const dmg = CAT.biteDamage * (crit ? 2 : 1);
+    const dmg = CAT.biteDamage * this.dmgMul(cat) * (crit ? 2 : 1);
     // A killing bite eats the mouse if the eat cooldown is ready: heal, no tail.
     if (best.hp - dmg <= 0 && cat.eatT <= 0 && !MICE[best.type].boss) {
       cat.eatT = CAT.eatCooldown;
@@ -661,7 +887,7 @@ export class Sim {
       if (m.dead || Math.hypot(m.x - cat.x, m.z - cat.z) > CAT.pounceRadius || Math.abs(m.y - cat.y) > 1.2) continue;
       m.stunT = m.stunMax = MICE[m.type].boss ? CAT.pounceStun * 0.4 : CAT.pounceStun;
       m.windT = 0;                                   // interrupts a boss stomp wind-up
-      this.damageMouse(m, CAT.pounceDamage, 'splat');
+      this.damageMouse(m, CAT.pounceDamage * this.dmgMul(cat), 'splat');
     }
   }
   // Puddin's heavy landing flings small mice away.
@@ -795,7 +1021,7 @@ export class Sim {
       return;
     }
     if (m.state === 'stranded') { this.damageMouse(m, RULES.unreachableDps * DT, 'stranded'); return; }
-    if (m.stunT > 0) { m.stunT -= DT; return; }
+    if (m.stunT > 0) { m.stunT -= DT; if (m.stunT <= 0) m.asleep = false; return; }
     if (m.state === 'stuck') { m.stuckT -= DT; if (m.stuckT <= 0) m.state = 'walk'; return; }
 
     const i = cellOf(m.x, m.z);
@@ -809,6 +1035,16 @@ export class Sim {
     const pass = d.big ? this.passBig : this.passSmall;
     let flow = d.big ? this.flowBig : this.flow;
     if (i < 0 || !(flow[i] < Infinity)) { m.state = 'stranded'; return; }
+    // Scared by a hiss: run straight away from the cat, sliding along walls.
+    if (m.fearT > 0) {
+      m.fearT -= DT;
+      const fx = m.x - m.fearX, fz = m.z - m.fearZ, fl = Math.hypot(fx, fz) || 1, sp = d.speed * 1.4 * DT;
+      const okf = (x, z) => { const c = cellOf(x, z); return c >= 0 && pass(c) && !this.isBlocker(c); };
+      const nx = m.x + fx / fl * sp, nz = m.z + fz / fl * sp;
+      if (okf(nx, nz)) { m.x = nx; m.z = nz; } else if (okf(nx, m.z)) m.x = nx; else if (okf(m.x, nz)) m.z = nz;
+      m.yaw = Math.atan2(fx, fz);
+      return;
+    }
     // Follow the pack's lane choice until it's reached, then head straight for the hole.
     if (!d.big && m.via >= 0) {
       const vf = this.viaFlow[m.via];
@@ -831,11 +1067,12 @@ export class Sim {
     }
 
     // Nearest cat on (roughly) our level — what we fight.
-    let foe = null, foeD = Infinity;
+    // Cats with taunt (Casper) count as closer, so mice pick them first and chase from further.
+    let foe = null, foeD = Infinity, best = Infinity;
     for (const cat of this.cats.values()) {
       if (!cat.alive || Math.abs(cat.y - m.y) > 1.2) continue;
-      const dd = Math.hypot(cat.x - m.x, cat.z - m.z);
-      if (dd < foeD) { foe = cat; foeD = dd; }
+      const dd = Math.hypot(cat.x - m.x, cat.z - m.z), eff = dd / (cat.def.taunt || 1);
+      if (eff < best) { foe = cat; foeD = dd; best = eff; }
     }
 
     // Boss stomp: wind up (red ring warning), then slam — hurts, stuns and flings cats.
@@ -849,7 +1086,7 @@ export class Sim {
             if (!cat.alive || cat.y > m.y + 1.5) continue;
             const dx = cat.x - m.x, dz = cat.z - m.z, dd = Math.hypot(dx, dz) || 0.1;
             if (dd > d.stomp.radius) continue;
-            this.hurtCat(cat, d.stomp.dmg);
+            if (!this.hurtCat(cat, d.stomp.dmg)) continue;          // dodged
             cat.stunT = d.stomp.stun; cat.vx = dx / dd * d.stomp.fling; cat.vz = dz / dd * d.stomp.fling; cat.vy = 6; cat.onGround = false;
           }
         }
@@ -894,7 +1131,7 @@ export class Sim {
     const sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * (m.packed ? RULES.packSpeed : 1);
     let mx, mz;
     m.ignoreT = Math.max(0, (m.ignoreT || 0) - DT);
-    const chasing = foe && d.aggro && foeD < d.aggro && foe.onGround !== false && m.ignoreT === 0;
+    const chasing = foe && d.aggro && foeD < d.aggro * (foe.def.taunt || 1) && foe.onGround !== false && m.ignoreT === 0;
     if (chasing) {
       // Go for the cat. Stop at biting distance (no pushing into it).
       const dx = foe.x - m.x, dz = foe.z - m.z, dd = foeD || 1, reach = d.size * 0.5 + foe.def.radius;
@@ -949,11 +1186,15 @@ export class Sim {
   }
 
   // One place for "a mouse hurt a cat" (bites, spit, stomps).
+  // Returns false when the hit missed (dead cat, or Nebbie dodged).
   hurtCat(cat, dmg) {
-    if (!cat.alive) return;
+    if (!cat.alive) return false;
+    cat.stillT = 0;                                  // getting hit wakes a napping cat
+    if (cat.def.dodge && this.rng() < cat.def.dodge) { this.emit({ t: 'dodge', id: cat.id }); if (this.rng() < 0.15) this.bark('dodge', cat.name); return false; }
     cat.hp -= dmg; cat.hurtT = 0.3; this.stats.damageTaken += dmg;
     this.emit({ t: 'catHurt', id: cat.id });
     if (cat.hp <= 0) this.killCat(cat, false);
+    return true;
   }
 
   // Plague spit: arcs at a cat, hurts on contact, splats on the floor.
@@ -988,21 +1229,59 @@ export class Sim {
   // Cat projectiles: pellets (fast, single target, bleed) and hairballs (arc, splash, slow).
   stepMissiles() {
     for (const b of this.missiles) {
-      b.vy -= b.g * DT; b.x += b.vx * DT; b.y += b.vy * DT; b.z += b.vz * DT; b.life -= DT;
-      const i = cellOf(b.x, b.z);
-      let hitMouse = null;
-      for (const m of this.nearMice(b.x, b.z, 1.2)) {
-        const s = MICE[m.type].size;
-        if (!m.dead && Math.hypot(m.x - b.x, m.z - b.z) < s * 0.5 + 0.2 && Math.abs(m.y + s * 0.4 - b.y) < s * 0.6 + 0.2) { hitMouse = m; break; }
+      b.vy -= b.g * DT; b.life -= DT;
+      // Move in short sub-steps so fast darts can't skip over a mouse between ticks.
+      const n = Math.max(1, Math.ceil(Math.hypot(b.vx, b.vy, b.vz) * DT / 0.3));
+      let i = -1, hitMouse = null, hitWorld = false;
+      for (let k = 0; k < n && !hitMouse && !hitWorld; k++) {
+        b.x += b.vx * DT / n; b.y += b.vy * DT / n; b.z += b.vz * DT / n;
+        i = cellOf(b.x, b.z);
+        for (const m of this.nearMice(b.x, b.z, 1.2)) {
+          const s = MICE[m.type].size;
+          if (!m.dead && !(b.hit && b.hit.includes(m.id)) && Math.hypot(m.x - b.x, m.z - b.z) < s * 0.5 + 0.2 && Math.abs(m.y + s * 0.4 - b.y) < s * 0.6 + 0.2) { hitMouse = m; break; }
+        }
+        hitWorld = i < 0 || b.y <= this.groundAt(i, b.y + 0.1, 0.1, true) || this.blocks(i, b.y, 0.15, 0, true);
+        // A piercing dart deals with this mouse and keeps flying through the rest of the sub-steps.
+        if (hitMouse && b.kind === 'whisker' && b.pierce > 1 && !hitWorld) {
+          const crit = this.rng() < this.mods.crit;
+          b.hit.push(hitMouse.id); b.pierce--;
+          this.damageMouse(hitMouse, CAT.whiskerDamage * (b.mul || 1) * (crit ? 2 : 1), 'cat', crit);
+          this.emit({ t: 'pelletHit', x: b.x, y: Math.max(0, b.y), z: b.z, mouse: true });
+          hitMouse = null;
+        }
       }
-      const hitWorld = b.life <= 0 || i < 0 || b.y <= this.groundAt(i, b.y + 0.1, 0.1, true) || this.blocks(i, b.y, 0.15, 0, true);
+      if (b.life <= 0) hitWorld = true;
       if (!hitMouse && !hitWorld) continue;
+      // Whisker darts go through mice until they run out of pierce (or hit the world).
+      if (b.kind === 'whisker') {
+        if (hitMouse) {
+          const crit = this.rng() < this.mods.crit;
+          b.hit.push(hitMouse.id); b.pierce--;
+          this.damageMouse(hitMouse, CAT.whiskerDamage * (b.mul || 1) * (crit ? 2 : 1), 'cat', crit);
+          this.emit({ t: 'pelletHit', x: b.x, y: Math.max(0, b.y), z: b.z, mouse: true });
+        }
+        if (hitWorld || b.pierce <= 0) b.done = true;
+        continue;
+      }
+      if (b.kind === 'burr') {
+        b.done = true;
+        if (hitMouse) {
+          this.damageMouse(hitMouse, CAT.burrDamage * (b.mul || 1), 'cat');
+          if (!hitMouse.dead) {
+            hitMouse.slowT = Math.max(hitMouse.slowT, CAT.burrSlowSecs);
+            hitMouse.drowsy = (hitMouse.drowsy || 0) + 1;
+            if (hitMouse.drowsy >= CAT.burrDrowsy) this.putToSleep(hitMouse, CAT.sleepSecs);
+          }
+        }
+        this.emit({ t: 'pelletHit', x: b.x, y: Math.max(0, b.y), z: b.z, mouse: !!hitMouse });
+        continue;
+      }
       b.done = true;
       if (b.kind === 'pellet') {
         if (hitMouse) {
           if (hitMouse.bleed.length < this.mods.bleedMax) hitMouse.bleed.push(CAT.bleedSeconds); else hitMouse.bleed[0] = CAT.bleedSeconds;
           const crit = this.rng() < this.mods.crit;
-          this.damageMouse(hitMouse, CAT.pelletDamage * (crit ? 2 : 1), 'cat', crit);
+          this.damageMouse(hitMouse, CAT.pelletDamage * (b.mul || 1) * (crit ? 2 : 1), 'cat', crit);
         }
         this.emit({ t: 'pelletHit', x: b.x, y: Math.max(0, b.y), z: b.z, mouse: !!hitMouse });
       } else {
@@ -1097,12 +1376,14 @@ export class Sim {
     const cat = this.cats.get(id);
     const nearStall = cat ? STALLS.some(s => Math.hypot(cat.x - s.sell[0], cat.z - s.sell[1]) < RULES.stallRadius) : false;
     const def = cat ? cat.def : CATS.fred;
-    const secCd = def.secondary === 'hairball' ? CAT.hairballCooldown : CAT.pounceCooldown;
+    const SEC = { hairball: [CAT.hairballCooldown, CAT.hairballCost], pounce: [CAT.pounceCooldown, CAT.pounceCost], hiss: [CAT.hissCooldown, CAT.hissCost],
+      purr: [CAT.purrCooldown, CAT.purrCost], frenzy: [CAT.frenzyCooldown, CAT.frenzyCost], yawn: [CAT.yawnCooldown, CAT.yawnCost] };
+    const [secCd, secCost] = SEC[def.secondary];
     return { phase: this.phase, wave: this.wave, phaseTimer: this.phaseTimer, lives: this.lives, sardines: this.sardines,
       yarn: this.yarn, tails: cat ? cat.tails : 0, hp: cat ? cat.hp / def.maxHp : 0, energy: cat ? cat.energy / CAT.maxEnergy : 0,
       alive: cat ? cat.alive : false, respawnT: cat ? cat.respawnT : 0, name: cat ? cat.name : '', kind: cat ? cat.kind : 'fred',
       secCd: cat ? cat.secT / (secCd * this.mods.abilityCd) : 0,
-      secCost: def.secondary === 'hairball' ? CAT.hairballCost : CAT.pounceCost,
+      secCost, rage: cat ? cat.rage / CAT.rageMax : 0, napping: cat ? cat.napping : false, altCd: cat && def.alt ? cat.altT / (CAT.leapBackCooldown * this.mods.abilityCd) : 0, buffT: cat ? cat.buffT : 0,
       eatCd: cat ? cat.eatT / CAT.eatCooldown : 0, charge: cat ? cat.charge / CAT.leapMaxCharge : 0,
       miceLeft: this.mice.length + (this.spawn ? this.spawn.queue.length : 0),
       gateUp: this.gate.up, mode: this.mode, nearStall, trinkets: { ...this.trinkets } };

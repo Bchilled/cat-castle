@@ -139,7 +139,7 @@ export class Sfx {
 }
 
 // Rate limits: [max plays, per seconds]. Unlisted sounds: 6 per 0.1 s.
-const LIMITS = { squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25] };
+const LIMITS = { claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25] };
 
 // Each sound: (sfx, output node, random, options).
 const SOUNDS = {
@@ -174,6 +174,17 @@ const SOUNDS = {
   wallkick: (a, o) => { a.tone(o, { type: 'triangle', f: 260, f2: 160, dur: 0.07, vol: 0.25 }); },
   catHurt: (a, o) => { a.noise(o, { dur: 0.3, vol: 0.35, type: 'highpass', f: 2500, att: 0.02 }); },
   catDeath: (a, o) => { a.tone(o, { type: 'sawtooth', f: 520, f2: 300, dur: 0.8, vol: 0.18, att: 0.05, vib: 40 }); a.noise(o, { dur: 0.5, vol: 0.2, type: 'highpass', f: 2500 }); },
+  whip: (a, o) => { a.noise(o, { dur: 0.12, vol: 0.25, f: 800, f2: 4000, q: 1 }); a.noise(o, { t: 0.1, dur: 0.03, vol: 0.8, type: 'highpass', f: 3500 }); },
+  hiss: (a, o) => { a.noise(o, { dur: 0.9, vol: 0.55, type: 'highpass', f: 3200, att: 0.05 }); a.noise(o, { dur: 0.7, vol: 0.2, f: 6000, q: 2, att: 0.08 }); },
+  whisker: (a, o, R) => { a.tone(o, { type: 'triangle', f: 3200 + R() * 400, f2: 1800, dur: 0.07, vol: 0.08 }); a.noise(o, { dur: 0.04, vol: 0.12, type: 'highpass', f: 6000 }); },
+  purr: (a, o) => { a.tone(o, { type: 'sawtooth', f: 26, dur: 1.4, vol: 0.5, att: 0.15, vib: 6 }); a.noise(o, { dur: 1.3, vol: 0.25, type: 'lowpass', f: 220, att: 0.15 });
+    [523, 659, 784].forEach((f, k) => a.tone(o, { f, t: 0.2 + k * 0.12, dur: 0.5, vol: 0.06 })); },
+  dodge: (a, o) => { a.noise(o, { dur: 0.15, vol: 0.2, f: 2500, f2: 800, q: 1 }); },
+  claw: (a, o, R, { hits }) => { a.noise(o, { dur: 0.07, vol: 0.3, f: 3000 + R() * 1000, f2: 1500, q: 2 }); if (hits) a.noise(o, { t: 0.03, dur: 0.05, vol: 0.25, type: 'lowpass', f: 1200 }); },
+  frenzy: (a, o) => { a.tone(o, { type: 'sawtooth', f: 400, f2: 900, dur: 0.5, vol: 0.2, att: 0.03, vib: 60 }); a.noise(o, { dur: 0.5, vol: 0.3, type: 'highpass', f: 2500 }); },
+  burr: (a, o) => { a.tone(o, { f: 500, f2: 260, dur: 0.06, vol: 0.18 }); },
+  yawn: (a, o) => { a.tone(o, { type: 'triangle', f: 520, f2: 180, dur: 1.2, vol: 0.25, att: 0.2, vib: 8 }); a.noise(o, { dur: 1.0, vol: 0.12, type: 'lowpass', f: 900, f2: 300, att: 0.2 });
+    [784, 659, 523].forEach((f, k) => a.tone(o, { f, t: 0.6 + k * 0.15, dur: 0.4, vol: 0.06 })); },
   // Traps
   snap: (a, o) => { a.noise(o, { dur: 0.04, vol: 0.7, type: 'highpass', f: 2500 }); a.tone(o, { type: 'triangle', f: 1500, dur: 0.25, vol: 0.12 }); a.tone(o, { f: 160, f2: 60, dur: 0.1, vol: 0.4 }); },
   flip: (a, o) => { a.tone(o, { f: 180, f2: 520, dur: 0.12, vol: 0.4 }); a.tone(o, { f: 520, f2: 240, t: 0.12, dur: 0.25, vol: 0.3, vib: 25 }); },
