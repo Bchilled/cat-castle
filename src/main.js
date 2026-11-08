@@ -198,7 +198,7 @@ function start(mode) {
     if (k === 'm') { sfx.toggleMute(); showMute(); }
     if (k === 'q') net.send({ type: 'item', id: LOCAL_ID, aim: aim && aim.point ? { x: aim.point.x, y: aim.point.y, z: aim.point.z } : null });   // Q: use your item
     if (k === 'r') rot = (rot + 1) % 4;
-    if (k === 'x' && aim && aim.cell >= 0 && aim.surface !== 'none') net.send({ type: 'sellTrap', id: LOCAL_ID, cell: aim.cell, layer: aim.surface === 'top' ? 'floor' : aim.surface });
+    if (k === 'x' && aim && aim.cell >= 0 && aim.surface !== 'none') net.send({ type: 'sellTrap', id: LOCAL_ID, cell: aim.cell, layer: aim.surface });
     if (k === 'g') net.send({ type: 'startWave', id: LOCAL_ID });
     if (k === 'h') document.getElementById('controls').classList.toggle('hidden');
   });
@@ -209,7 +209,9 @@ function start(mode) {
   function placement() {
     if (!selected || !aim) return null;
     const def = TRAPS[selected];
-    if (aim.surface !== def.surface) return { ok: false, cells: aim.cell >= 0 && aim.surface !== 'none' ? sim.footprint(selected, aim.cell % W, (aim.cell / W) | 0, rot, aim.wallDir) : null, ax: 0, az: 0, wallDir: aim.wallDir };
+    // Floor traps can also go on furniture tops (tables, counters, crates...): aim at the top.
+    const top = aim.surface === 'top' && def.surface === 'floor';
+    if (aim.surface !== def.surface && !top) return { ok: false, cells: aim.cell >= 0 && aim.surface !== 'none' ? sim.footprint(selected, aim.cell % W, (aim.cell / W) | 0, rot, aim.wallDir) : null, ax: 0, az: 0, wallDir: aim.wallDir };
     let [w, d] = def.size; if (def.surface !== 'wall' && rot % 2) [w, d] = [d, w];
     // Traps snap to half-tiles (2 cells). If that spot clips a wall, try nudging one cell
     // so a trap still fits snug against walls that aren't on the half-tile grid.
@@ -222,18 +224,19 @@ function start(mode) {
     } else {
       ax = half(aim.point.x / CELL - w / 2); az = half(aim.point.z / CELL - d / 2);
     }
-    let res = sim.canPlace(selected, ax, az, rot, aim.wallDir);
+    let res = sim.canPlace(selected, ax, az, rot, aim.wallDir, top);
     if (res !== true) {
       const along = def.surface === 'wall' ? ((aim.wallDir === 0 || aim.wallDir === 1) ? [[0, -1], [0, 1]] : [[-1, 0], [1, 0]])
         : [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]];
-      for (const [ox, oz] of along) { if (sim.canPlace(selected, ax + ox, az + oz, rot, aim.wallDir) === true) { ax += ox; az += oz; res = true; break; } }
+      for (const [ox, oz] of along) { if (sim.canPlace(selected, ax + ox, az + oz, rot, aim.wallDir, top) === true) { ax += ox; az += oz; res = true; break; } }
     }
-    return { ok: res === true && sim.sardines >= def.cost, cells: sim.footprint(selected, ax, az, rot, aim.wallDir), ax, az, wallDir: aim.wallDir };
+    const cells = sim.footprint(selected, ax, az, rot, aim.wallDir);
+    return { ok: res === true && sim.sardines >= def.cost, cells, ax, az, wallDir: aim.wallDir, top, y: top ? sim.topHeight(cells[0] >= 0 ? cells[0] : aim.cell) : 0 };
   }
   function placeSelected() {
     const p = placement(); if (!p || !p.cells) return;
     if (!p.ok) sfx.play('deny');
-    net.send({ type: 'place', id: LOCAL_ID, trap: selected, ax: p.ax, az: p.az, rot, wallDir: p.wallDir });
+    net.send({ type: 'place', id: LOCAL_ID, trap: selected, ax: p.ax, az: p.az, rot, wallDir: p.wallDir, top: p.top });
   }
 
   function sendInput() {
@@ -284,6 +287,7 @@ function start(mode) {
       case 'slam': case 'strike': sfx.play('pounceLand', x, z); break;
       case 'leapback': sfx.play('leap', x, z); break;
       case 'bossRoar': sfx.play('bossRoar', undefined, undefined, { vol: 0.9 }); break;
+      case 'crateHit': sfx.play('barricadeHit', x, z); break;
       case 'combo': sfx.play('combo_' + e.kind, x, z); break;
       default: sfx.play(e.t, x, z, e);   // names that match a sound directly (snap, flip, zap, splat, ...)
     }
@@ -329,7 +333,7 @@ function start(mode) {
     if (grindT <= 0) { grindT = 0.3; for (const t of sim.traps.values()) if (t.kind === 'grinder' && t.active) sfx.play('grind', (t.x0 + t.x1) / 2, (t.z0 + t.z1) / 2); }
     if (!ended) sfx.setMusic(sim.phase === 'wave' ? (sim.mice.some(m => MICE[m.type].boss) ? 'boss' : 'wave') : 'build');
     const p = placement();
-    scene.setGhost(selected, p ? p.cells : null, p ? p.ok : false, rot, p ? p.wallDir : -1);
+    scene.setGhost(selected, p ? p.cells : null, p ? p.ok : false, rot, p ? p.wallDir : -1, p ? p.y : 0);
     hud.update(dt, sim.hud(LOCAL_ID), selected, p ? p.ok : true);
     scene.render(dt, yaw, pitch, LOCAL_ID);
     requestAnimationFrame(frame);

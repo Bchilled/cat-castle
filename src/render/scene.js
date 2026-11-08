@@ -235,6 +235,25 @@ export class Scene {
       return { g, f };
     });
     this.propMeshes = new Map();
+    // Food up on furniture tops (mice climb to it).
+    this.topFx = this.sim.tops.map(f => {
+      const g = new THREE.Group(); g.position.set(f.x, f.y, f.z); s.add(g);
+      const col = /cheese/i.test(f.name) ? 0xf0c838 : /fish/i.test(f.name) ? 0x9ab0c0 : /cake/i.test(f.name) ? 0xf0d0e0 : /crumb|oat/i.test(f.name) ? 0xc89a5a : 0xb86a3a;
+      g.add(outline(new THREE.Mesh(new THREE.CylinderGeometry(f.r * 0.8, f.r * 0.8, 0.06, 16), mat(0xe8e4dc))));   // plate
+      for (let k = 0; k < 6; k++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.22 + (k % 3) * 0.06, 8, 6), mat(col)); b.position.set(Math.cos(k * 1.05) * f.r * 0.35, 0.18 + (k % 2) * 0.12, Math.sin(k * 1.05) * f.r * 0.35); g.add(b); }
+      return { g, f };
+    });
+    // Crate stacks mice smash through (servants restack them each wave).
+    this.crateMeshes = this.sim.crates.map(c => {
+      const [x0, z0, x1, z1] = c.rect, g = new THREE.Group(); s.add(g);
+      const w = x1 - x0, d = z1 - z0, n = Math.max(1, Math.round(Math.max(w, d) / 1.6));
+      for (let k = 0; k < n; k++) {
+        const along = w >= d, bw = along ? w / n : w, bd = along ? d : d / n;
+        const b = outline(new THREE.Mesh(new THREE.BoxGeometry(bw * 0.96, 1.6 * (0.85 + (k % 2) * 0.15), bd * 0.96), tmat('planks', 1.5, 0xb89068)), 1.01);
+        b.position.set(along ? x0 + bw * (k + 0.5) : (x0 + x1) / 2, 0.8 * (0.85 + (k % 2) * 0.15), along ? (z0 + z1) / 2 : z0 + bd * (k + 0.5)); b.rotation.y = (k % 3 - 1) * 0.05; g.add(b);
+      }
+      return g;
+    });
   }
   drawMapFeatures(dt, now) {
     if (!this.doorMeshes) this.buildMapFeatures();
@@ -243,6 +262,8 @@ export class Scene {
     for (const { g } of this.fireFx) g.children.forEach((c, k) => { if (c.geometry && c.geometry.type === 'ConeGeometry') c.scale.y = 0.8 + Math.sin(now / 70 + k * 1.9) * 0.3; });
     if (Math.random() < dt * 8) for (const { f } of this.fireFx) this.spawnParticles(f.x + (Math.random() - 0.5) * f.r, 0.5, f.z + (Math.random() - 0.5) * f.r, 0xff8a30, 1, 2, 0.05);
     for (const { g, f } of this.foodFx) { const k = Math.max(0, f.left / f.amount); g.scale.setScalar(Math.max(0.01, k)); g.visible = k > 0; }
+    for (const { g, f } of this.topFx) { const k = Math.max(0, f.left / f.amount); g.children.forEach((c, j) => { if (j) c.visible = j / g.children.length < k + 0.05; }); }
+    this.sim.crates.forEach((c, k) => { this.crateMeshes[k].visible = c.up; this.crateMeshes[k].children.forEach(b => { b.rotation.z = c.up && c.hp < c.maxHp ? Math.sin(now / 40 + b.id) * 0.04 * (1 - c.hp / c.maxHp) : 0; }); });
     // Knock-over props: pots, jugs, baskets, buckets.
     this.syncSimple(this.sim.props, this.propMeshes, (p) => makeProp(p.kind), (g, p) => {
       g.position.set(p.x, p.y, p.z); g.rotation.z = p.state === 'up' ? 0 : Math.min(Math.PI / 2, p.tilt);
@@ -311,18 +332,18 @@ export class Scene {
     return this.cats.get(cat.id);
   }
 
-  placeTrapModel(g, kind, cells, rot, wallDir) {
+  placeTrapModel(g, kind, cells, rot, wallDir, top = 0) {
     const good = cells.filter(i => i >= 0);
     if (!good.length) { g.visible = false; return; }
     const xs = good.map(i => i % W), zs = good.map(i => (i / W) | 0);
     g.visible = true;
     const cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2 * CELL, cz = (Math.min(...zs) + Math.max(...zs) + 1) / 2 * CELL;
     const def = TRAPS[kind];
-    const y = def.surface === 'ceiling' ? this.sim.map.slabBot[good[0]] : 0;
+    const y = def.surface === 'ceiling' ? this.sim.map.slabBot[good[0]] : top || 0;   // top: on a table/counter
     g.position.set(cx, y, cz);
     g.rotation.y = def.surface === 'wall' ? (wallDir >= 0 ? YAW_FOR[OPP[wallDir]] : 0) : YAW_FOR[ROT_DIR[rot % 4]];
   }
-  setGhost(kind, cells, valid, rot, wallDir) {
+  setGhost(kind, cells, valid, rot, wallDir, top = 0) {
     if (this.ghostKind !== kind) {
       if (this.ghost) this.scene.remove(this.ghost);
       this.ghost = kind ? makeTrap(kind, true) : null; this.ghostKind = kind;
@@ -330,7 +351,7 @@ export class Scene {
     }
     if (!this.ghost) return;
     if (!cells) { this.ghost.visible = false; return; }
-    this.placeTrapModel(this.ghost, kind, cells, rot, wallDir);
+    this.placeTrapModel(this.ghost, kind, cells, rot, wallDir, top);
     const col = valid ? 0x5ee06a : 0xe0503a;
     this.ghost.traverse(o => { if (o.isMesh) o.material.color.setHex(col); });
   }
@@ -443,7 +464,7 @@ export class Scene {
     switch (e.t) {
       case 'trapAdd': {
         const g = makeTrap(e.trap.kind);
-        this.placeTrapModel(g, e.trap.kind, e.trap.cells, e.trap.rot, e.trap.wallDir);
+        this.placeTrapModel(g, e.trap.kind, e.trap.cells, e.trap.rot, e.trap.wallDir, e.trap.y);
         g.userData.id = e.trap.id; g.userData.kind = e.trap.kind; g.userData.anim = 0;
         this.scene.add(g); this.trapMeshes.set(e.trap.id, g); break;
       }
@@ -520,7 +541,9 @@ export class Scene {
       case 'wallkick': this.spawnParticles(e.x, e.y + 0.5, e.z, 0xd8d0c0, 6, 2); break;
       case 'item': this.itemFx(e); break;
       case 'smash': this.spawnParticles(e.x, e.y + 0.3, e.z, 0xb86a3a, 16, 4, 0.08); this.shake = Math.max(this.shake, 0.15); break;
-      case 'gorged': this.spawnParticles(e.x, 0.6, e.z, 0xe8c040, 4, 1.5, 0.05); break;
+      case 'crateBreak': this.spawnParticles(e.x, 1, e.z, 0xb89068, 40, 6, 0.14); this.shake = Math.max(this.shake, 0.25); break;
+      case 'crateHit': if (Math.random() < 0.3) this.spawnParticles(e.x, 0.6, e.z, 0xb89068, 2, 2, 0.06); break;
+      case 'gorged': this.spawnParticles(e.x, (e.y || 0) + 0.6, e.z, 0xe8c040, 4, 1.5, 0.05); break;
       case 'dash': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.2, cat.z, 0xd8d0c0, 10, 3); break; }
       case 'sit': this.ring(e.x, e.z, e.r, 0xd8d0c0, 0.4, false, true); this.spawnParticles(e.x, 0.2, e.z, 0xd8d0c0, 20, 5, 0.1); this.shake = Math.max(this.shake, 0.3); break;
       case 'tinker': this.ring(e.x, e.z, e.r, 0x6fd8ff, 0.6, false, true); break;
@@ -737,7 +760,7 @@ export class Scene {
       const p = this.localCat.mesh.position, cp = this.camera.position;
       for (const r of this.roofs) {
         const [x0, z0, x1, z1] = r.f.rect;
-        const under = (q) => q.x > x0 && q.x < x1 && q.z > z0 && q.z < z1 && q.y < r.f.bot + 0.5;
+        const under = (q) => q.x > x0 && q.x < x1 && q.z > z0 && q.z < z1 && q.y < r.f.bot - 0.1;   // below it (standing ON a table is not under it)
         const fade = under(p) || under(cp);
         if (r.faded !== fade) {
           r.faded = fade;
@@ -796,7 +819,7 @@ export class Scene {
       p.x += (mo.x - p.x) * k; p.y += (mo.y - p.y) * k; p.z += (mo.z - p.z) * k;
       const d = MICE[mo.type], s = d.size * (mo.scale || 1);
       const bob = d.ghost ? 0.25 + Math.sin(now / 300 + mo.id) * 0.12 : mo.state === 'walk' ? Math.abs(Math.sin(now / 60 + mo.id)) * 0.04 * s : 0;   // ghosts float
-      const tumble = mo.state === 'air' ? now / 90 : 0;
+      const tumble = mo.state === 'air' ? now / 90 : mo.climbing ? -1.1 : 0;   // nose-up while scrambling up a table leg
       M.compose(v.set(p.x, p.y + bob, p.z), q.setFromEuler(e.set(tumble, mo.yaw || 0, 0, 'YXZ')), sc.set(s, s, s));
       set(body, n, 0, 0.42, 0, 0, 0.8, 0.7, 1.15);
       set(bodyO, n, 0, 0.42, 0, 0, 0.88, 0.78, 1.23);

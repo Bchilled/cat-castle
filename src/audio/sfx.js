@@ -237,6 +237,9 @@ const SOUNDS = {
   intro: (a, o) => { [880, 1175].forEach((f, k) => a.tone(o, { type: 'triangle', f, t: k * 0.12, dur: 0.3, vol: 0.18 })); },
   win: (a, o) => { [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, k) => a.tone(o, { type: 'triangle', f, t: k * 0.14, dur: 0.4, vol: 0.2 })); },
   lose: (a, o) => { [392, 370, 349, 262].forEach((f, k) => a.tone(o, { type: 'sawtooth', f, t: k * 0.35, dur: 0.5, vol: 0.12, vib: 4 })); },
+  // Smarter mice (0.12).
+  crateBreak: (a, o) => { a.noise(o, { dur: 0.12, vol: 0.8, type: 'highpass', f: 1500 }); a.tone(o, { f: 110, f2: 45, t: 0.03, dur: 0.4, vol: 0.6 }); a.noise(o, { t: 0.05, dur: 0.5, vol: 0.4, type: 'lowpass', f: 900, f2: 150 }); },
+  crateUp: (a, o) => { a.tone(o, { type: 'triangle', f: 200, f2: 140, dur: 0.1, vol: 0.2 }); },
   // New traps and items (0.11).
   sizzle: (a, o) => { a.noise(o, { dur: 0.5, vol: 0.35, type: 'highpass', f: 3000, att: 0.02 }); a.noise(o, { dur: 0.3, vol: 0.15, f: 6000, q: 3 }); },
   chill: (a, o, R) => { for (let k = 0; k < 3; k++) a.tone(o, { type: 'triangle', f: 3000 + R() * 1500, t: k * 0.05, dur: 0.1, vol: 0.06 }); },

@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.11.0';
+export const VERSION = '0.12.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -294,6 +294,9 @@ export const MICE = {
   lobber:  { name: 'Siege Mouse', res: { psychic: 1.5 }, points: 10, hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45, aggro: 0, ranged: true },
   plague:  { name: 'Plague Rat', res: { poison: 0.25, holy: 2, fire: 1.5 },  points: 10, hp: 45,   speed: 2.2, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 8,  color: 0x6f7a4a, aggro: 0, spit: { range: 7, dmg: 7, every: 2.2, speed: 11 }, intro: 7, ranged: true },
   fatty:   { name: 'Fat Rat', res: { physics: 0.6, fire: 1.5, poison: 1.25 },     points: 25, hp: 260,  speed: 1.3, size: 1.0,  tails: 2, tailChance: 1,   bite: 18, gateDmg: 40, color: 0x5a4a40, aggro: 3, split: 'mouse', splitN: 3, intro: 9 },
+  // Scout: quick and flimsy, runs at the front of a pack. When one dies the pack remembers
+  // that spot four times as hard (see danger memory in sim.js) and looks for another way.
+  scout:   { name: 'Scout', res: {}, points: 3, hp: 12, speed: 5.2, size: 0.38, tails: 1, tailChance: 1, bite: 3, gateDmg: 4, color: 0xc89a5a, aggro: 0, intro: 2, scout: true },
   // Ghost Mouse: pale and see-through. Shrugs off claws, physics and poison; holy and psychic tear it apart.
   ghost:   { name: 'Ghost Mouse', res: { physical: 0.4, physics: 0.4, poison: 0, death: 0, holy: 2.5, psychic: 1.5 }, points: 8, hp: 34, speed: 2.9, size: 0.45, tails: 1, tailChance: 1, bite: 5, gateDmg: 6, color: 0xdce6f0, aggro: 2, intro: 11, ghost: true },
   // Birds (flying; ignore the routes). Magpies steal cheese and dropped tails; crows carry

@@ -17,6 +17,7 @@ export const INTRO_TEXT = {
   tank: 'tough and slow, shrugs off claws. Chews through Poison Boxes fast. Weak to electricity.',
   plague: 'spits plague at cats from range. Immune-ish to poison; fire and holy hurt it. Kill it first.',
   fatty: "huge, slow, and full of mice. Don't ask. Burns well.",
+  scout: 'runs ahead of the pack. Where a scout dies, the pack remembers, and finds another way.',
   ghost: 'claws and poison pass right through it. Holy and psychic tear it apart.',
 };
 
@@ -25,7 +26,7 @@ export const INTRO_TEXT = {
 // at the start (with a long gap so you can watch it), and stays out of that wave's mobs.
 // From the next wave on it mixes into the packs.
 const KINDS = [   // [type, weight once introduced]
-  ['runner', 0.5], ['splitter', 0.35], ['tank', 0.3], ['plague', 0.25], ['fatty', 0.12], ['ghost', 0.2],
+  ['scout', 0], ['runner', 0.5], ['splitter', 0.35], ['tank', 0.3], ['plague', 0.25], ['fatty', 0.12], ['ghost', 0.2],   // scouts lead packs instead (below)
 ];
 export function buildWave(n, rng, gateUp, opts = {}) {
   const pool = [];
@@ -47,6 +48,7 @@ export function buildWave(n, rng, gateUp, opts = {}) {
   while (pool.length) {
     if (rng() < 0.12) { queue.push({ type: pool.shift(), gap: 0.8 + rng() * 1.2, pack: 1 }); continue; }   // straggler
     const size = Math.min(pool.length, 6 + Math.floor(rng() * 10));
+    if (n > MICE.scout.intro && size >= 6) queue.push({ type: 'scout', gap: 0.04, pack: size });   // a scout runs at the front of every big pack
     for (let k = 0; k < size; k++) queue.push({ type: pool.shift(), gap: k === size - 1 ? Math.max(2.2, 5 - n * 0.1) + rng() : 0.04, pack: size });
   }
   // Birds: a few per wave once introduced, slipped in mid-wave. The first ever comes alone.

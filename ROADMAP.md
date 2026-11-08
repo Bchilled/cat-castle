@@ -9,7 +9,7 @@ Orcs Must Die at heart, but it's cats and mice in a human castle. These are the 
 - Six cats, each with left click, right click, a jump and a passive.
 
 ## A. A living castle you can climb (scale and verticality)
-In from v0.10.0: all six maps, mazing with Poison Boxes, knock-over props, food piles mice gorge on, mud, troughs, darkness, timed doors, fire. Still to do here: mice climbing onto furniture, things that break and fall over to open or close routes, humans in the background.
+In from v0.10.0: all six maps, mazing with Poison Boxes, knock-over props, food piles mice gorge on, mud, troughs, darkness, timed doors, fire. In from v0.12.0: mice climb furniture to eat, floor traps on furniture tops, crate stacks mice smash open. Still to do here: full multi-level routes (mice running along tabletops as a path), bigger things that fall over, humans in the background.
 - Furniture at real scale that cats and mice can both jump onto: market stalls, food stands, tables, benches, shelves, barrels, crates and sacks. Traps go on the floor, walls and ceilings of all of it.
 - Mice climb and jump between levels. Pathing becomes multi-level, with jump links between floor, tabletops and shelves. Mice still never go over a barricade.
 - Infesting: mice stop at food (stalls, sacks, the kitchen) to eat. That holds them in place and buys time to build.
@@ -79,6 +79,7 @@ Equippable actives with cooldowns, for example:
 - Squeaky toy (decoy)
 
 ## F. Smarter mice
+- In from v0.12.0: danger memory (they avoid where they keep dying), scouts, smashing crate shortcuts, avoiding fires, climbing furniture to eat.
 - Already in: they always take the cheapest route, adapt the moment barricades change, and never go over barricades.
 - Next: avoid tiles where many mice just died (they learn), send scouts, and break props to open shortcuts. Siege mice wreck things along a long route.
 

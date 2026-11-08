@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.12.0 — 2026-11-07
+Smarter mice
+- They learn: every mouse that dies marks its patch of floor (a 4x4-unit area) as dangerous. Small mice add that to their path cost, so a lane they keep dying in gets dearer and packs pick other lanes. In tests, packs take a deadly lane about 1 time in 40 instead of 1 in 3. It fades over about 20 seconds (and halves between waves). Bosses don't care. The radar shows where they're scared of as faint red patches. `src/sim/sim.js` addDanger, stepDanger, updateFlow (danger added for small mice only), extraOfBig.
+- Scouts (new, from wave 2): quick, flimsy mice that run at the front of every big pack. A scout's death counts four times as much, and the first one tells you so. `src/config.js` MICE.scout, `src/sim/waves.js`.
+- They smash shortcuts open: crate stacks block a corridor on three maps (the entrance guard passage, the market centre alley, the last stretch of the servants' passages). When the way round is long enough, mice chew through and that shortcut stays open for the rest of the wave; servants stack the crates back between waves. Crates show on the radar. `src/sim/map.js` CRATES, `src/sim/sim.js` crates, crateUp, breakCrate.
+- They go round fires (kitchen ovens and hearth) when there's another way. You can still fling them in.
+
+Climbing and infesting
+- Food up on the furniture on every map: a meat pie on the entrance trestle table, fish and cheese on the market stalls, oats on the stable hay, the top of the cellar cheese wheel, crumbs on the coal scuttle, a roast, a cake and a pie on the kitchen counters.
+- About a third of small mice leave their route to climb up, walk to the food, gorge (30% tougher), and climb back down. They scramble up nose-first. Shown on the radar as yellow rings.
+- Floor traps can now go on furniture tops (tables, counters, stalls, crates, the well): aim at the top. They hit mice up there. A Snapper on the kitchen island is a fine way to ruin dinner. (Not Poison Boxes or Cheese Chunks.) `src/sim/sim.js` stepClimb, topHeight, canPlace(top), trap levels in stepTraps; `src/main.js` placement; `src/render/scene.js` traps at top height.
+- Fixed: standing on a table faded it out as if you were under it. `src/render/scene.js` (line 763).
+
+Tests: 161 checks, all passing:
+- danger re-routes packs, and fades
+- scouts lead packs
+- mice smash crates; crates come back
+- fire avoidance
+- a mouse climbs, eats, comes down tougher
+- a Snapper on the island catches it
+
 ## 0.11.0 — 2026-11-07
 Elements
 - Every attack and trap now carries one of 12 elements: physical, fire, ice, water, wind, earth, electric, psychic, poison, physics, holy, death.
@@ -66,7 +87,7 @@ The shop (between runs)
 - `?sandbox` in the URL unlocks everything with 999 paw prints to try things out; nothing is saved.
 - `src/meta/profile.js` (new), `src/ui/shop.js` (new), `src/ui/icons.js` (new, shared trap pictures), `src/main.js` (menu, loadout, rewards), `src/ui/hud.js` (end screen), `src/render/models.js` makeHat, `index.html` (shop screen and styles).
 
-Tests: 155 checks, all passing:
+Tests: 150 checks, all passing:
 - every element combo and resistance
 - every trap placed and hitting a mouse
 - upgrade numbers

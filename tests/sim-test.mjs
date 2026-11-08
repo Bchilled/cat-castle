@@ -497,4 +497,48 @@ for (const id of MAP_ORDER) {
   const tr = [...g.traps.values()][0];
   ok(tr && tr.p.bleed === 3 && tr.p.damage > TRAPS.mousetrap.damage, 'placed traps carry your upgrades');
 }
+// 34. Smarter mice: danger memory, scouts, crates, fire avoidance, climbing, traps on tops.
+{
+  // Danger: kill enough mice on the route and the pack picks another way.
+  const dg = new Sim({ seed: 500 }); dg.addPlayer('p1'); dg.gate.up = false; dg.flowDirty = true; dg.step();
+  // The north yard has three lanes (west colonnade, guard passage, east). Make the west lane
+  // deadly: its cost should rise the most, so packs favour the others.
+  const VI = (await import('../src/sim/map.js')).VIAS;
+  const west = VI.findIndex(v => v.x < 30);
+  const cost0 = VI.map((_, k) => dg.viaCost(k, 0));
+  const wr = dg.routes()[1];   // entrance 1's first lane route = the west lane
+  for (let k = 0; k < 6; k++) wr.filter(([, z], j) => z > 10 && z < 34 && j % 3 === 0).forEach(([x, z]) => dg.addDanger(x, z, 3));   // a killing ground along it
+  run(dg, 1.1);
+  const rise = VI.map((_, k) => dg.viaCost(k, 0) - cost0[k]);
+  ok(rise[west] > 40 && rise[west] === Math.max(...rise), `the lane they keep dying in gets dearer (+${rise.map(v => v.toFixed(0)).join(' / +')})`);
+  const picks = {}; for (let k = 0; k < 200; k++) { const v = dg.chooseVia(0); picks[v] = (picks[v] || 0) + 1; }
+  ok((picks[west] || 0) < 15, `packs mostly stop picking it (${JSON.stringify(picks)})`);
+  for (let k = 0; k < 120; k++) { dg.dangerT = 0; dg.stepDanger(); }
+  ok(Math.max(...dg.danger) < 1, 'and forget it after a while');
+  ok(buildWave(9, () => 0.5, false).queue.some(e => e.type === 'scout'), 'scouts lead the packs');
+  // Crates: the guard passage is a shortcut worth smashing; mice chew through and it opens.
+  const cr = new Sim({ seed: 501 }); cr.addPlayer('p1'); cr.gate.up = false; cr.flowDirty = true; cr.step();
+  const crate = cr.crates[0]; for (let k = 0; k < 6; k++) { const m = cr.spawnAt('tank', 48 + (k % 3 - 1), 23 + (k >> 1) * 0.3, 999); m.via = -1; }
+  const evc = run(cr, 30, () => { for (const m of cr.mice) m.hp = m.maxHp; });
+  ok(evc.some(e => e.t === 'crateHit') && !crate.up, 'mice smash through a crate stack to take the shortcut');
+  cr.phase = 'build'; cr.phaseTimer = 0; cr.mice = []; cr.step(); ok(crate.up, 'servants stack the crates back each wave');
+  // Fire: mice path round the kitchen ovens.
+  const fk = new Sim({ map: 'kitchen', seed: 502 }); fk.addPlayer('p1'); fk.step();
+  ok(fk.extraArr[cellOf(44, 10.5)] >= 6, 'mice avoid stepping into fire when they can');
+  // Climbing: a mouse near the kitchen island climbs up, eats the roast and comes back down tougher.
+  const cl = new Sim({ map: 'kitchen', seed: 503 }); cl.addPlayer('p1'); cl.step();
+  const cm = cl.spawnAt('mouse', 48, 61.5, 100); cm.climber = true; cm.via = -1; let topY = 0;
+  run(cl, 15, () => { topY = Math.max(topY, cm.y); });
+  ok(topY > 3 && cm.gorged && cm.maxHp > 100, `a mouse climbs the island (y ${topY.toFixed(1)}), eats and comes out tougher (${cm.maxHp} hp)`);
+  ok(!cm.climb && cm.y < 0.1, 'then climbs back down and carries on');
+  // Floor traps on furniture tops: a Snapper on the island catches the diner.
+  const tt = new Sim({ map: 'kitchen', seed: 504 }); tt.addPlayer('p1'); tt.sardines = 1e5; tt.step();
+  const ax = Math.floor(47 / CELL), az = Math.floor(47 / CELL);
+  ok(tt.canPlace('mousetrap', ax, az, 0, -1, true) === true && tt.canPlace('barricade', ax, az, 0, -1, true) !== true, 'floor traps go on furniture tops (not Poison Boxes)');
+  tt.command({ type: 'place', id: 'p1', trap: 'mousetrap', ax, az, rot: 0, top: true });
+  const ttr = [...tt.traps.values()][0];
+  const tm = tt.spawnAt('mouse', 48, 61.5, 100); tm.climber = true; tm.via = -1;
+  const evt = run(tt, 8);
+  ok(ttr && ttr.y > 3 && evt.some(e => e.t === 'snap'), `the Snapper up on the island snaps a climbing mouse (hp ${Math.max(0, tm.hp).toFixed(0)})`);
+}
 process.exit(fails ? 1 : 0);

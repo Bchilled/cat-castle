@@ -134,6 +134,11 @@ export class Hud {
     sim.doors.forEach(d => { const [x0, z0, x1, z1] = d.rect; c.fillStyle = d.open ? TYPE_RGB[T.FLOOR] : '#8a5a2a'; c.fillRect(this.rx(x0), this.rz(z0), Math.max(2, this.rx(x1) - this.rx(x0)), Math.max(2, this.rz(z1) - this.rz(z0))); });
     c.fillStyle = '#ff7a20'; for (const f of sim.mapDef.fires || []) { c.beginPath(); c.arc(this.rx(f.x), this.rz(f.z), 3, 0, 7); c.fill(); }
     c.fillStyle = '#e8c040'; for (const f of sim.foods) if (f.left > 0) { c.beginPath(); c.arc(this.rx(f.x), this.rz(f.z), 2.5, 0, 7); c.fill(); }
+    // Food up on furniture: yellow ring. Crate stacks: brown while standing.
+    c.strokeStyle = '#e8c040'; c.lineWidth = 1.5; for (const f of sim.tops) if (f.left > 0) { c.beginPath(); c.arc(this.rx(f.x), this.rz(f.z), 3, 0, 7); c.stroke(); }
+    c.fillStyle = '#9a6a3a'; for (const cr of sim.crates) if (cr.up) { const [x0, z0, x1, z1] = cr.rect; c.fillRect(this.rx(x0), this.rz(z0), Math.max(2, this.rx(x1) - this.rx(x0)), Math.max(2, this.rz(z1) - this.rz(z0))); }
+    // Where the mice are scared of (danger memory): faint red patches.
+    for (const [x, z, k] of sim.dangerSpots) { c.fillStyle = `rgba(220,40,30,${0.12 + 0.35 * k})`; const r = 4 / CELL * this.rs; c.fillRect(this.rx(x) - r / 2, this.rz(z) - r / 2, r, r); }
     if (GATE && !sim.gate.up) { c.fillStyle = TYPE_RGB[T.FLOOR]; c.fillRect(this.rx(GATE.x0), this.rz(GATE.z0), this.rx(GATE.x1) - this.rx(GATE.x0), this.rz(GATE.z1) - this.rz(GATE.z0)); }
     for (const tr of sim.traps.values()) { c.fillStyle = tr.kind === 'barricade' ? '#c4a46a' : tr.layer === 'ceiling' ? '#6fb8ff' : '#7fd06a'; c.fillRect(this.rx(tr.x0), this.rz(tr.z0), Math.max(2, this.rx(tr.x1) - this.rx(tr.x0)), Math.max(2, this.rz(tr.z1) - this.rz(tr.z0))); }
     // Mouse route.

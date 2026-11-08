@@ -138,6 +138,14 @@ const BARRICADE_COST = 5000;
 const MUD_SLOW = 0.55;      // stables: mud slows mice and cats
 const FIRE_DPS = 20;        // kitchen: ovens and hearth burn mice (cats take 3/4)
 const GORGE_SECS = 2.5, GORGE_HP = 1.3;   // food piles: time spent eating, and how much tougher they come out
+// Smarter mice (v0.12).
+// Danger memory: every death leaves "danger" on the floor around it; small mice add it to
+// their path cost (capped per cell), so a kill zone they keep dying in becomes worth avoiding
+// if another way costs about the same. It fades over ~20 s. Scouts dying count four times.
+const DANGER_KILL = 3, DANGER_SCOUT = 4, DANGER_CAP = 10, DANGER_MAX = 30, DANGER_DECAY = 0.965, DANGER_REPATH = 12;
+const FIRE_AVOID = 6;            // extra path cost near ovens: mice go round fires if they can
+const CRATE_COST = 15, CRATE_HP = 90, CRATE_H = 1.6;   // crate stacks: cheap enough to smash through for a real shortcut
+const CLIMB_SECS = 0.9;          // time to scramble up (or down) a table leg
 // Default element for each damage source (a call can name its own instead).
 // 'dot' = a status ticking (burning, poison): resistances apply, but it doesn't re-apply itself.
 const SRC_EL = { cat: 'physical', bleed: 'physical', trap: 'physical', splat: 'physics', poison: 'poison', fire: 'fire', chain: 'electric' };
@@ -167,7 +175,22 @@ export class Sim {
     this.traps = new Map();
     this.baits = [];                    // Cheese Chunks (refreshed each tick in stepTraps)
     const N = W * H;
-    this.occ = { floor: new Int32Array(N), wall: new Int32Array(N), ceiling: new Int32Array(N) };
+    this.occ = { floor: new Int32Array(N), wall: new Int32Array(N), ceiling: new Int32Array(N), top: new Int32Array(N) };   // top = on furniture
+    // Food up on furniture tops (mice climb to it), crate stacks mice smash through, danger memory.
+    this.tops = (this.mapDef.tops || []).map(f => ({ ...f, left: f.amount }));
+    this.crateAt = new Int16Array(N);
+    this.crates = (this.mapDef.crates || []).map(([x0, z0, x1, z1], k) => {
+      const cells = [];
+      for (let z = Math.floor(z0 / CELL); z < Math.ceil(z1 / CELL); z++) for (let x = Math.floor(x0 / CELL); x < Math.ceil(x1 / CELL); x++) { const i = idx(x, z); cells.push(i); this.crateAt[i] = k + 1; }
+      return { id: 800000 + k, rect: [x0, z0, x1, z1], cells, hp: CRATE_HP, maxHp: CRATE_HP, up: true };
+    });
+    // Danger is kept per block of 8x8 cells (4x4 units): an area, so mice can't just sidestep
+    // the exact spot; they have to go round the whole patch or take another lane.
+    this.DB = 8; this.dbw = Math.ceil(W / this.DB); this.dbh = Math.ceil(H / this.DB);
+    this.danger = new Float32Array(this.dbw * this.dbh); this.dangerT = 1; this.dangerDelta = 0; this.dangerSpots = [];
+    // Constant path cost near fires (kitchen): mice route round the ovens when they can.
+    this.fireCost = new Float32Array(N);
+    for (const f of this.mapDef.fires || []) for (let i = 0; i < N; i++) { const [cx, cz] = cellCenter(i); if (Math.hypot(cx - f.x, cz - f.z) < f.r + 0.5) this.fireCost[i] = FIRE_AVOID; }
     this.tails = []; this.loot = [];   // trinkets lying on the ground (tails are gone: kills pay Paw Points directly)
     this.trinkets = {};                // collected this run (team-wide), key -> count
     this.shots = [];                   // lobber rocks
@@ -234,7 +257,7 @@ export class Sim {
         if (cmd.alt) inp.alt = true;             // E: second ability
         break;
       }
-      case 'place': this.placeTrap(cat, cmd.trap, cmd.ax, cmd.az, cmd.rot || 0, cmd.wallDir); break;
+      case 'place': this.placeTrap(cat, cmd.trap, cmd.ax, cmd.az, cmd.rot || 0, cmd.wallDir, !!cmd.top); break;
       case 'sellTrap': this.sellTrap(cmd.cell, cmd.layer); break;
       case 'item': this.useItem(cat, cmd.aim); break;
       case 'startWave': if (this.phase === 'build') this.phaseTimer = 0; break;
@@ -255,6 +278,14 @@ export class Sim {
   isWater(i) { return i >= 0 && this.map.type[i] === T.WATER; }
   trapAt(layer, i) { const id = i >= 0 ? this.occ[layer][i] : 0; return id ? this.traps.get(id) : null; }
   isBarricade(i) { const t = this.trapAt('floor', i); return t && t.kind === 'barricade' ? t : null; }
+  crateUp(i) { const k = i >= 0 ? this.crateAt[i] : 0; return k && this.crates[k - 1].up ? this.crates[k - 1] : null; }
+  // Height of a furniture top a floor trap could sit on (0 = not a top): a low solid block
+  // (crates, the well, sacks) or a table/counter/bench surface.
+  topHeight(i) {
+    if (i < 0) return 0;
+    if (this.map.type[i] === T.SOLID && this.map.solid[i] >= 0.8 && this.map.solid[i] <= 4.6 && !(this.map.door[i] >= 0)) return this.map.solid[i];
+    const st = this.map.slabTop[i]; return st >= 0.8 && st <= 4.6 ? st : 0;
+  }
 
   // Solid column height at a cell. Cats squeeze past the jammed board (gate);
   // mice have to chew it down.
@@ -270,6 +301,7 @@ export class Sim {
     } else if (t === T.GATE) h = 0;
     const bar = this.isBarricade(i);
     if (bar) h = Math.max(h, TRAPS.barricade.height * (0.55 + 0.45 * bar.hp / bar.maxHp));   // same height as the model
+    if (this.crateUp(i)) h = Math.max(h, CRATE_H);
     return h;
   }
   blocks(i, y, h, step, forCat) {
@@ -300,21 +332,27 @@ export class Sim {
   extraOf = (i) => (this.extraArr ? this.extraArr[i] : 0);   // per-cell step cost (traps, gate) for nextCell
   passSmall = (i) => miceWalkable(this.map.type[i]);
   passBig = (i) => (this.map.bigOk[i] === 1 && this.map.type[i] !== T.SOLID) || this.map.type[i] === T.HOLE || this.map.type[i] === T.GATE;   // SOLID: a shut door
-  isBlocker = (i) => (this.map.type[i] === T.GATE && this.gate.up) || this.occBarricade(i);
+  isBlocker = (i) => (this.map.type[i] === T.GATE && this.gate.up) || this.occBarricade(i) || !!this.crateUp(i);
+  extraOfBig = (i) => (this.extraBig ? this.extraBig[i] : 0);   // bosses: no danger memory (fearless)
   occBarricade(i) { const id = this.occ.floor[i]; return id ? this.traps.get(id).kind === 'barricade' : false; }
   updateFlow() {
     // Precompute per-cell trap cost + blocker flags once (much faster than
     // looking traps up inside the pathfinder for 46k cells).
     const N = W * H, extra = new Float32Array(N), blk = new Uint8Array(N);
-    for (const tr of this.traps.values()) for (const i of tr.cells) {
+    for (const tr of this.traps.values()) if (tr.layer !== 'top') for (const i of tr.cells) {
       extra[i] += tr.kind === 'barricade' ? BARRICADE_COST : (TRAPS[tr.kind].pathCost || 0);
       if (tr.kind === 'barricade') blk[i] = 1;
     }
     if (this.gate.up) for (let i = 0; i < N; i++) if (this.map.type[i] === T.GATE) { extra[i] += 10 + this.gate.hp / 4; blk[i] = 1; }
-    this.blk = blk; this.extraArr = extra;
-    const base = { goals: this.goals, extra: (i) => extra[i], blocked: (i) => blk[i] === 1 };
+    for (const c of this.crates) if (c.up) for (const i of c.cells) { extra[i] += CRATE_COST; blk[i] = 1; }
+    for (let i = 0; i < N; i++) if (this.fireCost[i]) extra[i] += this.fireCost[i];
+    // Small mice also weigh the danger they remember; bosses don't care.
+    const extraS = Float32Array.from(extra), DB = this.DB;
+    for (let i = 0; i < N; i++) { const dv = this.danger[((((i / W) | 0) / DB) | 0) * this.dbw + (((i % W) / DB) | 0)]; if (dv > 0.5) extraS[i] += Math.min(DANGER_CAP, dv); }
+    this.blk = blk; this.extraArr = extraS; this.extraBig = extra;
+    const base = { goals: this.goals, extra: (i) => extraS[i], blocked: (i) => blk[i] === 1 };
     this.flow = computeFlow(this.map, { ...base, pass: this.passSmall });
-    this.flowBig = computeFlow(this.map, { ...base, pass: this.passBig });
+    this.flowBig = computeFlow(this.map, { ...base, extra: (i) => extra[i], pass: this.passBig });
     this.flowBase = base;
     this.viaDirty.fill(true);          // route-choice fields refresh one per tick (spreads the cost)
     this.flowDirty = false; this.routeCache = null;
@@ -389,12 +427,19 @@ export class Sim {
     }
     return cells.map(([x, z]) => (x < 0 || z < 0 || x >= W || z >= H) ? -1 : idx(x, z));
   }
-  canPlace(kind, ax, az, rot = 0, wallDir = -1) {
+  // top = a floor trap going on a furniture top (tables, counters, crates, the well...).
+  canPlace(kind, ax, az, rot = 0, wallDir = -1, top = false) {
     const def = TRAPS[kind]; if (!def) return false;
     const cells = this.footprint(kind, ax, az, rot, wallDir);
+    if (top) {
+      if (def.surface !== 'floor' || kind === 'barricade' || kind === 'bait') return false;
+      const h0 = this.topHeight(cells[0]);
+      for (const i of cells) if (i < 0 || this.occ.top[i] || !h0 || Math.abs(this.topHeight(i) - h0) > 0.05 || this.crateAt[i]) return false;
+      return true;
+    }
     const layer = def.surface;
     for (const i of cells) {
-      if (i < 0 || this.occ[layer][i]) return false;
+      if (i < 0 || this.occ[layer][i] || this.crateAt[i]) return false;
       if (!floorish(this.map.type[i]) || this.map.door[i] >= 0) return false;   // not in a doorway that swings shut
       if (layer === 'ceiling' && !this.map.covered[i]) return false;
       if (layer === 'wall') {
@@ -421,11 +466,11 @@ export class Sim {
     }
     return true;
   }
-  placeTrap(cat, kind, ax, az, rot, wallDir) {
+  placeTrap(cat, kind, ax, az, rot, wallDir, top = false) {
     if (cat && cat.loadout && !cat.loadout.includes(kind)) return;   // only traps you brought
     const def = TRAPS[kind]; if (!def || !cat) return;
     if (this.sardines < def.cost) { this.emit({ t: 'msg', text: 'Not enough Paw Points' }); return; }
-    const ok = this.canPlace(kind, ax, az, rot, wallDir);
+    const ok = this.canPlace(kind, ax, az, rot, wallDir, top);
     if (ok === 'seal') { this.emit({ t: 'msg', text: 'Leave them a way through' }); return; }
     if (!ok) { this.emit({ t: 'msg', text: "Can't place that there" }); return; }
     const cells = this.footprint(kind, ax, az, rot, wallDir);
@@ -433,7 +478,7 @@ export class Sim {
     const xs = cells.map(i => i % W), zs = cells.map(i => (i / W) | 0);
     // p = this trap's working numbers with the placing cat's shop upgrades applied.
     const up = cat.upgrades ? cat.upgrades[kind] : null, P = trapParams(kind, up);
-    const tr = { id: this.nextId++, kind, cells, layer: def.surface, rot, wallDir, cd: 0, hp: P.hp || 0, maxHp: P.hp || 0, p: P, tier: (up && up.tier) || 1, special: (up && up.special) || null,
+    const tr = { id: this.nextId++, kind, cells, layer: top ? 'top' : def.surface, y: top ? this.topHeight(cells[0]) : 0, rot, wallDir, cd: 0, hp: P.hp || 0, maxHp: P.hp || 0, p: P, tier: (up && up.tier) || 1, special: (up && up.special) || null,
       cost: def.cost, charges: P.charges || P.nibbles || 0, rechargeT: 0, cdMax: P.cooldown || P.recharge || 1, tickT: 0,
       ceil: def.surface === 'ceiling' ? this.map.slabBot[cells[0]] : 0,
       x0: Math.min(...xs) * CELL, x1: (Math.max(...xs) + 1) * CELL, z0: Math.min(...zs) * CELL, z1: (Math.max(...zs) + 1) * CELL };
@@ -444,7 +489,7 @@ export class Sim {
     this.emit({ t: 'trapAdd', trap: tr });
   }
   sellTrap(cell, layer) {
-    const order = layer ? [layer, 'ceiling', 'wall', 'floor'] : ['ceiling', 'wall', 'floor'];
+    const order = layer ? [layer, 'top', 'ceiling', 'wall', 'floor'] : ['top', 'ceiling', 'wall', 'floor'];
     for (const l of order) {
       const tr = this.trapAt(l, cell);
       if (tr) {
@@ -488,6 +533,7 @@ export class Sim {
     if (this.flowDirty) this.updateFlow();
     const vd = this.viaDirty.indexOf(true); if (vd >= 0) this.viaField(vd);
     this.stepPhase();
+    this.stepDanger();
     for (const cat of this.cats.values()) this.stepCat(cat);
     this.stepTraps();
     this.buildMouseGrid();
@@ -504,6 +550,30 @@ export class Sim {
     }
   }
 
+  // Danger memory: fades every second; enough new danger and the mice re-plan their route.
+  // Also keeps a short list of hot spots for the radar (sniff shows where they're scared of).
+  stepDanger() {
+    if ((this.dangerT -= DT) > 0) return;
+    this.dangerT = 1;
+    const d = this.danger, spots = [], bs = this.DB * CELL;
+    for (let b = 0; b < d.length; b++) {
+      if (d[b] <= 0) continue;
+      d[b] = d[b] > 0.1 ? d[b] * DANGER_DECAY : 0;
+      if (d[b] > 4) spots.push([((b % this.dbw) + 0.5) * bs, (((b / this.dbw) | 0) + 0.5) * bs, Math.min(1, d[b] / DANGER_MAX)]);
+    }
+    this.dangerSpots = spots;   // [x, z, 0..1] block centres, for the radar
+    if (this.dangerDelta > DANGER_REPATH) { this.dangerDelta = 0; this.flowDirty = true; }
+  }
+  addDanger(x, z, amt) {
+    const bx = Math.floor(x / (this.DB * CELL)), bz = Math.floor(z / (this.DB * CELL));
+    // Its own block takes the full amount, the blocks around it a third.
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = bx + dx, nz = bz + dz; if (nx < 0 || nz < 0 || nx >= this.dbw || nz >= this.dbh) continue;
+      const b = nz * this.dbw + nx; this.danger[b] = Math.min(DANGER_MAX, this.danger[b] + amt * (dx || dz ? 0.33 : 1));
+    }
+    this.dangerDelta += amt;
+  }
+
   stepPhase() {
     if (this.phase === 'build') {
       this.phaseTimer -= DT;
@@ -514,6 +584,9 @@ export class Sim {
         this.emit({ t: 'msg', text: `Wave ${this.wave}` + (this.wave % 12 === 0 ? ' — BIG BOSS RAT' : this.wave % 6 === 0 ? ' — mini boss' : '') });
         this.emit({ t: 'waveStart', wave: this.wave, boss: this.wave % 6 === 0 });
         for (const f of this.foods) f.left = f.amount;                                                       // food restocked
+        for (const f of this.tops) f.left = f.amount;
+        for (const c of this.crates) if (!c.up) { c.up = true; c.hp = c.maxHp; this.flowDirty = true; this.layoutVer++; this.emit({ t: 'crateUp', id: c.id }); }   // servants restack the crates
+        for (let i = 0; i < this.danger.length; i++) this.danger[i] *= 0.5;                                     // they half-forget between waves
         for (const p of this.props) { [p.x, p.y, p.z] = p.home; p.state = 'up'; p.vx = p.vy = p.vz = 0; p.tilt = 0; }   // pots back on the shelves
         this.bark(this.wave % 6 === 0 ? 'boss' : 'wave', this.anyCatName(), true);
       }
@@ -562,7 +635,8 @@ export class Sim {
       vx: 0, vy: 0, vz: 0, yaw: Math.PI, hp, maxHp: hp, state: 'walk', bleed: [], biteT: 0, attackT: 0,
       lobbed: false, lobT: 0, dead: false, flash: 0, slowT: 0, stuckT: 0, stunT: 0, stunMax: 1, glueId: 0, tackT: 0, onGround: true,
       scale: 0.88 + this.rng() * 0.24, shade: (this.rng() - 0.5) * 0.25, wander: this.rng() * 6.28, packed: false,
-      lane: (this.rng() * 2 - 1) * 0.9, via, spitT: 1 + this.rng() * 2, stompT: 1.5, windT: 0 };
+      lane: (this.rng() * 2 - 1) * 0.9, via, spitT: 1 + this.rng() * 2, stompT: 1.5, windT: 0,
+      climber: !MICE[type].big && !MICE[type].bird && MICE[type].size < 0.7 && this.rng() < 0.3 };   // about 1 in 3 small mice go for food up on the furniture
     this.mice.push(m);
     return m;
   }
@@ -656,6 +730,11 @@ export class Sim {
     if (!drowned) {
       if (d.boss) this.dropTrinket(m.x, m.z, this.rng() < 0.35 ? 'legendary' : 'rare', stranded);
       else if (this.rng() < RULES.trinketChance) this.dropTrinket(m.x, m.z, this.rng() < 0.3 ? 'rare' : 'common', stranded);
+    }
+    // Danger memory: the pack remembers where this one died (scouts report back louder).
+    if (!stranded && !d.boss) {
+      this.addDanger(m.x, m.z, d.scout ? DANGER_KILL * DANGER_SCOUT : DANGER_KILL);
+      if (d.scout && !this.scoutTold) { this.scoutTold = true; this.emit({ t: 'msg', text: 'A scout died. The mice will remember that spot and look for another way.' }); }
     }
     // Every kill pays Paw Points straight away (no tails to carry any more).
     const pts = Math.round((d.points || 1) * this.mods.points);
@@ -1430,6 +1509,7 @@ export class Sim {
     return out;
   }
   launch(m, vx, vy, vz) {
+    m.climb = null;                                 // knocked off whatever it was climbing
     m.state = 'air'; m.onGround = false; m.vx = vx; m.vy = vy; m.vz = vz; m.y += 0.05;
   }
 
@@ -1492,6 +1572,12 @@ export class Sim {
       this.emit({ t: 'leak', boss: !!d.boss }); this.bark('leak');
       this.emit({ t: 'msg', text: d.boss ? 'A boss got into the great hall!' : 'A mouse got into the great hall' });
       return;
+    }
+    // Climbing to food on a furniture top: the whole trip (walk over, scramble up, eat, climb down).
+    if (m.climb) { this.stepClimb(m, d); return; }
+    if (m.climber && !m.gorged && !d.big && m.state === 'walk' && this.tops.length && !(m.fearT > 0)) {
+      const f = this.tops.find(f => f.left > 0 && Math.hypot(f.climb[0] - m.x, f.climb[1] - m.z) < 7);
+      if (f) { m.climb = { f, phase: 'to', t: 0, stuck: 0 }; this.stepClimb(m, d); return; }
     }
     const pass = d.big ? this.passBig : this.passSmall;
     let flow = d.big ? this.flowBig : this.flow;
@@ -1664,7 +1750,7 @@ export class Sim {
       m.yaw = Math.atan2(mx, mz);
     } else {
       // Follow the flow field.
-      const n = nextCell(this.map, flow, i, pass, this.isBlocker, this.extraOf);
+      const n = nextCell(this.map, flow, i, pass, this.isBlocker, d.big ? this.extraOfBig : this.extraOf);
       if (n < 0) return;
       const [cx, cz] = cellCenter(n);
       const dx = cx - m.x, dz = cz - m.z, dist = Math.hypot(dx, dz) || 1;
@@ -1676,6 +1762,10 @@ export class Sim {
           if (this.map.type[n] === T.GATE && this.gate.up) {
             this.gate.hp -= d.gateDmg; this.emit({ t: 'gateHit' });
             if (this.gate.hp <= 0) this.breakGate();
+          } else if (this.crateUp(n)) {
+            // Smashing through a crate stack to open the shortcut.
+            const c = this.crateUp(n); c.hp -= d.gateDmg; this.emit({ t: 'crateHit', id: c.id, x: m.x, z: m.z });
+            if (c.hp <= 0) this.breakCrate(c);
           } else {
             const b = this.isBarricade(n);
             if (b) { b.hp -= d.gateDmg * (b.p.tough ? 0.5 : 1); this.emit({ t: 'barricadeHit', id: b.id }); if (b.hp <= 0) this.removeTrap(b); }
@@ -1711,6 +1801,55 @@ export class Sim {
     m.y = 0;
   }
 
+  // A mouse going for food on a furniture top. Phases: to (walk to the climb spot by the
+  // edge), up (scramble up), top (walk to the food), eat (gorge: tougher), back, down.
+  // Floor traps placed on the top hit it while it's up there; cats can jump up after it.
+  stepClimb(m, d) {
+    const c = m.climb, f = c.f, [cx, cz] = f.climb;
+    const ux = f.x - cx, uz = f.z - cz, ul = Math.hypot(ux, uz) || 1, ex = cx + ux / ul * 1.0, ez = cz + uz / ul * 1.0;   // first spot up on the top
+    const sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * DT;
+    const toward = (tx, tz, free) => {
+      const dx = tx - m.x, dz = tz - m.z, dd = Math.hypot(dx, dz);
+      if (dd > 0.01) m.yaw = Math.atan2(dx, dz);
+      const st = Math.min(dd, sp), nx = m.x + dx / (dd || 1) * st, nz = m.z + dz / (dd || 1) * st;
+      if (free) { m.x = nx; m.z = nz; return dd; }
+      const okc = (x, z) => { const q = cellOf(x, z); return q >= 0 && this.passSmall(q) && !this.isBlocker(q); };
+      if (okc(nx, nz)) { m.x = nx; m.z = nz; } else if (okc(nx, m.z)) m.x = nx; else if (okc(m.x, nz)) m.z = nz;
+      return dd;
+    };
+    switch (c.phase) {
+      case 'to': {
+        m.y = 0;
+        const ox = m.x, oz = m.z, dd = toward(cx, cz, false);
+        if (dd < 0.35) { c.phase = 'up'; c.t = 0; c.sx = m.x; c.sz = m.z; break; }
+        c.stuck = Math.hypot(m.x - ox, m.z - oz) < sp * 0.2 ? c.stuck + DT : 0;
+        if (c.stuck > 1.5 || f.left <= 0) { m.climb = null; m.climber = false; }          // can't get there: forget it
+        break;
+      }
+      case 'up': case 'down': {
+        c.t += DT; const k = Math.min(1, c.t / CLIMB_SECS), up = c.phase === 'up';
+        const fx = up ? c.sx : ex, fz = up ? c.sz : ez, tx = up ? ex : cx, tz = up ? ez : cz;
+        m.x = fx + (tx - fx) * k; m.z = fz + (tz - fz) * k; m.y = f.y * (up ? k : 1 - k);
+        m.yaw = Math.atan2(tx - fx, tz - fz);
+        if (k >= 1) { if (up) c.phase = 'top'; else { m.climb = null; m.climber = false; m.y = 0; } }
+        break;
+      }
+      case 'top': m.y = f.y; if (toward(f.x, f.z, true) < f.r * 0.7) { c.phase = 'eat'; c.t = 0; } break;
+      case 'eat':
+        m.y = f.y; c.t += DT;
+        if (f.left <= 0) { c.phase = 'back'; break; }
+        if (c.t > GORGE_SECS) {
+          m.gorged = true; f.left--; m.maxHp = Math.round(m.maxHp * GORGE_HP); m.hp = Math.min(m.maxHp, m.hp * GORGE_HP); m.scale *= 1.12;
+          this.emit({ t: 'gorged', x: m.x, y: m.y, z: m.z, food: f.name, left: f.left });
+          if (f.left === 0) this.emit({ t: 'msg', text: `The ${f.name.toLowerCase()} is all gone.` });
+          c.phase = 'back';
+        }
+        break;
+      case 'back': m.y = f.y; if (toward(ex, ez, true) < 0.1) { c.phase = 'down'; c.t = 0; } break;
+    }
+    m.climbing = !!m.climb && (c.phase === 'up' || c.phase === 'down');
+  }
+
   // One place for "a mouse hurt a cat" (bites, spit, stomps).
   // Returns false when the hit missed (dead cat, or Nebbie dodged).
   hurtCat(cat, dmg) {
@@ -1739,6 +1878,13 @@ export class Sim {
     if (this.globs.some(g => g.done)) this.globs = this.globs.filter(g => !g.done);
   }
 
+  breakCrate(c) {
+    if (!c.up) return;
+    c.up = false; c.hp = 0; this.flowDirty = true; this.layoutVer++;
+    const [x0, z0, x1, z1] = c.rect;
+    this.emit({ t: 'crateBreak', id: c.id, x: (x0 + x1) / 2, z: (z0 + z1) / 2 });
+    if (!this.crateTold) { this.crateTold = true; this.emit({ t: 'msg', text: 'The mice smashed through the crates! That shortcut is open until the next wave.' }); }
+  }
   breakGate() {
     if (!this.gate.up) return;
     this.gate.up = false; this.gate.hp = 0; this.flowDirty = true;
@@ -1851,8 +1997,9 @@ export class Sim {
       this.baits.push(tr);
     }
     const inRect = (b, tr, pad = 0.1) => b.x > tr.x0 - pad && b.x < tr.x1 + pad && b.z > tr.z0 - pad && b.z < tr.z1 + pad;
-    const grounded = (m) => (m.state === 'walk' || m.state === 'stuck') && m.y < 0.3;
-    const live = (m) => !m.dead && grounded(m);
+    // A floor trap hits mice standing at its level: the floor, or the furniture top it sits on.
+    let lvl = 0;
+    const live = (m) => !m.dead && (m.state === 'walk' || m.state === 'stuck') && Math.abs(m.y - lvl) < 0.35;
     // Wall traps work on the strip of floor in front of them, `reach` units out from the wall.
     const lane = (tr, reach) => {
       const [wx, wz] = DIRS4[tr.wallDir], nx = -wx, nz = -wz;
@@ -1869,7 +2016,7 @@ export class Sim {
       // Nebbie's Tinker overclocks a trap for a while.
       if (tr.boostT > 0) tr.boostT -= DT;
       const mods = tr.boostT > 0 ? { ...baseMods, trapDmg: baseMods.trapDmg * ABILITY2.tinker.buff } : baseMods;
-      const P = tr.p, dmg = (P.damage || 0) * mods.trapDmg, el = P.el;
+      const P = tr.p, dmg = (P.damage || 0) * mods.trapDmg, el = P.el; lvl = tr.y || 0;
       switch (tr.kind) {
         case 'barricade':
           // Fumes special: poisons mice walking past (not on it — that's chewing).
@@ -1893,7 +2040,7 @@ export class Sim {
           if (tr.cd > 0) break;
           const [dx, dz] = DIRS4[ROT_DIR[tr.rot % 4]];
           const victims = this.mice.filter(m => live(m) && inRect(m, tr));
-          const cats = [...this.cats.values()].filter(c => c.alive && c.onGround && c.y < 0.3 && inRect(c, tr, 0));
+          const cats = [...this.cats.values()].filter(c => c.alive && c.onGround && Math.abs(c.y - lvl) < 0.3 && inRect(c, tr, 0));
           if (!victims.length && !cats.length) break;
           reset(tr, P.cooldown); this.emit({ t: 'flip', id: tr.id });
           for (const m of victims) {

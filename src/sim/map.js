@@ -188,7 +188,7 @@ export const MAPS = {
     hole: { x0: 35, x1: 39, z0: 2, z1: 2.5 }, spawns: [{ x: 5, z: 98.8 }, { x: 75, z: 98.8 }], catSpawn: { x: 37, z: 5 },
     vias: [{ name: 'West passage', x: 5, z: 50, weight: 1 }, { name: 'Middle passage', x: 37, z: 33, weight: 1 }, { name: 'East passage', x: 75, z: 50, weight: 1 }],
     torches: [[2, 20, 1, 0], [78, 80, -1, 0], [34, 50, -1, 0], [40, 20, 1, 0]],
-    props: [['basket', 5, 1.4, 41.5], ['pot', 75, 1.4, 21.5]],
+    props: [['basket', 5, 1.4, 41.5], ['pot', 76, 1.4, 21]],
   },
 
   // 6. The Kitchen — under the counters and the island, past the ovens, to the pantry.
@@ -214,6 +214,26 @@ export const MAPS = {
   },
 };
 export const MAP_ORDER = ['entrance', 'market', 'stables', 'cellar', 'passages', 'kitchen'];
+
+// Food up on the furniture (v0.12): some mice leave their route, climb up at `climb`
+// (a floor spot by the edge), eat at (x, z) on the top (height y) and come out tougher.
+// Floor traps can go on furniture tops too, so you can trap the feast.
+const TOPS = {
+  entrance: [{ name: 'Meat pie', x: 68, z: 41.5, y: 2.9, r: 1.2, amount: 20, climb: [68, 45] }, { name: 'Cheese rind', x: 21, z: 41.5, y: 1.9, r: 1, amount: 15, climb: [21, 44] }],
+  market: [{ name: 'Fish', x: 28, z: 43, y: 3, r: 1.2, amount: 20, climb: [16.5, 43] }, { name: 'Cheese', x: 60, z: 65, y: 3, r: 1.2, amount: 20, climb: [71.5, 65] }],
+  stables: [{ name: 'Oat bucket', x: 92, z: 9, y: 2.6, r: 1.2, amount: 20, climb: [84.5, 9] }],
+  cellar: [{ name: 'Cheese wheel top', x: 42, z: 64, y: 3, r: 1.5, amount: 30, climb: [42, 69] }],
+  passages: [{ name: 'Crumbs', x: 74, z: 21.5, y: 1.4, r: 1, amount: 15, climb: [75, 24.5] }],
+  kitchen: [{ name: 'Roast chicken', x: 48, z: 48, y: 3.4, r: 1.5, amount: 30, climb: [48, 59.5] }, { name: 'Cake', x: 8, z: 50, y: 3.4, r: 1.2, amount: 20, climb: [15.5, 50] }, { name: 'Pie', x: 88, z: 32, y: 3.4, r: 1.2, amount: 20, climb: [80.5, 32] }],
+};
+// Crate stacks across a corridor (v0.12): mice smash through them when it's worth it,
+// opening a shortcut for the rest of the wave. Servants stack them back between waves.
+const CRATES = {
+  entrance: [[44, 18, 52, 20]],   // the guard passage
+  market: [[38, 76, 50, 78]],     // the centre alley
+  passages: [[34, 20, 40, 22]],   // the last stretch of the main passage, before the hall
+};
+for (const k of MAP_ORDER) { MAPS[k].tops = TOPS[k] || []; MAPS[k].crates = CRATES[k] || []; }
 
 // Point every live export at map `id`. Call before building a Sim.
 export function useMap(id) {
