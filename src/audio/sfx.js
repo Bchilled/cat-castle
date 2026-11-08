@@ -139,7 +139,7 @@ export class Sfx {
 }
 
 // Rate limits: [max plays, per seconds]. Unlisted sounds: 6 per 0.1 s.
-const LIMITS = { footstep: [2, 0.2], sizzle: [2, 0.3], chill: [2, 0.3], salt: [1, 0.4], slip: [2, 0.2], darts: [2, 0.2], combo_chain: [2, 0.15], combo_blaze: [2, 0.2], combo_freeze: [3, 0.15], combo_spread: [1, 0.3], combo_knockdown: [3, 0.1], combo_steam: [1, 0.3], execute: [3, 0.1], toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25], shelfHit: [2, 0.12], barrelHit: [2, 0.15], barrelRoll: [2, 0.4] };
+const LIMITS = { footstep: [2, 0.2], sizzle: [2, 0.3], chill: [2, 0.3], salt: [1, 0.4], slip: [2, 0.2], darts: [2, 0.2], combo_chain: [2, 0.15], combo_blaze: [2, 0.2], combo_freeze: [3, 0.15], combo_spread: [1, 0.3], combo_knockdown: [3, 0.1], combo_steam: [1, 0.3], execute: [3, 0.1], toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25], shelfHit: [2, 0.12], barrelHit: [2, 0.15], barrelRoll: [2, 0.4], knife: [3, 0.08], beam: [2, 0.3], honeyDrip: [2, 0.3] };
 
 // Each sound: (sfx, output node, random, options).
 const SOUNDS = {
@@ -242,6 +242,11 @@ const SOUNDS = {
   // Smarter mice (0.12).
   crateBreak: (a, o) => { a.noise(o, { dur: 0.12, vol: 0.8, type: 'highpass', f: 1500 }); a.tone(o, { f: 110, f2: 45, t: 0.03, dur: 0.4, vol: 0.6 }); a.noise(o, { t: 0.05, dur: 0.5, vol: 0.4, type: 'lowpass', f: 900, f2: 150 }); },
   crateUp: (a, o) => { a.tone(o, { type: 'triangle', f: 200, f2: 140, dur: 0.1, vol: 0.2 }); },
+  // New traps (0.19): a hatch dropping open, a knife whooshing into wood, a honey blop, a sunbeam catching.
+  trapdoor: (a, o) => { a.tone(o, { f: 140, f2: 70, dur: 0.15, vol: 0.5 }); a.tone(o, { type: 'sawtooth', f: 220, f2: 120, t: 0.05, dur: 0.25, vol: 0.05, vib: 12 }); a.tone(o, { f: 90, f2: 60, t: 0.55, dur: 0.12, vol: 0.4 }); },
+  knife: (a, o, R) => { a.noise(o, { dur: 0.12, vol: 0.25, f: 2500 + R() * 800, f2: 900, q: 2 }); a.tone(o, { type: 'triangle', f: 1800, f2: 1400, t: 0.16, dur: 0.12, vol: 0.12 }); a.tone(o, { f: 160, f2: 110, t: 0.16, dur: 0.08, vol: 0.3 }); },
+  honeyDrip: (a, o) => { a.tone(o, { f: 300, f2: 120, dur: 0.18, vol: 0.3 }); a.tone(o, { f: 180, f2: 90, t: 0.12, dur: 0.15, vol: 0.2 }); },
+  beam: (a, o) => { a.noise(o, { dur: 0.4, vol: 0.12, type: 'highpass', f: 4000, att: 0.1 }); a.tone(o, { type: 'triangle', f: 880, f2: 1320, dur: 0.35, vol: 0.05 }); },
   // Things that fall over (0.17): a wooden knock and creak, a big crash with breaking jars, a rolling rumble.
   shelfHit: (a, o, R) => { a.tone(o, { f: 160 + R() * 30, f2: 90, dur: 0.12, vol: 0.4 }); a.tone(o, { type: 'sawtooth', f: 90, f2: 70, t: 0.05, dur: 0.35, vol: 0.06, vib: 9 }); },
   shelfFall: (a, o, R) => { a.tone(o, { f: 90, f2: 35, dur: 0.6, vol: 0.8 }); a.noise(o, { dur: 0.7, vol: 0.6, type: 'lowpass', f: 1200, f2: 150 }); for (let k = 0; k < 5; k++) a.noise(o, { t: 0.04 + k * 0.05 + R() * 0.04, dur: 0.07, vol: 0.25, type: 'highpass', f: 3500 + R() * 2000 }); },

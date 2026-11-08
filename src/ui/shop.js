@@ -15,7 +15,7 @@ const cost = (c) => !c ? '' : c.yarn ? `${c.yarn} yarn` : c.paws ? `${c.paws} ${
 export function statLine(P) {
   const out = [];
   if (P.damage) out.push(`${Math.round(P.damage)} dmg`);
-  if (P.dps) out.push(`${Math.round(P.dps)}/s`);
+  if (P.dps) out.push(P.maxDps ? `${Math.round(P.dps)}–${Math.round(P.maxDps)}/s` : `${Math.round(P.dps)}/s`);
   if (P.launchDamage) out.push(`${Math.round(P.launchDamage)} dmg`);
   if (P.hp) out.push(`${Math.round(P.hp)} hp`);
   if (P.cooldown) out.push(`resets ${P.cooldown.toFixed(1)}s`);
@@ -24,6 +24,9 @@ export function statLine(P) {
   if (P.reach) out.push(`reach ${P.reach.toFixed(1)}`);
   if (P.charges) out.push(`${P.charges} charges`);
   if (P.maxHits) out.push(`up to ${P.maxHits}`);
+  if (P.swallow) out.push(`drops ${P.swallow}`);
+  if (P.rampSecs) out.push(`full heat ${P.rampSecs.toFixed(1)}s`);
+  if (P.puddleSecs) out.push(`puddles ${P.puddleSecs.toFixed(1)}s`);
   return out.join(' · ');
 }
 

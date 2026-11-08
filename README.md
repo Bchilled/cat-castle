@@ -1,6 +1,6 @@
 # Nine Lives Keep
 
-Cats vs mice trap tower defense in the browser (Three.js), in the spirit of Orcs Must Die, at mouse scale in a human castle. Seven cats, each with their own attacks, abilities, jump and health. Six maps make one journey from the castle entrance to the kitchen. There are 22 traps, 10 items and 12 elements that combo, and a shop between runs. Play solo or with up to three friends online. Sound and music are synthesised live in the browser (no audio files).
+Cats vs mice trap tower defense in the browser (Three.js), in the spirit of Orcs Must Die, at mouse scale in a human castle. Seven cats, each with their own attacks, abilities, jump and health. Six maps make one journey from the castle entrance to the kitchen. There are 26 traps, 10 items and 12 elements that combo, and a shop between runs. Play solo or with up to three friends online. Sound and music are synthesised live in the browser (no audio files).
 
 Play: https://brentsnow.ca/cat-castle/
 

@@ -459,8 +459,58 @@ export function makeTrap(kind, ghost = false) {
       st.position.set(x, -0.9, z); st.rotation.y = k * 0.8; strips.add(st);
       for (let f = 0; f < 3; f++) { const fly = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 3), mat(0x111111)); fly.position.set(x + (f - 1) * 0.05, -0.5 - f * 0.3, z); strips.add(fly); }
     }
+  } else if (kind === 'trapdoor') {
+    // A hinged hatch flush with the floor: two plank leaves drop open over a dark chute.
+    const hole = new THREE.Mesh(new THREE.PlaneGeometry(S * 0.88, S * 0.88), new THREE.MeshBasicMaterial({ color: 0x050403 })); hole.rotation.x = -Math.PI / 2; hole.position.y = 0.012; add(hole);
+    for (const [x, z, sx, sz] of [[0, -h + 0.06, S, 0.12], [0, h - 0.06, S, 0.12], [-h + 0.06, 0, 0.12, S], [h - 0.06, 0, 0.12, S]]) B(0x4a3624, x, 0.03, z, sx, 0.06, sz);
+    const leaves = [];
+    for (const sd of [-1, 1]) {
+      const hinge = new THREE.Group(); hinge.position.set(sd * (h - 0.12), 0.045, 0); add(hinge); hinge.userData.sd = sd;
+      const L = h - 0.13;
+      hinge.add(part(BOX, 0x8a6038, -sd * L / 2, 0, 0, L, 0.05, S * 0.86, !ghost));
+      for (const z of [-0.45, 0, 0.45]) hinge.add(part(BOX, 0x5e4026, -sd * L / 2, 0.03, z, L * 0.96, 0.02, 0.03, false));   // plank seams
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.02, 4, 10), mat(0x3a3836)); ring.rotation.x = Math.PI / 2; ring.position.set(-sd * (L - 0.15), 0.035, 0); hinge.add(ring);
+      leaves.push(hinge);
+    }
+    g.userData.leaves = leaves;
+    lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'magnifier') {
+    // A big brass magnifying glass on a wall arm, tilted down to focus a sunbeam into the lane.
+    B(0x3a3632, 0, 0.6, -0.2, 0.3, 0.5, 0.08);
+    const arm = P(cyl(0.04, 0.04, 0.6, 6), 0x9a7a3a, 0, 0.75, 0.1); arm.rotation.x = Math.PI / 2;
+    const lens = new THREE.Group(); lens.position.set(0, 0.85, 0.45); lens.rotation.x = -0.6; add(lens); g.userData.lens = lens;
+    lens.add(part(new THREE.TorusGeometry(0.42, 0.05, 6, 24), 0xc8a040, 0, 0, 0, 1, 1, 1, !ghost));
+    lens.add(new THREE.Mesh(new THREE.CircleGeometry(0.4, 24), new THREE.MeshLambertMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })));
+    lens.add(part(cyl(0.05, 0.06, 0.5, 8), 0x5a3a20, 0, -0.68, 0, 1, 1, 1, !ghost));
+    lamp(h - 0.15, 1.05, -0.12);
+  } else if (kind === 'knifeblock') {
+    // A slanted wooden knife block, a row of black handles sticking out of it.
+    B(0x7a4a2a, 0, 0.04, 0, 1.3, 0.08, 1.0);
+    const blk = new THREE.Group(); blk.position.set(0, 0.5, 0); blk.rotation.x = -0.35; add(blk);
+    blk.add(part(BOX, 0x9a6a3a, 0, 0, 0, 1.1, 0.9, 0.7, !ghost));
+    const handles = [];
+    for (let k = 0; k < 5; k++) { const hd = part(BOX, 0x1e1a18, (k - 2) * 0.2, 0.62, 0.08 - (k % 2) * 0.14, 0.09, 0.4, 0.12, !ghost); blk.add(hd); handles.push(hd); }
+    g.userData.handles = handles;
+    lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'honey') {
+    // A honeycomb hanging from the roof, honey drooping off it.
+    B(0x3a3632, 0, -0.15, 0, 0.04, 0.3, 0.04);
+    const comb = new THREE.Group(); comb.position.y = -0.6; add(comb); g.userData.comb = comb;
+    comb.add(part(cyl(0.55, 0.45, 0.5, 6), 0xd89a20, 0, 0, 0, 1, 1, 1, !ghost));
+    for (let k = 0; k < 6; k++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.52, 6), mat(0xb87a10)); c.position.set(Math.cos(k * 1.05) * 0.3, 0, Math.sin(k * 1.05) * 0.3); comb.add(c); }
+    const drips = [];
+    for (let k = 0; k < 4; k++) { const d = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 6), mat(0xe8a820)); d.rotation.x = Math.PI; d.position.set(Math.cos(k * 1.6) * 0.28, -0.38, Math.sin(k * 1.6) * 0.28); comb.add(d); drips.push(d); }
+    g.userData.drips = drips;
+    lamp(0.45, -0.15, 0);
   }
   if (ghost) g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.5; o.material.depthWrite = false; } });
+  return g;
+}
+// A thrown kitchen knife (Knife Block): steel blade, black handle, along +z.
+export function makeKnife() {
+  const g = new THREE.Group();
+  g.add(part(BOX, 0xd8dce0, 0, 0, 0.18, 0.03, 0.09, 0.4, false));
+  g.add(part(BOX, 0x1e1a18, 0, 0, -0.12, 0.05, 0.08, 0.22, false));
   return g;
 }
 // Hypno Wheel face: a black-and-white spiral drawn once onto a canvas.

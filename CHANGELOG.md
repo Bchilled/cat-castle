@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.19.0 — 2026-11-07
+Four new traps (26 in all). Unlock them in the shop.
+- **Trapdoor** (floor, 110 Paw Points, 14 paw prints). A hatch that drops open when a mouse steps on it and swallows up to 4 mice down a chute. They're gone for good: they still pay, but drop no trinket and splitters don't split. Fat Rats, Ghost Mice and bosses don't fall in. Resets in 10 s. Not on furniture tops.
+  - Specials: Oubliette (8 per opening), Wide Hatch (Fat Rats fit too).
+- **Magnifying Glass** (wall, 85, 10). Holds a sunbeam on the nearest mouse in its lane. The longer it holds the same mouse, the hotter it gets: 6 damage a second rising to 40 over 3 s, and past halfway it sets the mouse alight. A new target starts cool.
+  - Specials: Burning Glass (heats twice as fast), Prism (three beams).
+- **Knife Block** (table and counter tops only, 95, 12). A turret: throws a knife at the nearest mouse within 8 units, on the floor or up on the furniture. 26 damage plus a bleed, every 1.5 s.
+  - Specials: Cleaver (+80% damage, knocks small mice flat), Steak Knives (three knives, three mice).
+- **Honey Drip** (ceiling, 45, 6). Drips a sticky puddle when mice pass under. Every mouse wading through it is slowed for 6 s.
+  - Specials: Royal Jelly (wider, lasts twice as long), Beehive (bees sting mice in the puddle).
+- Upgrades for them: tier 2 boosts how many the Trapdoor swallows, the Glass's heat, the Knife Block's damage and how long puddles last; tier 3 makes them reset (or heat up) faster.
+- The shop shows the new numbers (heat range, swallow count, puddle time).
+- Fixed: floor traps could be placed on a barrel's spot (the barrel came back on top of them each wave).
+- `src/config.js` TRAPS (349–353), TRAP_ORDER (358–359), POWER_KEYS/TIME_KEYS (366–367), SPECIALS (390–393), trapParams rounding (405); `src/meta/profile.js` unlock prices (15); `src/sim/sim.js` canPlace topOnly/noTop/barrel spots (490–501), placeTrap message (534), killMouse `fell` (788, 815), honey zones (1478–1483), stepTraps trapdoor/magnifier/knifeblock/honey (2275–2334); `src/render/models.js` trap models and makeKnife (462–515); `src/render/scene.js` events (597–605), fell kills (622–623), honey puddles (781, 791), beams and knives (321–338, 858–870); `src/audio/sfx.js` trapdoor, knife, honeyDrip, beam (245–249); `src/main.js` beam sound (424); `src/ui/shop.js` statLine (18, 27–29).
+
+Tests: 207 checks, all passing (every trap affects a mouse; trapdoor capacity and fit, the glass heating and igniting, knife block on tops only and volleys, honey slowing and stinging, barrel spots).
+
 ## 0.18.0 — 2026-11-07
 First-run tips
 - A new player gets one short tip at a time in a card on the left, and each clears when you do what it asks: move, press 1 for a Poison Box, place it, put a Snapper on the purple arrows, press G, attack (5 kills), sniff with F, then a last word on Paw Points and the shop. Tips you've already done are skipped (press G early and the build tips stay put until you've built).

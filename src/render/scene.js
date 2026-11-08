@@ -9,7 +9,7 @@ import {
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
-import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp, makeHuman, makeShelf, makeBarrel } from './models.js';
+import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp, makeHuman, makeShelf, makeBarrel, makeKnife } from './models.js';
 import { tmat } from './textures.js';
 
 const MAX_MICE = 800;
@@ -21,6 +21,7 @@ const TINT = { stuck: new THREE.Color(0xe0d060), slow: new THREE.Color(0x7a9a3a)
 // Combo colours (rings and sparks where a combo goes off).
 const COMBO_COL = { chain: 0xf0e040, blaze: 0xff5a10, freeze: 0x9ad8ff, spread: 0xc8f0e8, knockdown: 0xd8c8a0, steam: 0xe8eef0 };
 let DECAL_GEO = null;
+const BEAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);   // Magnifying Glass sunbeam (scaled per beam)
 
 export class Scene {
   constructor(canvas, sim) {
@@ -41,7 +42,7 @@ export class Scene {
     this.camDist = null;                                            // set per cat on first frame; wheel zooms
 
     this.cats = new Map(); this.trapMeshes = new Map(); this.tailMeshes = new Map(); this.lootMeshes = new Map();
-    this.shotMeshes = new Map(); this.globMeshes = new Map(); this.birdMeshes = new Map(); this.zoneMeshes = new Map(); this.decoyMeshes = new Map(); this.rings = []; this.shake = 0; this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map();
+    this.shotMeshes = new Map(); this.globMeshes = new Map(); this.birdMeshes = new Map(); this.zoneMeshes = new Map(); this.decoyMeshes = new Map(); this.rings = []; this.shake = 0; this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map(); this.knives = [];
     this.particles = []; this.decals = [];
     this.aimProxies = new THREE.Group();
     this.buildWorld();
@@ -317,6 +318,24 @@ export class Scene {
       return { b, outer, rollG, body, lie: 0, yaw: null, roll: 0 };
     });
   }
+  // Magnifying Glass: a sunbeam from the lens to each mouse it's holding, brighter and
+  // thicker as it heats up; smoke, then sparks, where it lands.
+  drawBeams(g, tr, now) {
+    const ud = g.userData, ids = tr.active ? (ud.targets || []) : [], heat = tr.charges || 0;
+    ud.beams = ud.beams || [];
+    const from = ud.lens.getWorldPosition(new THREE.Vector3()), up = new THREE.Vector3(0, 1, 0);
+    let n = 0;
+    for (const id of ids) {
+      const m = this.sim.mice.find(mm => mm.id === id); if (!m || m.dead) continue;
+      if (!ud.beams[n]) { const b = new THREE.Mesh(BEAM_GEO, new THREE.MeshBasicMaterial({ color: 0xfff0a0, transparent: true, opacity: 0.55, depthWrite: false })); this.scene.add(b); ud.beams[n] = b; }
+      const b = ud.beams[n++], to = new THREE.Vector3(m.x, m.y + 0.15, m.z), d = to.clone().sub(from), len = d.length();
+      b.visible = true; b.position.copy(from).addScaledVector(d, 0.5); b.quaternion.setFromUnitVectors(up, d.normalize());
+      const r = 0.03 + heat * 0.07 + Math.sin(now / 40) * 0.008; b.scale.set(r, len, r);
+      b.material.color.setHSL(0.14 - heat * 0.1, 1, 0.75 - heat * 0.15);
+      if (Math.random() < 0.25 + heat) this.spawnParticles(to.x, to.y, to.z, heat >= 0.5 ? 0xffa030 : 0xb8b0a0, 1, 1, 0.04);
+    }
+    for (let k = n; k < ud.beams.length; k++) ud.beams[k].visible = false;
+  }
   // Shelves: wobble when hit, fall with gravity (accelerating), vanish once chewed away.
   // Barrels: follow the sim, tip on their side when knocked, roll by how far they moved.
   drawFallers(dt, now) {
@@ -558,7 +577,7 @@ export class Scene {
         g.userData.id = e.trap.id; g.userData.kind = e.trap.kind; g.userData.anim = 0;
         this.scene.add(g); this.trapMeshes.set(e.trap.id, g); break;
       }
-      case 'trapRemove': { const g = trap(e.id); if (g) { this.spawnParticles(g.position.x, 0.4, g.position.z, 0xc4a46a, 10); this.scene.remove(g); this.trapMeshes.delete(e.id); } break; }
+      case 'trapRemove': { const g = trap(e.id); if (g) { this.spawnParticles(g.position.x, 0.4, g.position.z, 0xc4a46a, 10); this.scene.remove(g); for (const b of g.userData.beams || []) this.scene.remove(b); this.trapMeshes.delete(e.id); } break; }
       case 'snap': case 'flip': case 'punch': case 'roll': case 'hypno': { const g = trap(e.id); if (g) g.userData.anim = 1; if (e.t === 'roll' && g) this.spawnParticles(g.position.x, 0.2, g.position.z, 0xd8c8a8, 12, 3); break; }
       case 'sizzle': { const g = trap(e.id); if (g) { g.userData.anim = 1; this.spawnParticles(g.position.x, 0.25, g.position.z, 0xff8a30, 10, 2.5, 0.06); } break; }
       case 'chill': { const g = trap(e.id); if (g) { g.userData.anim = 1; this.spawnParticles(g.position.x, 0.3, g.position.z, 0xcfefff, 10, 2, 0.06); } break; }
@@ -575,6 +594,15 @@ export class Scene {
       case 'gust': { const g = trap(e.id); if (g) g.userData.anim = 1; this.jet(e.x + e.nx * 0.5, 0.5, e.z + e.nz * 0.5, e.nx, e.nz, e.reach * 2.4, e.hot ? [0xff7a2a, 0xffd040, 0xe8f0f0] : 0xe8f0f0, 18, 0.06, 0.5); break; }
       case 'flame': { const g = trap(e.id); if (g) g.userData.anim = 1; this.jet(e.x + e.nx * 0.4, 0.45, e.z + e.nz * 0.4, e.nx, e.nz, e.reach * 2.6, [0xff5a10, 0xffa030, 0xffe060], 26, 0.1, 0.3); break; }
       case 'squirt': this.jet(e.x + e.nx * 0.5, 0.5, e.z + e.nz * 0.5, e.nx, e.nz, e.reach * 2.4, [0x6ab0ff, 0xbfe0ff], 22, 0.05, 0.12); break;
+      // New traps (0.19).
+      case 'trapdoor': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.15, e.z, 0x6a5a48, 12, 2, 0.06); break; }
+      case 'beam': { const g = trap(e.id); if (g) g.userData.targets = e.targets; break; }
+      case 'knife': {
+        const g = trap(e.id); if (g) g.userData.anim = 1;
+        for (const [tx, ty, tz] of e.to) { const k = makeKnife(); k.position.set(e.x, e.y, e.z); k.lookAt(tx, ty, tz); this.scene.add(k); this.knives.push({ k, from: [e.x, e.y, e.z], to: [tx, ty, tz], t: 0 }); }
+        break;
+      }
+      case 'honeyDrip': { const g = trap(e.id); if (g) { g.userData.anim = 1; for (let k = 0; k < 6; k++) this.spawnParticles(e.x + (Math.random() - 0.5), 1.5, e.z + (Math.random() - 0.5), 0xe8a820, 1, 0.5, 0.07); } break; }
       case 'potDrop': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.3, e.z, 0xc8643a, 14, 4, 0.1); this.spawnParticles(e.x, 0.2, e.z, 0x4a3020, 14, 3, 0.07); this.decal(e.x, e.z, 0x4a3020, 1.1); this.shake = Math.max(this.shake, 0.12); break; }
       case 'splashDown': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.4, e.z, 0x6ab0ff, 22, 3.5, 0.07); this.ring(e.x, e.z, e.r, 0x3a7ad8, 0.4, false, true); break; }
       case 'salt': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 8; k++) this.spawnParticles(e.x + (Math.random() - 0.5) * e.r * 1.4, 1.6, e.z + (Math.random() - 0.5) * e.r * 1.4, 0xffffff, 1, 0.3, 0.04); break; }
@@ -591,7 +619,8 @@ export class Scene {
         break;
       }
       case 'kill':
-        if (e.drowned) this.spawnParticles(e.x, -0.4, e.z, 0x9cc8e4, 8);
+        if (e.fell) this.spawnParticles(e.x, 0.1, e.z, 0x3a3028, 5, 1.5, 0.05);   // down the trapdoor: just a puff of dust
+        else if (e.drowned) this.spawnParticles(e.x, -0.4, e.z, 0x9cc8e4, 8);
         else if (!e.eaten) { this.spawnParticles(e.x, e.y + 0.3, e.z, 0x8a1c14, e.splat ? 16 : 6, e.splat ? 5 : 3); this.decal(e.x, e.z, 0x5a1410, e.splat ? 0.5 : 0.25, Math.max(0.02, e.y + 0.02)); }
         break;
       case 'eat': this.spawnParticles(e.x, 0.3, e.z, 0x8a1c14, 10, 2); { const c = this.cats.get(e.id); if (c) c.atkT = 0.3; } break;
@@ -749,6 +778,7 @@ export class Scene {
     this.syncSimple(sim.zones, this.zoneMeshes, (z) => {
       if (z.kind === 'laser') { const m = new THREE.Mesh(new THREE.CircleGeometry(0.25, 12), new THREE.MeshBasicMaterial({ color: 0xff2020 })); m.rotation.x = -Math.PI / 2; return m; }
       if (z.kind === 'fire') { const m = new THREE.Mesh(new THREE.CircleGeometry(z.r, 20), new THREE.MeshBasicMaterial({ color: 0xff6a20, transparent: true, opacity: 0.35, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.userData.fire = true; return m; }
+      if (z.kind === 'honey') { const m = new THREE.Mesh(new THREE.CircleGeometry(z.r, 20), new THREE.MeshBasicMaterial({ color: 0xd8941a, transparent: true, opacity: 0.6, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.userData.honey = true; return m; }
       if (z.kind === 'soil') { const m = new THREE.Mesh(new THREE.CircleGeometry(z.r, 18), new THREE.MeshBasicMaterial({ color: 0x4a3020, transparent: true, opacity: 0.7, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.userData.soil = true; return m; }
       if (z.kind === 'spill') {   // what came out of the pot: water, milk, oil, grain
         const col = { pot: 0x3a6a8a, jug: 0xe8e4d8, basket: 0xc8a050, bucket: 0x3a6a8a }[z.what] || 0x3a6a8a;
@@ -758,6 +788,7 @@ export class Scene {
     }, (g, z) => {
       if (z.kind === 'laser') g.position.set(z.x + Math.sin(now / 160) * 0.8, 0.06, z.z + Math.cos(now / 130) * 0.8);   // the dot dances about
       else if (g.userData.fire) { g.position.set(z.x, 0.03, z.z); g.material.opacity = 0.25 + Math.sin(now / 60) * 0.1; if (Math.random() < 0.6) this.spawnParticles(z.x + (Math.random() - 0.5) * z.r * 1.4, 0.2, z.z + (Math.random() - 0.5) * z.r * 1.4, Math.random() < 0.5 ? 0xff7a20 : 0xffd040, 1, 2, 0.08); }
+      else if (g.userData.honey) { g.position.set(z.x, this.sim.groundAt(cellOf(z.x, z.z), 5, 0.3, true) + 0.028, z.z); g.material.opacity = Math.min(0.6, z.t / 2); if (z.bees && Math.random() < 0.3) this.spawnParticles(z.x + (Math.random() - 0.5) * z.r * 1.4, 0.5, z.z + (Math.random() - 0.5) * z.r * 1.4, Math.random() < 0.5 ? 0xf0c020 : 0x1a1a1a, 1, 1.5, 0.04); }
       else if (g.userData.soil) { g.position.set(z.x, 0.025, z.z); g.material.opacity = Math.min(0.7, z.t / 2); }
       else if (g.userData.spill) { g.position.set(z.x, this.sim.groundAt(cellOf(z.x, z.z), 5, 0.3, true) + 0.03, z.z); g.material.opacity = Math.min(0.55, z.t / 3); }
       else { g.position.set(z.x, 0.3, z.z); g.material.opacity = 0.18 + Math.sin(now / 90) * 0.06; if (Math.random() < 0.3) this.spawnParticles(z.x + (Math.random() - 0.5) * z.r * 1.5, 0.4, z.z + (Math.random() - 0.5) * z.r * 1.5, 0x3a3a1a, 1, 1, 0.03); }
@@ -824,7 +855,19 @@ export class Scene {
       if (ud.kind === 'salt') ud.shaker.rotation.z = ud.anim > 0 ? Math.sin(now / 30) * 0.25 : 0;
       if (ud.kind === 'flypaper') ud.strips.children.forEach((st, k) => { if (st.geometry.type === 'PlaneGeometry') st.rotation.y = k * 0.8 + Math.sin(now / 600 + k) * 0.3; });
       if (ud.kind === 'bait') ud.cheese.scale.setScalar(Math.max(0.05, tr.charges / TRAPS.bait.nibbles));
+      // New traps (0.19).
+      if (ud.kind === 'trapdoor') { const open = ud.anim > 0 || f > 0.94; for (const l of ud.leaves) l.rotation.z += ((open ? l.userData.sd * 1.5 : 0) - l.rotation.z) * Math.min(1, dt * (open ? 18 : 4)); }
+      if (ud.kind === 'knifeblock') ud.handles.forEach((hd, k) => { hd.visible = !(ud.anim > 0 && k === 2); hd.position.y = 0.62 + (f > 0 && k === 2 ? -0.3 * f : 0); });
+      if (ud.kind === 'honey') { ud.comb.rotation.z = Math.sin(now / 900 + ud.id) * 0.05; ud.drips.forEach((d, k) => { d.scale.y = 1 + 0.4 * Math.sin(now / 400 + k * 1.7) + ud.anim * 1.5; }); }
+      if (ud.kind === 'magnifier') this.drawBeams(g, tr, now);
     }
+    // Thrown knives fly to their mark in 0.18 s, then glint and vanish.
+    this.knives = this.knives.filter(o => {
+      o.t += dt / 0.18; const k = Math.min(1, o.t);
+      o.k.position.set(o.from[0] + (o.to[0] - o.from[0]) * k, o.from[1] + (o.to[1] - o.from[1]) * k + Math.sin(k * Math.PI) * 0.6, o.from[2] + (o.to[2] - o.from[2]) * k);
+      if (o.t >= 1) { this.spawnParticles(o.to[0], o.to[1], o.to[2], 0xe8ecf0, 3, 1.5, 0.04); this.scene.remove(o.k); return false; }
+      return true;
+    });
     // Warning/shockwave rings on the floor (boss stomps, pounce landings).
     this.rings = this.rings.filter(r => {
       r.userData.life -= dt; const u = r.userData;

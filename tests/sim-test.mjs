@@ -447,7 +447,7 @@ for (const id of MAP_ORDER) {
     const t = new Sim({ seed: 300 }); t.addPlayer('p1'); t.sardines = 1e6; t.gate.up = false; t.flowDirty = true; t.step();
     const def = TRAPS[kind]; let spot = null;
     for (let z = 20; z < 200 && !spot; z += 2) for (let x = 4; x < 188 && !spot; x += 2) for (const wd of def.surface === 'wall' ? [0, 1, 2, 3] : [-1]) {
-      if (t.canPlace(kind, x, z, 0, wd) !== true) continue;
+      if (t.canPlace(kind, x, z, 0, wd, !!def.topOnly) !== true) continue;
       // Need floor in reach for the mouse to stand on.
       const cells = t.footprint(kind, x, z, 0, wd), xs = cells.map(i => i % W), zs = cells.map(i => (i / W) | 0);
       let cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2 * CELL, cz = (Math.min(...zs) + Math.max(...zs) + 1) / 2 * CELL;
@@ -457,12 +457,12 @@ for (const id of MAP_ORDER) {
       spot = { x, z, wd, cx, cz };
     }
     if (!spot) { ok(false, `${kind}: found a place for it`); continue; }
-    t.command({ type: 'place', id: 'p1', trap: kind, ax: spot.x, az: spot.z, rot: 0, wallDir: spot.wd });
+    t.command({ type: 'place', id: 'p1', trap: kind, ax: spot.x, az: spot.z, rot: 0, wallDir: spot.wd, top: !!def.topOnly });
     const tr = [...t.traps.values()][0];
     if (kind === 'barricade') { ok(tr && tr.hp === trapParams('barricade').hp, 'barricade placed'); continue; }
     const m = t.spawnAt('mouse', spot.cx, spot.cz, 100);
     const ev = run(t, 4, () => { if (kind !== 'bait' && !m.dead && m.state !== 'air') { m.x = spot.cx; m.z = spot.cz; } });
-    const hit = m.dead || m.hp < m.maxHp || m.oilT > 0 || ev.some(e => e.t === 'glue') || m.confuseT > 0 || m.wetT > 0 || (m.eatT > 0) || m.state === 'air';
+    const hit = m.dead || m.hp < m.maxHp || m.oilT > 0 || ev.some(e => e.t === 'glue') || m.confuseT > 0 || m.wetT > 0 || (m.eatT > 0) || m.state === 'air' || m.slowT > 0;
     ok(tr && hit, `${kind} (${def.surface}) affects a mouse in reach (hp ${Math.max(0, m.hp).toFixed(0)}/${m.maxHp}${m.oilT > 0 ? ', oily' : ''}${m.wetT > 0 ? ', wet' : ''}${m.confuseT > 0 ? ', confused' : ''}${m.eatT > 0 ? ', eating' : ''})`);
   }
   // Upgrades change numbers: tier 2 power, tier 3 speed, specials.
@@ -647,6 +647,7 @@ for (const id of MAP_ORDER) {
   ok(Math.hypot(b.vx, b.vz) < 0.3 && b.lying && bs.map.type[cellOf(b.x, b.z)] !== 4, 'it comes to rest on open floor, on its side');
   bs.phase = 'build'; bs.phaseTimer = 0; bs.step();
   ok(b.x === hx && b.z === hz && !b.lying, 'barrels go home next wave');
+  ok(!bs.canPlace('mousetrap', q(hx) - 1, q(hz) - 1) && bs.canPlace('mousetrap', q(hx) + 6, q(hz) - 1) === true, "no floor traps on a barrel's spot");
   // Co-op: the guest's mirror sees the shelf go down (its spot turns to floor) and the barrels move.
   const C = await import('../src/net/coop.js');
   const host = new Sim({ map: 'passages', seed: 1003 }); host.addPlayer('p1'); host.step();
@@ -667,5 +668,63 @@ for (const id of MAP_ORDER) {
   st.kills = 5; st.sniffed = true; c.update(0.1, st); for (let k = 0; k < 120; k++) c.update(0.1, st);
   ok(first === 0 && afterMove === 1 && afterBuild === 5 && !c.active && el.innerHTML.includes('Tip'), `tips advance as you play and finish (${STEPS.length} tips)`);
   c.replay(); c.update(0.1, { ...st, moved: 0 }); ok(c.active && c.step === 0, 'tips can be replayed');
+}
+// 41. New traps (0.19): Trapdoor, Magnifying Glass, Knife Block, Honey Drip.
+{
+  const { trapParams } = await import('../src/config.js');
+  const { DIRS4 } = await import('../src/sim/map.js');
+  // Somewhere legal for a trap, plus a floor spot in its reach.
+  const findSpot = (t, kind) => {
+    const def = TRAPS[kind];
+    for (let z = 20; z < 200; z += 2) for (let x = 4; x < 188; x += 2) for (const wd of def.surface === 'wall' ? [0, 1, 2, 3] : [-1]) {
+      if (t.canPlace(kind, x, z, 0, wd, !!def.topOnly) !== true) continue;
+      const cells = t.footprint(kind, x, z, 0, wd), xs = cells.map(i => i % W), zs = cells.map(i => (i / W) | 0);
+      let cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2 * CELL, cz = (Math.min(...zs) + Math.max(...zs) + 1) / 2 * CELL;
+      if (wd >= 0) { cx -= DIRS4[wd][0] * 1.4; cz -= DIRS4[wd][1] * 1.4; }
+      const ci = cellOf(cx, cz); if (!(t.flow[ci] < Infinity) || t.map.solid[ci] > 0) continue;
+      return { x, z, wd, cx, cz };
+    }
+  };
+  const setup = (kind, up) => {
+    const t = new Sim({ seed: 1100 }); t.addPlayer('p1', 'fred', up ? { upgrades: { [kind]: up } } : {}); t.sardines = 1e6; t.gate.up = false; t.flowDirty = true; t.step();
+    const sp = findSpot(t, kind); t.command({ type: 'place', id: 'p1', trap: kind, ax: sp.x, az: sp.z, rot: 0, wallDir: sp.wd, top: !!TRAPS[kind].topOnly });
+    return { t, sp, tr: [...t.traps.values()][0] };
+  };
+  const hold = (t, ms, sp) => run(t, 0.1, () => ms.forEach(m => { if (!m.dead) { m.x = sp.cx; m.z = sp.cz; } }));
+  // Trapdoor: swallows up to 4 small mice at once (no splitting, still pays); fat rats don't fit.
+  {
+    const { t, sp } = setup('trapdoor'); const pts0 = t.sardines;
+    const small = [0, 1, 2, 3, 4, 5].map(() => t.spawnAt('mouse', sp.cx, sp.cz, 100)), fat = t.spawnAt('fatty', sp.cx, sp.cz, 400);
+    for (let k = 0; k < 10; k++) hold(t, [...small, fat], sp);
+    const gone = small.filter(m => m.dead).length;
+    ok(gone === 4 && !fat.dead && t.sardines > pts0, `a Trapdoor drops 4 mice down the chute and pays for them; a fat rat doesn't fit (${gone} gone)`);
+    const w = setup('trapdoor', { tier: 3, special: 'b' }), f2 = w.t.spawnAt('fatty', w.sp.cx, w.sp.cz, 400);
+    hold(w.t, [f2], w.sp); ok(f2.dead && trapParams('trapdoor', { tier: 2 }).swallow === 5, 'Wide Hatch takes fat rats; tier 2 swallows 5');
+  }
+  // Magnifying Glass: the longer it holds one mouse, the harder it burns, until it catches fire.
+  {
+    const { t, sp, tr } = setup('magnifier'); const m = t.spawnAt('tank', sp.cx, sp.cz, 5000);
+    const ev = run(t, 1, () => { m.x = sp.cx; m.z = sp.cz; }); const early = 5000 - m.hp, burnEarly = m.burnT > 0;
+    run(t, 3, () => { m.x = sp.cx; m.z = sp.cz; }); const hp1 = m.hp; run(t, 1, () => { m.x = sp.cx; m.z = sp.cz; });
+    ok(ev.some(e => e.t === 'beam') && !burnEarly && m.burnT > 0 && hp1 - m.hp > early * 3, `the Magnifying Glass heats up on one mouse and sets it alight (${early.toFixed(0)} in the 1st s, ${(hp1 - m.hp).toFixed(0)} in the 5th)`);
+    ok(trapParams('magnifier', { tier: 3, special: 'a' }).rampSecs < 1.3, 'Burning Glass and tier 3 heat it faster');
+  }
+  // Knife Block: tops only; throws at the nearest mouse; Steak Knives throw three.
+  {
+    const t0 = new Sim({ seed: 1101 }); t0.addPlayer('p1'); t0.sardines = 1e6; t0.step();
+    const fl = findSpot(t0, 'mousetrap'), tp = findSpot(t0, 'knifeblock');
+    ok(!t0.canPlace('knifeblock', fl.x, fl.z) && t0.canPlace('knifeblock', tp.x, tp.z, 0, -1, true) === true, 'the Knife Block only goes on furniture tops');
+    ok(t0.canPlace('mousetrap', tp.x, tp.z, 0, -1, true) === true && !t0.canPlace('trapdoor', tp.x, tp.z, 0, -1, true), 'no trapdoors in table tops');
+    const { t, sp } = setup('knifeblock', { tier: 3, special: 'b' }); const ms = [0, 1, 2, 3].map(k => t.spawnAt('mouse', sp.cx + k * 0.3, sp.cz, 500));
+    const ev = run(t, 0.5, () => ms.forEach((m, k) => { m.x = sp.cx + k * 0.3; m.z = sp.cz; }));
+    const k = ev.find(e => e.t === 'knife'); ok(k && k.to.length === 3 && ms.filter(m => m.hp < 500).length === 3, 'Steak Knives throw three knives at three mice');
+  }
+  // Honey Drip: a puddle that slows mice wading through; Beehive bees sting.
+  {
+    const { t, sp } = setup('honey', { tier: 3, special: 'b' }); const m = t.spawnAt('mouse', sp.cx, sp.cz, 100);
+    hold(t, [m], sp); run(t, 1, () => { m.x = sp.cx; m.z = sp.cz; });
+    const z = t.zones.find(zn => zn.kind === 'honey');
+    ok(z && m.slowT > 0 && m.hp < 100, `Honey Drip leaves a sticky puddle (${z ? z.t.toFixed(1) : 0} s left); Beehive bees sting`);
+  }
 }
 process.exit(fails ? 1 : 0);

@@ -421,6 +421,7 @@ function start(mode, co = null) {
       case 'leapback': sfx.play('leap', x, z); break;
       case 'bossRoar': sfx.play('bossRoar', undefined, undefined, { vol: 0.9 }); break;
       case 'crateHit': sfx.play('barricadeHit', x, z); break;
+      case 'beam': if (e.targets.length) sfx.play('beam', x, z); break;   // only when it catches a mouse, not when it lets go
       case 'combo': sfx.play('combo_' + e.kind, x, z); break;
       default: sfx.play(e.t, x, z, e);   // names that match a sound directly (snap, flip, zap, splat, ...)
     }

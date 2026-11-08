@@ -487,9 +487,10 @@ export class Sim {
   // top = a floor trap going on a furniture top (tables, counters, crates, the well...).
   canPlace(kind, ax, az, rot = 0, wallDir = -1, top = false) {
     const def = TRAPS[kind]; if (!def) return false;
+    if (def.topOnly && !top) return false;                     // Knife Block: tables and counters only
     const cells = this.footprint(kind, ax, az, rot, wallDir);
     if (top) {
-      if (def.surface !== 'floor' || kind === 'bait') return false;   // a Poison Box on top closes a furniture route
+      if (def.surface !== 'floor' || kind === 'bait' || def.noTop) return false;   // a Poison Box on top closes a furniture route; no trapdoors in tables
       const h0 = this.topHeight(cells[0]);
       for (const i of cells) if (i < 0 || this.occ.top[i] || !h0 || Math.abs(this.topHeight(i) - h0) > 0.05 || this.noBuild(i)) return false;
       return true;
@@ -497,6 +498,7 @@ export class Sim {
     const layer = def.surface;
     for (const i of cells) {
       if (i < 0 || this.occ[layer][i] || this.noBuild(i)) return false;
+      if (layer === 'floor' && this.barrels.some(b => Math.hypot((i % W + 0.5) * CELL - b.home[0], (((i / W) | 0) + 0.5) * CELL - b.home[1]) < 1.2)) return false;   // a barrel's spot (it comes back each wave)
       if (!floorish(this.map.type[i]) || this.map.door[i] >= 0) return false;   // not in a doorway that swings shut
       if (layer === 'ceiling' && !this.map.covered[i]) return false;
       if (layer === 'wall') {
@@ -529,7 +531,7 @@ export class Sim {
     if (this.sardines < def.cost) { this.emit({ t: 'msg', text: 'Not enough Paw Points' }); return; }
     const ok = this.canPlace(kind, ax, az, rot, wallDir, top);
     if (ok === 'seal') { this.emit({ t: 'msg', text: 'Leave them a way through' }); return; }
-    if (!ok) { this.emit({ t: 'msg', text: "Can't place that there" }); return; }
+    if (!ok) { this.emit({ t: 'msg', text: TRAPS[kind].topOnly && !top ? `The ${TRAPS[kind].name} goes on a table or counter top` : "Can't place that there" }); return; }
     const cells = this.footprint(kind, ax, az, rot, wallDir);
     this.sardines -= def.cost;
     const xs = cells.map(i => i % W), zs = cells.map(i => (i / W) | 0);
@@ -783,7 +785,7 @@ export class Sim {
     this.combosSeen = this.combosSeen || new Set();
     if (!this.combosSeen.has(kind)) { this.combosSeen.add(kind); this.emit({ t: 'msg', text: 'COMBO! ' + COMBOS[kind] }); }
   }
-  killMouse(m, source, drowned = false, eaten = false) {
+  killMouse(m, source, drowned = false, eaten = false, fell = false) {   // fell = down a trapdoor
     if (m.dead) return;
     m.dead = true; this.stats.kills++;
     const d = MICE[m.type], stranded = m.state === 'stranded';
@@ -810,7 +812,7 @@ export class Sim {
       }
       this.emit({ t: 'burst', x: m.x, y: m.y, z: m.z });
     }
-    this.emit({ t: 'kill', x: m.x, y: m.y, z: m.z, type: m.type, drowned, eaten, splat: source === 'splat' });
+    this.emit({ t: 'kill', x: m.x, y: m.y, z: m.z, type: m.type, drowned, eaten, fell, splat: source === 'splat' });
     const who = this.anyCatName();
     if (source === 'trap' || source === 'splat' || source === 'dot' || source === 'chain') this.bark('trap', who); else if (source === 'cat' || source === 'bleed') this.bark('kill', who);
   }
@@ -1473,6 +1475,12 @@ export class Sim {
       if (zn.kind === 'fire') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) if (!m.dead && m.y < 1 && Math.hypot(m.x - zn.x, m.z - zn.z) < zn.r) this.damageMouse(m, zn.dps * DT, 'fire');
       // Cactus soil from a Flower Pot: dirty and prickly.
       if (zn.kind === 'soil') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) if (!m.dead && Math.hypot(m.x - zn.x, m.z - zn.z) < zn.r) { m.dirtyT = Math.max(m.dirtyT || 0, 1); m.toxT = Math.max(m.toxT || 0, 1); m.toxDps = Math.max(m.toxDps || 0, STATUS.toxDps); }
+      // Honey puddles: everything wading through is slowed; Beehive bees sting (poison).
+      if (zn.kind === 'honey') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) {
+        if (m.dead || m.y > 1 || Math.hypot(m.x - zn.x, m.z - zn.z) > zn.r) continue;
+        m.slowT = Math.max(m.slowT, 0.4);
+        if (zn.bees) this.damageMouse(m, 4 * DT, 'poison');
+      }
       // Spills: water from pots and buckets soaks mice, oil from jugs makes them oily, grain from baskets makes them dirty.
       if (zn.kind === 'spill') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) {
         if (m.dead || Math.hypot(m.x - zn.x, m.z - zn.z) > zn.r) continue;
@@ -2262,6 +2270,66 @@ export class Sim {
             if (P.stun && !MICE[m.type].boss) m.stunT = m.stunMax = Math.max(m.stunT, P.stun);
           }
           for (const b of bs) this.damageBird(b, dmg, el);
+          break;
+        }
+        // ---- new in 0.19 ----
+        case 'trapdoor': {
+          // Opens when a mouse that fits steps on it, stays open a moment, and drops up to
+          // `swallow` mice down the chute (gone: no trinket, splitters don't split).
+          const fits = (m) => { const d = MICE[m.type]; return live(m) && inRect(m, tr, 0) && !d.boss && !d.ghost && (P.big || d.size < 0.9); };
+          if (!(tr.openT > 0)) {
+            if (tr.cd > 0 || !this.nearMice(...centre(tr), 2).some(fits)) break;
+            reset(tr, P.cooldown); tr.openT = 0.6; tr.left = P.swallow;
+            const [cx, cz] = centre(tr); this.emit({ t: 'trapdoor', id: tr.id, x: cx, z: cz });
+          }
+          tr.openT -= DT;
+          for (const m of this.nearMice(...centre(tr), 2)) if (tr.left > 0 && fits(m)) { tr.left--; this.killMouse(m, 'trap', true, false, true); }
+          break;
+        }
+        case 'magnifier': {
+          // Holds a sunbeam on the same mouse(s); heat builds the longer it holds (0..1 over
+          // rampSecs), damage climbs from dps to maxDps, and past `hot` it sets them alight.
+          const L = lane(tr, P.reach), n = P.split || 1;
+          const fromWall = (m) => Math.abs(L.nx) ? Math.abs(m.x - (L.nx > 0 ? tr.x0 : tr.x1)) : Math.abs(m.z - (L.nz > 0 ? tr.z0 : tr.z1));
+          const inLane = (m) => m && live(m) && inRect(m, L, 0);
+          let tg = (tr.targets || []).map(id => this.mice.find(m => m.id === id)).filter(inLane);
+          if (tg.length < n) {
+            const more = this.mice.filter(m => inLane(m) && !tg.includes(m)).sort((a, b) => fromWall(a) - fromWall(b)).slice(0, n - tg.length);
+            if (more.length && !tg.length) tr.heat = 0;                       // a fresh target: start cool
+            tg = tg.concat(more);
+          }
+          const ids = tg.map(m => m.id);
+          if (ids.join() !== (tr.targets || []).join()) this.emit({ t: 'beam', id: tr.id, targets: ids, x: (tr.x0 + tr.x1) / 2, z: (tr.z0 + tr.z1) / 2 });
+          tr.targets = ids; tr.active = ids.length > 0;
+          if (!tg.length) { tr.heat = Math.max(0, (tr.heat || 0) - DT); tr.charges = tr.heat; break; }
+          tr.heat = Math.min(1, (tr.heat || 0) + DT / P.rampSecs); tr.charges = tr.heat;   // charges = heat (the renderer reads it)
+          if ((tr.tickT -= DT) > 0) break;
+          tr.tickT = 0.25;
+          const dps = (P.dps + (P.maxDps - P.dps) * tr.heat) * mods.trapDmg * (n > 1 ? 0.6 : 1);
+          for (const m of tg) this.damageMouse(m, dps * 0.25, 'trap', false, tr.heat >= P.hot ? 'fire' : null);
+          break;
+        }
+        case 'knifeblock': {
+          // A turret on a table top: throws at the nearest mice in range, floor or furniture.
+          if (tr.cd > 0) break;
+          const [cx, cz] = centre(tr), y0 = tr.y + 0.8;
+          const vs = this.nearMice(cx, cz, P.radius).filter(m => !m.dead && Math.hypot(m.x - cx, m.z - cz) < P.radius)
+            .sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz)).slice(0, P.volley || 1);
+          if (!vs.length) break;
+          reset(tr, P.cooldown);
+          this.emit({ t: 'knife', id: tr.id, x: cx, y: y0, z: cz, to: vs.map(m => [m.x, m.y + 0.2, m.z]) });
+          for (const m of vs) {
+            bleed(m, P.bleed || 1, mods.bleedMax); this.damageMouse(m, dmg, 'trap', false, el);
+            if (P.flatten && !m.dead && MICE[m.type].size < 0.9) { m.dirtyT = Math.max(m.dirtyT || 0, 0.1); this.damageMouse(m, 1, 'trap', false, 'physics'); }   // Cleaver: knocked flat
+          }
+          break;
+        }
+        case 'honey': {
+          // Drips a sticky puddle under it when mice pass below (the puddle does the work).
+          if (tr.cd > 0 || !below(tr, P.radius).length) break;
+          reset(tr, P.cooldown); const [cx, cz] = centre(tr);
+          this.zones.push({ id: this.nextId++, kind: 'honey', x: cx, z: cz, r: P.radius, t: P.puddleSecs, bees: !!P.bees });
+          this.emit({ t: 'honeyDrip', id: tr.id, x: cx, z: cz });
           break;
         }
         case 'gluepad': case 'flypaper': {

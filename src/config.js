@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.18.0';
+export const VERSION = '0.19.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -346,19 +346,25 @@ export const TRAPS = {
   bucket:    { el: 'water', name: 'Leaky Bucket', desc: 'Tips cold water on everything below. Wet mice conduct electricity and freeze in a blink.', cost: 50, surface: 'ceiling', size: [4, 4], damage: 4, cooldown: 3, radius: 2.2, pathCost: 0 },
   salt:      { el: 'holy', name: 'Salt Shaker', desc: 'Blessed salt. A steady sprinkle that burns plague rats and ghosts.', cost: 75, surface: 'ceiling', size: [4, 4], damage: 7, cooldown: 1, radius: 2.2, pathCost: 0 },
   flypaper:  { el: 'physical', name: 'Flypaper', desc: 'Sticky strips hanging from the roof. Catches birds that swoop through, and gums up mice running under.', cost: 40, surface: 'ceiling', size: [4, 4], radius: 2.5, hold: 4, birdDps: 12, stickSecs: 1, charges: 6, recharge: 8, pathCost: 0 },
+  // ---- new in 0.19 ----
+  trapdoor:  { el: 'physics', name: 'Trapdoor', desc: 'A hatch in the floor. Drops the mice standing on it down a chute, gone for good. Fat Rats and bosses are too big to fit, and ghosts just float over.', cost: 110, surface: 'floor', noTop: true, size: [4, 4], cooldown: 10, swallow: 4, pathCost: 0 },
+  magnifier: { el: 'fire', name: 'Magnifying Glass', desc: 'Focuses a sunbeam on one mouse in the lane. The longer it holds on, the hotter it gets, until the mouse goes up in flames.', cost: 85, surface: 'wall', size: [4, 1], reach: 7, dps: 6, maxDps: 40, rampSecs: 3, hot: 0.5, pathCost: 0 },
+  knifeblock:{ el: 'physical', name: 'Knife Block', desc: 'Table and counter tops only. Throws kitchen knives at the nearest mouse in range, down on the floor or up on the furniture.', cost: 95, surface: 'floor', topOnly: true, size: [4, 4], damage: 26, cooldown: 1.5, radius: 8, bleed: 1, pathCost: 0 },
+  honey:     { el: null, name: 'Honey Drip', desc: 'A dripping honeycomb. Leaves sticky puddles that slow every mouse wading through.', cost: 45, surface: 'ceiling', size: [4, 4], radius: 2, cooldown: 6, puddleSecs: 6, pathCost: 0 },
   glove:     { el: 'physics', name: 'Boxing Glove', desc: "Spring-loaded wall punch. Knocks small mice across the lane, dazes the big ones.",  cost: 70,  surface: 'wall',    size: [4, 1], cooldown: 3, reach: 4, push: 10, damage: 15, bigStun: 1.2, pathCost: 0 },   // OMD push trap
 };
 // Trap bar order = keys 1..8.
 export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove', 'bait',
-  'hotplate', 'icetray', 'oilslick', 'rollingpin', 'skull', 'forkdarts', 'bellows', 'candle', 'hypno', 'flowerpot', 'bucket', 'salt', 'flypaper'];
+  'hotplate', 'icetray', 'oilslick', 'rollingpin', 'skull', 'forkdarts', 'bellows', 'candle', 'hypno', 'flowerpot', 'bucket', 'salt', 'flypaper',
+  'trapdoor', 'magnifier', 'knifeblock', 'honey'];
 
 // Trap upgrades, bought in the shop with paw prints (kept between runs).
 // Tier 2: more power (damage/effect x1.25). Tier 3: resets 20% faster. Then pick one of two
 // specials (buy one, the other costs the same; once you own both you can swap freely).
 // A special changes numbers (mul / set) and/or switches on a behaviour flag the sim checks.
 export const UPGRADE = { tier2: 6, tier3: 10, special: 15, unlock: 8, power: 1.25, speed: 0.8 };
-export const POWER_KEYS = ['damage', 'dps', 'launchDamage', 'poisonDps', 'birdDmg', 'hp'];   // what tier 2 boosts
-export const TIME_KEYS = ['cooldown', 'recharge'];                                           // what tier 3 shortens
+export const POWER_KEYS = ['damage', 'dps', 'maxDps', 'launchDamage', 'poisonDps', 'birdDmg', 'hp', 'swallow', 'puddleSecs'];   // what tier 2 boosts
+export const TIME_KEYS = ['cooldown', 'recharge', 'rampSecs'];                                                                 // what tier 3 shortens
 export const SPECIALS = {
   barricade:  { a: { name: 'Fumes', desc: 'Poisons mice walking past within a tile.', set: { fumes: true } }, b: { name: 'Steel Box', desc: 'Double health; mice chew half as fast.', mul: { hp: 2 }, set: { tough: true } } },
   mousetrap:  { a: { name: 'Bleeding Edge', desc: 'Victims bleed (3 stacks).', set: { bleed: 3 } }, b: { name: 'Chain Snap', desc: 'Also snaps the two nearest mice off the tile for half.', set: { chain: 2 } } },
@@ -381,6 +387,10 @@ export const SPECIALS = {
   flowerpot:  { a: { name: 'Cast-Iron Pot', desc: '+60% damage, and the impact knocks them flat.', mul: { damage: 1.6 }, set: { heavy: true } }, b: { name: 'Cactus', desc: 'Leaves a patch of prickly soil: dirty and poisoned.', set: { cactus: true } } },
   bucket:     { a: { name: 'Ice Water', desc: 'Freezing cold: soaked mice freeze on the spot.', set: { icy: true } }, b: { name: 'Bath Night', desc: 'Bigger splash, tips twice as often.', mul: { radius: 1.5, cooldown: 0.5 } } },
   salt:       { a: { name: 'Rock Salt', desc: '+60% damage.', mul: { damage: 1.6 } }, b: { name: 'Blessed', desc: 'Cats underneath slowly heal.', set: { blessed: true } } },
+  trapdoor:   { a: { name: 'Oubliette', desc: 'Swallows twice as many mice each time it opens.', mul: { swallow: 2 } }, b: { name: 'Wide Hatch', desc: 'Big enough for Fat Rats (still not bosses).', set: { big: true } } },
+  magnifier:  { a: { name: 'Burning Glass', desc: 'Heats up twice as fast.', mul: { rampSecs: 0.5 } }, b: { name: 'Prism', desc: 'Splits the beam across three mice.', set: { split: 3 } } },
+  knifeblock: { a: { name: 'Cleaver', desc: '+80% damage, and it knocks small mice flat.', mul: { damage: 1.8 }, set: { flatten: true } }, b: { name: 'Steak Knives', desc: 'Throws three knives at once, at different mice.', set: { volley: 3 } } },
+  honey:      { a: { name: 'Royal Jelly', desc: 'Puddles are 30% wider and last twice as long.', mul: { radius: 1.3, puddleSecs: 2 } }, b: { name: 'Beehive', desc: 'Bees guard the puddles and sting mice in them (poison).', set: { bees: true } } },
   flypaper:   { a: { name: 'Extra Sticky', desc: 'Holds birds twice as long and catches bigger mice.', mul: { hold: 2, stickSecs: 2 } }, b: { name: 'Wide Strips', desc: '50% wider and twice the charges.', mul: { radius: 1.5, charges: 2 } } },
 };
 // A trap's working numbers for a given upgrade state ({ tier, special }): base numbers,
@@ -392,7 +402,7 @@ export function trapParams(kind, up) {
   if (tier >= 3) for (const k of TIME_KEYS) if (typeof p[k] === 'number') p[k] *= UPGRADE.speed;
   const sp = up && up.special && SPECIALS[kind] && SPECIALS[kind][up.special];
   if (sp) { for (const [k, v] of Object.entries(sp.mul || {})) if (typeof p[k] === 'number') p[k] *= v; Object.assign(p, sp.set || {}); }
-  if (p.maxHits) p.maxHits = Math.round(p.maxHits); if (p.charges) p.charges = Math.round(p.charges);
+  if (p.maxHits) p.maxHits = Math.round(p.maxHits); if (p.swallow) p.swallow = Math.round(p.swallow); if (p.charges) p.charges = Math.round(p.charges);
   return p;
 }
 // Starting traps (everything else is unlocked in the shop).
