@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.29.0 — 2026-11-08
+A lived-in castle at human size.
+- **Things at real size** on every map, so a cat feels cat-sized. They are scenery, so nothing bumps into them:
+  - Entrance: banners on the hall wall and the gatehouse, shields on the guardhouse, a 3 m ladder against the armoury, a broom, boots and a bucket by the barracks, lanterns in the gate passage.
+  - Market: hanging shop signs, a broom, boots, two chairs by the awning bench.
+  - Stables: saddles on pegs along the aisle, a pitchfork, a broom, buckets, lanterns under the loft. Two horses (1.6 m at the shoulder) stand in the pens; you can hop onto their backs.
+  - Cellar: hams under the vault, cobwebs in the corners, candles on the barrels, a lantern.
+  - Passages: paintings, coats on pegs, a broom and a bucket.
+  - Kitchen: copper pans, drying herbs, strings of onions, chairs against the walls, a broom and a bucket.
+- **Things moving:**
+  - bunting across the market alleys, the courtyard and the east lane; washing on lines high over the market
+  - banners, bunting and washing sway in the breeze; lanterns and signs swing a little
+  - dust drifting in the air round you
+  - flies over every food pile and the food on tables (they go when the food's eaten)
+  - smoke from the kitchen oven and the hearth
+  - torchlight flickers with the flame
+- **Distant sounds** of each place, one every few seconds from somewhere off to the side:
+  - entrance: birds, wind, guards' footsteps, armour clanking, voices
+  - market: chatter and laughter, footsteps, a door
+  - stables: horses snorting, a whinny, hooves
+  - cellar: drips, a door, footsteps overhead
+  - passages: footsteps overhead, doors, voices
+  - kitchen: chopping, pots, sizzling, voices
+  - They play under the sound-effects volume.
+- `src/render/life.js` the dressing, motion and effects (1–275); `src/render/scene.js` hooked in (12, 206–215), torchlight flicker and life each frame (1025–1026); `src/render/models.js` the horse (850–863); `src/sim/map.js` horses in the stables (160); `src/audio/sfx.js` ambience sounds (18–45) and setAmbience (138–155); `src/main.js` start and stop the ambience (203, 253); `src/config.js` VERSION (8); `README.md` (52); `ROADMAP.md` (12).
+
+Tests: 263 sim checks pass. In the browser, every map loads and runs a wave, and the ambience plays for 12 s on four maps, with no errors.
+
 ## 0.28.0 — 2026-11-08
 Stairs: ways up for the cats.
 - Stairs are built like real ones: 30 cm treads with 15 cm rises. Cats just walk up them, no jumping. Mice can't use them.

@@ -157,6 +157,7 @@ export const MAPS = {
       ...[24, 36, 48, 60, 72].map(z => blk('Pen wall', [2, z, 18, z + 1], 4, 'partition')),
       blk('Stable wall', [28, 14, 30, 28], 10, 'house'), blk('Stable wall', [28, 34, 30, 50], 10, 'house'),
       blk('Stable wall', [28, 56, 30, 72], 10, 'house'), blk('Stable wall', [28, 78, 30, 86], 10, 'house'),
+      blk('Horse', [4, 29, 14, 31], 5, 'horse', { tint: 0x8a5a32 }), blk('Horse', [4, 53, 14, 55], 5, 'horse', { tint: 0xb8b0a4 }),   // in two of the pens: real size
       blk('Paddock wall', [30, 40, 40, 42], 4, 'stone'), blk('Paddock wall', [48, 40, 76, 42], 4, 'stone'), blk('Paddock wall', [84, 40, 98, 42], 4, 'stone'),
       blk('Fence', [32, 72, 60, 73], 1.2, 'fence'), blk('Fence', [68, 30, 98, 31], 1.2, 'fence'),
       blk('Cart', [76, 8, 82, 16], 3.6, 'cart'), blk('Hay bales', [86, 4, 98, 14], 2.6, 'bales'),

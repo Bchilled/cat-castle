@@ -200,6 +200,7 @@ function start(mode, co = null) {
   document.getElementById('menu').classList.remove('show'); document.getElementById('end').classList.remove('show');
   sfx.unlock(); sfx.setMusic('build');
   if (co) { co.started = true; chosenMap = co.map; coop = co; }
+  sfx.setAmbience(chosenMap);   // distant life of this map (voices, horses, pots, drips...)
   const guest = co && co.role === 'guest', LOCAL_ID = guest ? co.you : 'p1';
   const difficulty = co ? co.difficulty || 'normal' : chosenDiff;   // co-op: the host's choice
   const sim = new Sim({ mode, seed: co ? co.seed : (Date.now() & 0xffff) | 1, map: chosenMap, difficulty });
@@ -249,7 +250,7 @@ function start(mode, co = null) {
   const hud = new Hud(sim, loadout);
   scene.onStep = (x, z) => sfx.play('footstep', x, z, { vol: 0.6 });   // humans walking past
   game = { stop() {
-    running = false; ac.abort(); offs.forEach(f => f()); scene.dispose(); document.exitPointerLock?.();
+    running = false; ac.abort(); offs.forEach(f => f()); scene.dispose(); sfx.setAmbience(null); document.exitPointerLock?.();
     const c = document.getElementById('game'); c.replaceWith(c.cloneNode(false));   // a clean canvas for the next game
   } };
 

@@ -9,6 +9,7 @@ import {
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
+import { Life } from './life.js';
 import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp, makeHuman, makeShelf, makeBarrel, makeKnife, makePan } from './models.js';
 import { tmat } from './textures.js';
 
@@ -202,15 +203,16 @@ export class Scene {
     this.exitRing = new THREE.Mesh(new THREE.RingGeometry(1.6, 1.9, 24), new THREE.MeshBasicMaterial({ color: 0xc8302a, transparent: true, opacity: 0.8 }));
     this.exitRing.rotation.x = -Math.PI / 2; this.exitRing.position.set(hx, 0.03, 2.2); s.add(this.exitRing);
     // Wall torches at human height (2.4 m) in iron sconces: [x, z, face normal x, z].
-    this.flames = [];
+    this.flames = []; this.torchLights = [];
     for (const [x, z, nx, nz] of MAP.torches || []) {
       const g = new THREE.Group(); g.position.set(x, 8, z); g.rotation.y = Math.atan2(nx, nz); s.add(g);
       g.add(part3(new THREE.BoxGeometry(0.5, 0.8, 0.12), 0x26221e, 0, 0, 0.06));
       const stick = part3(new THREE.CylinderGeometry(0.12, 0.08, 1.2, 6), 0x5a3a20, 0, 0.3, 0.45); stick.rotation.x = 0.35; g.add(stick);
       const flame = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.7, 6), new THREE.MeshBasicMaterial({ color: 0xffa040 }));
       flame.position.set(0, 1.05, 0.65); g.add(flame); this.flames.push(flame);
-      const l = new THREE.PointLight(0xffb060, 10, 30, 1.4); l.position.set(x + nx * 1, 9, z + nz * 1); s.add(l);
+      const l = new THREE.PointLight(0xffb060, 10, 30, 1.4); l.position.set(x + nx * 1, 9, z + nz * 1); s.add(l); this.torchLights.push(l);
     }
+    this.life = new Life(s, this.sim, MAP);   // dressing at human size, dust, flies, smoke, swaying cloth (src/render/life.js)
     function part3(geo, color, x, y, z) { const m = new THREE.Mesh(geo, mat(color)); m.position.set(x, y, z); return m; }
     this.aimProxies.updateMatrixWorld(true);
   }
@@ -1020,7 +1022,8 @@ export class Scene {
     this.drawMapFeatures(dt, now);
     this.stepHumans(dt);
     this.exitRing.material.opacity = 0.5 + Math.sin(now / 250) * 0.3;
-    this.flames.forEach((f, k) => { const n = Math.sin(now / 90 + k * 1.7) * 0.5 + Math.sin(now / 37 + k) * 0.5; f.scale.set(1 + n * 0.12, 1 + n * 0.25, 1 + n * 0.12); });
+    this.flames.forEach((f, k) => { const n = Math.sin(now / 90 + k * 1.7) * 0.5 + Math.sin(now / 37 + k) * 0.5; f.scale.set(1 + n * 0.12, 1 + n * 0.25, 1 + n * 0.12); if (this.torchLights[k]) this.torchLights[k].intensity = 10 * (1 + n * 0.12); });   // the light flickers with the flame
+    this.life.step(dt, now, this.camera.position);
     this.updateRoute(now);
     // Roofs fade out from below while you're under them, so you can see the fight.
     if (this.localCat) {

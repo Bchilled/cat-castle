@@ -847,6 +847,20 @@ export function makeFurniture(f) {
       }
       break;
     }
+    case 'horse': {
+      // A horse standing in its stall, head to the aisle (+x): 1.6 m at the withers (5.3 units),
+      // 2.4 m nose to tail. The collider is the 5-unit box of its back, so cats can hop up on it.
+      const c = f.tint || 0x8a5a32, dark = 0x2a1a10;
+      B(c, -0.5, 4.0, 0, 6.2, 2.2, 1.9);                                                // barrel
+      for (const lx of [-2.9, 2.1]) for (const lz of [-0.55, 0.55]) { B(c, lx, 2.0, lz, 0.55, 3.0, 0.5); B(dark, lx, 0.25, lz, 0.6, 0.5, 0.55, false); }   // legs, hooves
+      const neck = B(c, 3.0, 5.0, 0, 1.7, 2.6, 0.95); neck.rotation.z = -0.8;           // thick, reaching forward
+      const head = B(c, 4.3, 5.6, 0, 2.0, 0.85, 0.75); head.rotation.z = -1.0;           // nose down
+      B(0x1a1210, 3.9, 6.15, 0.39, 0.15, 0.15, 0.04, false); B(0x1a1210, 3.9, 6.15, -0.39, 0.15, 0.15, 0.04, false);   // eyes
+      for (const ez of [-0.25, 0.25]) B(c, 3.55, 6.65, ez, 0.2, 0.5, 0.15, false);       // ears
+      const mane = B(dark, 2.55, 5.6, 0, 1.9, 0.35, 0.3, false); mane.rotation.z = -0.8;
+      const tail = B(dark, -3.75, 3.6, 0, 0.35, 2.4, 0.35, false); tail.rotation.z = -0.25;
+      break;
+    }
     case 'tower': {
       // A squat stone watchtower: platform at f.h with merlons round the edge (scenery: no collision).
       TB('stone', 6, 0xd0c8bc, 0, f.h / 2, 0, w, f.h, d);

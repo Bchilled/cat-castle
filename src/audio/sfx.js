@@ -15,6 +15,34 @@ function loadPrefs() {
 }
 function savePrefs(p) { try { localStorage.setItem(STORE, JSON.stringify(p)); } catch { /* private window */ } }
 
+// Distant sounds of each map (ambience). Names are in AMB below.
+const AMBIENCE = {
+  entrance: ['bird', 'bird', 'wind', 'steps', 'clank', 'voices'],
+  market: ['voices', 'voices', 'laugh', 'steps', 'clank', 'bird', 'door'],
+  stables: ['snort', 'whinny', 'hooves', 'steps', 'bird', 'wind'],
+  cellar: ['drip', 'drip', 'drip', 'door', 'stepsAbove'],
+  passages: ['stepsAbove', 'stepsAbove', 'door', 'voices'],
+  kitchen: ['chop', 'clank', 'sizzle', 'voices', 'laugh', 'steps'],
+};
+// Each one: (sfx, output, random). Built from the same tone/noise bits as the effects.
+const AMB = {
+  bird: (s, o, R) => { const f = 2400 + R() * 1600; for (let k = 0; k < 2 + Math.floor(R() * 3); k++) s.tone(o, { f: f * (1 + R() * 0.2), f2: f * 0.7, t: k * 0.12, dur: 0.08, vol: 0.05 }); },
+  wind: (s, o, R) => s.noise(o, { type: 'lowpass', f: 300 + R() * 200, f2: 700, dur: 2.5, vol: 0.06, att: 1.0 }),
+  steps: (s, o, R) => { for (let k = 0; k < 4 + Math.floor(R() * 4); k++) s.noise(o, { type: 'lowpass', f: 180, t: k * 0.5, dur: 0.09, vol: 0.12 }); },
+  stepsAbove: (s, o, R) => { for (let k = 0; k < 5; k++) s.noise(o, { type: 'lowpass', f: 90, t: k * 0.55, dur: 0.12, vol: 0.18 }); },
+  hooves: (s, o, R) => { for (let k = 0; k < 8; k++) s.noise(o, { type: 'bandpass', f: 500, q: 3, t: k * 0.22 + (k % 2) * 0.06, dur: 0.05, vol: 0.08 }); },
+  clank: (s, o, R) => { const f = 600 + R() * 500; for (const m of [1, 2.76, 5.4]) s.tone(o, { type: 'sine', f: f * m, t: 0, dur: 0.6 / m, vol: 0.05 / m }); },
+  chop: (s, o, R) => { for (let k = 0; k < 3 + Math.floor(R() * 4); k++) s.noise(o, { type: 'bandpass', f: 1400, q: 2, t: k * 0.28, dur: 0.04, vol: 0.12 }); },
+  sizzle: (s, o, R) => s.noise(o, { type: 'highpass', f: 4500, dur: 1.6, vol: 0.03, att: 0.2 }),
+  drip: (s, o, R) => s.tone(o, { type: 'sine', f: 1400 + R() * 600, f2: 500, dur: 0.12, vol: 0.08 }),
+  door: (s, o, R) => { s.tone(o, { type: 'sawtooth', f: 260, f2: 180, dur: 0.7, vol: 0.025, vib: 20, att: 0.1 }); s.noise(o, { type: 'lowpass', f: 160, t: 0.75, dur: 0.15, vol: 0.15 }); },
+  snort: (s, o, R) => s.noise(o, { type: 'bandpass', f: 500 + R() * 200, q: 1.5, dur: 0.35, vol: 0.12, att: 0.03 }),
+  whinny: (s, o, R) => s.tone(o, { type: 'sawtooth', f: 700, f2: 450, dur: 0.9, vol: 0.03, vib: 40, att: 0.05 }),
+  // Voices: murmured syllables (formant-ish bands of noise) in a little burst of talk.
+  voices: (s, o, R) => { const n = 4 + Math.floor(R() * 6), base = 400 + R() * 500; for (let k = 0; k < n; k++) s.noise(o, { type: 'bandpass', f: base * (0.8 + R() * 0.5), q: 6, t: k * (0.13 + R() * 0.1), dur: 0.1 + R() * 0.08, vol: 0.06 }); },
+  laugh: (s, o, R) => { const f = 600 + R() * 300; for (let k = 0; k < 4; k++) s.noise(o, { type: 'bandpass', f: f * (1 - k * 0.05), q: 8, t: k * 0.16, dur: 0.1, vol: 0.07 }); },
+};
+
 // Note name -> frequency (A4 = 440).
 const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -105,6 +133,24 @@ export class Sfx {
     if (!this.allow(name, lim[0], lim[1])) return;
     const o = this.out(opt.vol ?? 1, x, z); if (!o) return;
     fn(this, o, R, opt);
+  }
+
+  // ---------- ambience (v0.29) ----------
+  // The castle going about its day, heard from off in the distance: voices, footsteps, pots,
+  // horses, drips, birds. One quiet sound every 1.5-5 s from a random direction 15-35 units
+  // away (so it's soft and panned). Under the sound-effects volume. setAmbience(null) stops it.
+  setAmbience(mapId) {
+    clearInterval(this.ambTimer); this.ambTimer = null; this.ambMap = mapId;
+    if (!mapId) return;
+    let wait = 1;
+    this.ambTimer = setInterval(() => {
+      if (!this.ctx || this.prefs.muted || this.ctx.state !== 'running') return;
+      wait -= 0.25; if (wait > 0) return;
+      wait = 1.5 + Math.random() * 3.5;
+      const set = AMBIENCE[this.ambMap] || [], name = set[Math.floor(Math.random() * set.length)]; if (!name) return;
+      const a = Math.random() * Math.PI * 2, d = 15 + Math.random() * 20;
+      const o = this.out(0.9, this.lx + Math.cos(a) * d, this.lz + Math.sin(a) * d); if (o) AMB[name](this, o, Math.random);
+    }, 250);
   }
 
   // ---------- music ----------
