@@ -1,7 +1,7 @@
 // main.js — wires input -> commands -> sim (fixed tick) -> renderer + HUD.
 
-import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE, RULES } from './config.js';
-import { CAT_INFO, abilityRows } from './ui/catinfo.js';
+import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE, RULES, COMBOS } from './config.js';
+import { CAT_INFO, abilityRows, elTag } from './ui/catinfo.js';
 import { portraitURL } from './ui/portraits.js';
 import { Sfx } from './audio/sfx.js';
 import { Sim } from './sim/sim.js';
@@ -12,15 +12,20 @@ import { Scene } from './render/scene.js';
 import { Hud } from './ui/hud.js';
 import * as THREE from 'three';
 import { makeCat } from './render/models.js';
+import { loadProfile, saveProfile, sandboxProfile, unlockedTraps, unlockedItems, upgradesFor, runReward, applyReward } from './meta/profile.js';
+import { openShop } from './ui/shop.js';
+import { trapIcons } from './ui/icons.js';
 
 const LOCAL_ID = 'p1';
 
-// Saved progress between runs (paw prints + yarn). Why localStorage: no server
-// needed yet; wrapped in try/catch because private windows can block it.
-function loadProfile() { try { return JSON.parse(localStorage.getItem('catcastle.profile')) || { paws: 0, yarn: 0 }; } catch { return { paws: 0, yarn: 0 }; } }
-function saveProfile(p) { try { localStorage.setItem('catcastle.profile', JSON.stringify(p)); } catch { /* ignore */ } }
-
-const profile = loadProfile();
+// Saved progress between runs: paw prints, yarn, unlocks, upgrades, hats (meta/profile.js).
+// ?sandbox in the URL: everything unlocked with plenty to spend, nothing saved.
+const SANDBOX = new URLSearchParams(location.search).has('sandbox');
+// Reload with one-shot flags (go = start straight away, shop = open the shop), keeping ?sandbox.
+const relaunch = (flag) => { location.href = location.pathname + '?' + [SANDBOX ? 'sandbox' : '', flag].filter(Boolean).join('&'); };
+const dropFlags = () => history.replaceState(null, '', location.pathname + (SANDBOX ? '?sandbox' : ''));
+window.__relaunch = relaunch;   // the end screen's buttons use it
+const profile = SANDBOX ? sandboxProfile() : loadProfile();
 // Sound: needs a click before the browser allows it, so unlock on the first one.
 const sfx = new Sfx();
 document.addEventListener('pointerdown', () => sfx.unlock(), { once: false });
@@ -47,7 +52,8 @@ const TIPS = [
   'Win a map to move onward: entrance, market, stables, cellar, passages, kitchen.',
 ];
 { let k = Math.floor(Math.random() * TIPS.length); const show = () => { const el = document.getElementById('tip'); if (el) el.textContent = 'Tip: ' + TIPS[k++ % TIPS.length]; }; show(); setInterval(show, 6000); }
-document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn`;
+const showWallet = () => { document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn${SANDBOX ? ' · sandbox (nothing saved)' : ''}`; };
+showWallet();
 // Cat select: a grid of portraits, and a detail panel with the chosen cat turning in 3D.
 let chosenCat = CAT_ORDER.includes(localStorage.getItem('catcastle.cat')) ? localStorage.getItem('catcastle.cat') : 'fred';
 const catsEl = document.getElementById('cats');
@@ -66,7 +72,7 @@ const pv = (() => {
   requestAnimationFrame(tick);
   return { show(kind) {
     if (previewCat) sc.remove(previewCat);
-    previewCat = makeCat(kind); sc.add(previewCat);
+    previewCat = makeCat(kind, profile.worn[kind]); sc.add(previewCat);
     if (previewCat.userData.reach) previewCat.userData.reach.visible = false;   // no attack markers on the menu
     if (previewCat.userData.rage) previewCat.userData.rage.visible = false;
     const big = kind === 'puddin';
@@ -78,7 +84,7 @@ function pickCat(k) {
   document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('picked', x.dataset.cat === k));
   const d = CATS[k], info = CAT_INFO[k];
   document.getElementById('catdetail').innerHTML = `<h2>${d.name}</h2><p>${info.blurb}</p>` +
-    abilityRows(k).map(([key, name, note]) => `<div class="ab-row"><i>${key}</i> <b>${name}</b> — ${note}</div>`).join('') +
+    abilityRows(k).map(([key, name, note, el]) => `<div class="ab-row"><i>${key}</i> <b>${name}</b> ${elTag(el)} — ${note}</div>`).join('') +
     `<div class="stats">Health ${d.maxHp} · Energy ${d.maxEnergy} (+${d.energyRegen}/s) · Speed ${d.speed}</div>`;
   pv.show(k);
 }
@@ -87,13 +93,18 @@ pickCat(chosenCat);
 // Loadout: pick 8 traps to bring, and 1 item. Remembered between visits.
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
-let loadout = load('catcastle.loadout', TRAP_ORDER.slice(0, LOADOUT_SIZE)).filter(k => TRAPS[k]);
-let chosenItem = ITEMS[load('catcastle.item', 'laser')] ? load('catcastle.item', 'laser') : 'laser';
+// Only traps and items you've unlocked (shop) can be brought.
+let loadout = load('catcastle.loadout', TRAP_ORDER.slice(0, LOADOUT_SIZE)).filter(k => TRAPS[k] && unlockedTraps(profile).includes(k));
+let chosenItem = unlockedItems(profile).includes(load('catcastle.item', 'laser')) ? load('catcastle.item', 'laser') : 'laser';
 function drawLoadout() {
+  const traps = unlockedTraps(profile), items = unlockedItems(profile), icons = trapIcons(traps);
+  loadout = loadout.filter(k => traps.includes(k));
+  const more = TRAP_ORDER.length - traps.length, moreI = ITEM_ORDER.length - items.length;
   document.getElementById('loadout').innerHTML = `<div class="lh">Traps <b>${loadout.length}/${LOADOUT_SIZE}</b></div>` +
-    TRAP_ORDER.map(k => `<button class="lt ${loadout.includes(k) ? 'on' : ''}" data-trap="${k}" title="${TRAPS[k].desc}">${TRAPS[k].name}</button>`).join('') +
-    `<div class="lh">Item (Q)</div>` + ITEM_ORDER.map(k => `<button class="lt ${chosenItem === k ? 'on' : ''}" data-item="${k}" title="${ITEMS[k].desc}">${ITEMS[k].name}</button>`).join('') +
-    `<p class="dim" id="loadhint">${ITEMS[chosenItem].desc}</p>`;
+    traps.map(k => `<button class="lt ${loadout.includes(k) ? 'on' : ''}" data-trap="${k}" title="${TRAPS[k].desc}">${icons[k] ? `<img src="${icons[k]}" alt="">` : ''}${TRAPS[k].name}</button>`).join('') +
+    (more ? `<span class="dim"> +${more} more in the shop</span>` : '') +
+    `<div><div class="lh">Item (Q)</div>` + items.map(k => `<button class="lt ${chosenItem === k ? 'on' : ''}" data-item="${k}" title="${ITEMS[k].desc}">${ITEMS[k].name}</button>`).join('') +
+    (moreI ? `<span class="dim"> +${moreI} more in the shop</span>` : '') + `</div><p class="dim" id="loadhint">${ITEMS[chosenItem].desc}</p>`;
   document.querySelectorAll('[data-trap]').forEach(b => b.onclick = () => {
     const k = b.dataset.trap;
     if (loadout.includes(k)) loadout = loadout.filter(x => x !== k);
@@ -104,6 +115,10 @@ function drawLoadout() {
   document.querySelectorAll('[data-item]').forEach(b => b.onclick = () => { chosenItem = b.dataset.item; save('catcastle.item', chosenItem); sfx.play('click'); drawLoadout(); });
 }
 drawLoadout();
+// Shop (between runs). Also opens straight away from the end screen's Shop button (?shop=1).
+const shop = () => openShop(profile, { sfx, cat: () => chosenCat, onChange: () => { showWallet(); drawLoadout(); pickCat(chosenCat); } });
+document.getElementById('shopbtn').onclick = () => { sfx.unlock(); sfx.play('click'); shop(); };
+if (new URLSearchParams(location.search).has('shop')) { dropFlags(); shop(); }
 // Map select: the six stretches of the journey, entrance to kitchen.
 let chosenMap = MAPS[load('catcastle.map', 'entrance')] ? load('catcastle.map', 'entrance') : 'entrance';
 function drawMaps() {
@@ -113,7 +128,7 @@ function drawMaps() {
   const pb = document.querySelector('[data-mode="normal"]'); if (pb) pb.textContent = `${MAPS[chosenMap].name} · ${RULES.winWave} waves`;
 }
 drawMaps();
-if (new URLSearchParams(location.search).has('go')) setTimeout(() => { previewOn = false; history.replaceState(null, '', location.pathname); start('normal'); }, 0);
+if (new URLSearchParams(location.search).has('go')) setTimeout(() => { previewOn = false; dropFlags(); start('normal'); }, 0);
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
   if (loadout.length < 1) { sfx.play('deny'); return; }
   previewOn = false; start(b.dataset.mode);
@@ -123,7 +138,7 @@ function start(mode) {
   document.getElementById('menu').classList.remove('show');
   sfx.unlock(); sfx.setMusic('build');
   const sim = new Sim({ mode, seed: (Date.now() & 0xffff) | 1, map: chosenMap });
-  sim.addPlayer(LOCAL_ID, chosenCat, { loadout, item: chosenItem });
+  sim.addPlayer(LOCAL_ID, chosenCat, { loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null });
   const net = new LocalTransport(sim);
   const canvas = document.getElementById('game');
   const scene = new Scene(canvas, sim);
@@ -144,7 +159,9 @@ function start(mode) {
     else if (hadLock && !ended) setPaused(true);
   });
   document.getElementById('resume').onclick = () => { setPaused(false); canvas.requestPointerLock(); };
-  document.getElementById('quit').onclick = () => location.reload();
+  // Element combos cheat sheet on the pause screen.
+  document.getElementById('combos').innerHTML = '<b>Element combos</b><br>' + Object.values(COMBOS).map(t => `<b>${t.split(':')[0]}</b>:${t.split(':').slice(1).join(':')}`).join('<br>');
+  document.getElementById('quit').onclick = () => relaunch('');
   for (const k of ['master', 'music', 'sfx']) {
     const el = document.getElementById('vol-' + k); el.value = sfx.prefs[k];
     el.oninput = () => { sfx.set(k, +el.value); sfx.play('click'); };
@@ -267,6 +284,7 @@ function start(mode) {
       case 'slam': case 'strike': sfx.play('pounceLand', x, z); break;
       case 'leapback': sfx.play('leap', x, z); break;
       case 'bossRoar': sfx.play('bossRoar', undefined, undefined, { vol: 0.9 }); break;
+      case 'combo': sfx.play('combo_' + e.kind, x, z); break;
       default: sfx.play(e.t, x, z, e);   // names that match a sound directly (snap, flip, zap, splat, ...)
     }
   }
@@ -286,16 +304,18 @@ function start(mode) {
         if (e.t === 'catHurt' && e.id === LOCAL_ID) hud.flashHurt();
         if (e.t === 'end' && !ended) {
           ended = true;
-          if (e.won && e.rating) profile.paws += e.rating.total;
-          profile.yarn += sim.yarn; saveProfile(profile);
+          // Pay out: paw prints for waves cleared, the rating and a first-win bonus; yarn from bosses.
+          const cleared = e.won ? sim.wave : Math.max(0, sim.wave - 1);
+          const reward = runReward(profile, { won: e.won, waves: cleared, rating: e.rating, yarn: sim.yarn, map: chosenMap });
+          applyReward(profile, reward, { won: e.won, map: chosenMap }); saveProfile(profile);
           document.exitPointerLock?.();
-          hud.showEnd(e.won, e.rating, sim, profile);
+          hud.showEnd(e.won, e.rating, sim, profile, reward, chosenCat);
           // Won a map: offer the next stretch of the journey.
           const nextMap = MAP_ORDER[MAP_ORDER.indexOf(chosenMap) + 1];
           const endEl = document.getElementById('end');
           if (e.won && nextMap) {
             const b = document.createElement('button'); b.className = 'play'; b.textContent = `Onward: ${MAPS[nextMap].name}`;
-            b.onclick = () => { save('catcastle.map', nextMap); location.href = location.pathname + '?go=1'; };
+            b.onclick = () => { save('catcastle.map', nextMap); relaunch('go'); };
             endEl.prepend(b);
           }
         }

@@ -1,3 +1,4 @@
+import { CATS, ATTACK_EL, ELEMENTS } from '../config.js';
 // catinfo.js — the words for each cat: role, blurb, and the name + one-line note for
 // each of their moves. Every cat has the same layout: left-click attack, right-click
 // ability, E ability, a jump, and (some) a passive. Used by the menu and the HUD.
@@ -51,8 +52,10 @@ export const CAT_INFO = {
   },
 };
 
-// Rows for the menu's detail panel: [key, name, note].
+// Rows for the menu's detail panel: [key, name, note, element].
 export const abilityRows = (k) => {
-  const c = CAT_INFO[k];
-  return [['Left click', ...c.pri], ['Right click', ...c.sec], ['E', ...c.e], ['Space', ...c.jump], ...(c.passive ? [['Passive', ...c.passive]] : [])];
+  const c = CAT_INFO[k], d = CATS[k];
+  return [['Left click', ...c.pri, ATTACK_EL[d.primary]], ['Right click', ...c.sec, ATTACK_EL[d.secondary]], ['E', ...c.e, ATTACK_EL[d.ability2]], ['Space', ...c.jump, null], ...(c.passive ? [['Passive', ...c.passive, null]] : [])];
 };
+// Little coloured element tag, e.g. <span class="el">Fire</span>.
+export const elTag = (el) => el && ELEMENTS[el] ? `<span class="el" style="color:${ELEMENTS[el].color};border-color:${ELEMENTS[el].color}">${ELEMENTS[el].name}</span>` : '';

@@ -139,7 +139,7 @@ export class Sfx {
 }
 
 // Rate limits: [max plays, per seconds]. Unlisted sounds: 6 per 0.1 s.
-const LIMITS = { toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25] };
+const LIMITS = { sizzle: [2, 0.3], chill: [2, 0.3], salt: [1, 0.4], slip: [2, 0.2], darts: [2, 0.2], combo_chain: [2, 0.15], combo_blaze: [2, 0.2], combo_freeze: [3, 0.15], combo_spread: [1, 0.3], combo_knockdown: [3, 0.1], combo_steam: [1, 0.3], execute: [3, 0.1], toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25] };
 
 // Each sound: (sfx, output node, random, options).
 const SOUNDS = {
@@ -237,6 +237,32 @@ const SOUNDS = {
   intro: (a, o) => { [880, 1175].forEach((f, k) => a.tone(o, { type: 'triangle', f, t: k * 0.12, dur: 0.3, vol: 0.18 })); },
   win: (a, o) => { [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, k) => a.tone(o, { type: 'triangle', f, t: k * 0.14, dur: 0.4, vol: 0.2 })); },
   lose: (a, o) => { [392, 370, 349, 262].forEach((f, k) => a.tone(o, { type: 'sawtooth', f, t: k * 0.35, dur: 0.5, vol: 0.12, vib: 4 })); },
+  // New traps and items (0.11).
+  sizzle: (a, o) => { a.noise(o, { dur: 0.5, vol: 0.35, type: 'highpass', f: 3000, att: 0.02 }); a.noise(o, { dur: 0.3, vol: 0.15, f: 6000, q: 3 }); },
+  chill: (a, o, R) => { for (let k = 0; k < 3; k++) a.tone(o, { type: 'triangle', f: 3000 + R() * 1500, t: k * 0.05, dur: 0.1, vol: 0.06 }); },
+  roll: (a, o) => { a.noise(o, { dur: 0.45, vol: 0.4, type: 'lowpass', f: 300, f2: 500 }); a.tone(o, { f: 70, f2: 60, dur: 0.45, vol: 0.4 }); },
+  darts: (a, o, R) => { for (let k = 0; k < 4; k++) a.noise(o, { t: k * 0.03, dur: 0.06, vol: 0.25, f: 3500 + R() * 1500, f2: 1500, q: 3 }); },
+  gust: (a, o) => { a.noise(o, { dur: 0.6, vol: 0.5, type: 'lowpass', f: 400, f2: 1400, att: 0.05 }); a.tone(o, { type: 'sawtooth', f: 60, dur: 0.3, vol: 0.12 }); },
+  flame: (a, o) => { a.noise(o, { dur: 0.5, vol: 0.5, type: 'lowpass', f: 800, f2: 2500, att: 0.02 }); },
+  hypno: (a, o) => { a.tone(o, { type: 'sine', f: 400, f2: 800, dur: 0.6, vol: 0.12, vib: 30 }); a.tone(o, { type: 'sine', f: 600, f2: 300, t: 0.1, dur: 0.6, vol: 0.08, vib: 30 }); },
+  potDrop: (a, o) => { a.noise(o, { dur: 0.08, vol: 0.7, type: 'highpass', f: 1800 }); a.noise(o, { t: 0.05, dur: 0.4, vol: 0.4, type: 'lowpass', f: 900, f2: 200 }); a.tone(o, { f: 160, f2: 60, dur: 0.2, vol: 0.4 }); },
+  splashDown: (a, o) => { a.noise(o, { dur: 0.6, vol: 0.5, f: 1200, f2: 400, q: 0.7 }); },
+  salt: (a, o) => { a.noise(o, { dur: 0.25, vol: 0.12, type: 'highpass', f: 7000 }); },
+  slip: (a, o) => { a.tone(o, { f: 600, f2: 1400, dur: 0.15, vol: 0.12 }); a.tone(o, { f: 150, f2: 70, t: 0.15, dur: 0.12, vol: 0.3 }); },
+  stickBird: (a, o) => { a.noise(o, { dur: 0.25, vol: 0.3, type: 'lowpass', f: 700, f2: 200, q: 4 }); a.tone(o, { type: 'sawtooth', f: 1200, f2: 600, dur: 0.3, vol: 0.08 }); },
+  squirt: (a, o) => { a.noise(o, { dur: 0.35, vol: 0.4, f: 2500, f2: 1200, q: 1 }); },
+  item_bell: (a, o) => { [1568, 2093, 1568, 2093].forEach((f, k) => a.tone(o, { type: 'sine', f, t: k * 0.09, dur: 0.6, vol: 0.12 })); },
+  item_pistol: (a, o) => { a.noise(o, { dur: 0.3, vol: 0.4, f: 2500, f2: 1200, q: 1 }); },
+  item_matches: (a, o) => { a.noise(o, { dur: 0.1, vol: 0.4, type: 'highpass', f: 2500 }); a.noise(o, { t: 0.08, dur: 0.6, vol: 0.35, type: 'lowpass', f: 600, f2: 2000 }); },
+  item_holy: (a, o) => { [1047, 1319, 1568, 2093].forEach((f, k) => a.tone(o, { type: 'triangle', f, t: k * 0.05, dur: 0.8, vol: 0.08 })); a.noise(o, { dur: 0.4, vol: 0.3, f: 1500, f2: 600, q: 0.8 }); },
+  // Element combos.
+  combo_chain: (a, o) => { a.noise(o, { dur: 0.35, vol: 0.45, type: 'highpass', f: 3500 }); a.tone(o, { type: 'sawtooth', f: 90, dur: 0.35, vol: 0.3 }); a.tone(o, { type: 'square', f: 2400, f2: 600, dur: 0.2, vol: 0.08 }); },
+  combo_blaze: (a, o) => { a.noise(o, { dur: 0.7, vol: 0.55, type: 'lowpass', f: 300, f2: 2500, att: 0.04 }); a.tone(o, { f: 80, f2: 160, dur: 0.5, vol: 0.4 }); },
+  combo_freeze: (a, o, R) => { for (let k = 0; k < 5; k++) a.tone(o, { type: 'triangle', f: 2600 + R() * 1200, t: k * 0.04, dur: 0.12, vol: 0.08 }); a.noise(o, { dur: 0.3, vol: 0.25, type: 'highpass', f: 6000 }); },
+  combo_spread: (a, o) => { a.noise(o, { dur: 0.6, vol: 0.35, f: 400, f2: 1600, q: 0.7, att: 0.08 }); },
+  combo_knockdown: (a, o) => { a.tone(o, { f: 140, f2: 45, dur: 0.25, vol: 0.6 }); a.noise(o, { dur: 0.12, vol: 0.3, type: 'lowpass', f: 900 }); },
+  combo_steam: (a, o) => { a.noise(o, { dur: 0.6, vol: 0.4, type: 'highpass', f: 2800, att: 0.03 }); },
+  execute: (a, o) => { a.tone(o, { type: 'sawtooth', f: 220, f2: 55, dur: 0.6, vol: 0.18, vib: 10 }); a.tone(o, { f: 110, f2: 40, t: 0.1, dur: 0.5, vol: 0.4 }); },
   click: (a, o) => { a.tone(o, { type: 'triangle', f: 700, f2: 500, dur: 0.05, vol: 0.15 }); },
   deny: (a, o) => { a.tone(o, { type: 'square', f: 180, dur: 0.12, vol: 0.08 }); },
 };

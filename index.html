@@ -113,6 +113,22 @@
   .paw.on { fill: var(--accent); } .paw.off { fill: #3b322a; }
   .bonus { list-style: none; padding: 0; text-align: left; color: var(--dim); } .bonus li.got { color: var(--ink); }
   .dim { font-size: 13px; }
+  /* Shop */
+  #shop { justify-content: flex-start; }
+  #shop .wallet { font-size: 18px; color: var(--ink); margin: 0; } #shop .wallet b { color: var(--accent); }
+  #shop .tabs { margin: 6px 0; } #shop .note { min-height: 18px; color: var(--accent); margin: 2px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 8px; width: min(1200px, 96vw); text-align: left; }
+  .card { background: var(--bg); border: 2px solid #0e0b09; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .card.locked { opacity: .7; } .card p { margin: 4px 0; max-width: none; } .card .stat { color: var(--accent); font-size: 12px; }
+  .card .ch { display: flex; gap: 8px; align-items: center; } .card .ch img { width: 64px; height: 48px; } .card .ch small { display: block; color: var(--dim); font-size: 11px; }
+  .card button { font-size: 12px; padding: 4px 10px; margin: 4px 0 0; } .card em { color: var(--dim); font-size: 12px; }
+  .tier i { color: #3b322a; font-style: normal; font-size: 16px; } .tier i.on { color: var(--accent); } .tier span { color: var(--dim); font-size: 12px; }
+  .specials .sp { border-top: 1px solid #3b322a; padding: 4px 0; color: var(--dim); } .specials .sp b { color: var(--ink); } .specials .sp.on b { color: #8ae06a; }
+  .pp { font-size: 11px; }
+  .lt img { display: block; width: 48px; height: 36px; margin: 0 auto; }
+  .el { display: inline-block; font-size: 10px; font-weight: bold; padding: 0 4px; border: 1px solid; border-radius: 3px; vertical-align: 1px; letter-spacing: .5px; text-transform: uppercase; }
+  #combos { max-width: 640px; text-align: left; font-size: 12.5px; color: var(--dim); line-height: 1.55; margin-top: 8px; }
+  #combos b { color: var(--ink); }
 </style>
 </head>
 <body>
@@ -159,6 +175,7 @@
   <div class="modes">
     <button class="play" data-mode="normal">Castle entrance · 24 waves</button>
     <button data-mode="endless">Endless</button>
+    <button id="shopbtn">Shop</button>
   </div>
   <p id="profile" class="dim"></p>
   <p class="tip" id="tip"></p>
@@ -174,9 +191,11 @@
     <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom · <b>Left click</b> attack · <b>Right click</b> ability / place trap<br>
     <b>Space</b> jump · <b>1–8</b> traps (again to put away) · <b>R</b> rotate · <b>X</b> sell · <b>E</b> ability · <b>Q</b> item · <b>G</b> next wave · <b>F</b> sniff · <b>M</b> mute
   </div>
+  <div id="combos"></div>
   <button id="quit">Quit to menu</button>
 </div>
 <div id="end" class="screen"></div>
+<div id="shop" class="screen"></div>
 
 <script type="module" src="./src/main.js"></script>
 </body>

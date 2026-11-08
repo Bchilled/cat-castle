@@ -16,7 +16,10 @@ const MAX_MICE = 800;
 const YAW_FOR = [Math.PI / 2, -Math.PI / 2, 0, Math.PI];   // DIRS4 index -> yaw pointing local +z that way
 const OPP = [1, 0, 3, 2];
 // Colours made once (not per mouse per frame).
-const TINT = { stuck: new THREE.Color(0xe0d060), slow: new THREE.Color(0x7a9a3a), stun: new THREE.Color(0xa0a0ff), zapOff: new THREE.Color(0x1c2a3a), zapOn: new THREE.Color(0x6fb8ff) };
+const TINT = { stuck: new THREE.Color(0xe0d060), slow: new THREE.Color(0x7a9a3a), stun: new THREE.Color(0xa0a0ff), zapOff: new THREE.Color(0x1c2a3a), zapOn: new THREE.Color(0x6fb8ff),
+  frozen: new THREE.Color(0xc8eeff), burn: new THREE.Color(0xff6a1a), wet: new THREE.Color(0x3a7ad8), oil: new THREE.Color(0x1a1612), dirty: new THREE.Color(0x6a4a2a), confuse: new THREE.Color(0xc070ff) };
+// Combo colours (rings and sparks where a combo goes off).
+const COMBO_COL = { chain: 0xf0e040, blaze: 0xff5a10, freeze: 0x9ad8ff, spread: 0xc8f0e8, knockdown: 0xd8c8a0, steam: 0xe8eef0 };
 let DECAL_GEO = null;
 
 export class Scene {
@@ -302,7 +305,7 @@ export class Scene {
 
   ensureCat(cat) {
     if (!this.cats.has(cat.id)) {
-      const m = makeCat(cat.kind); this.scene.add(m);
+      const m = makeCat(cat.kind, cat.hat); this.scene.add(m);
       this.cats.set(cat.id, { mesh: m, walk: 0, atkT: 0, side: 0, kind: cat.kind, tailX: 0, tailZ: 0, tailSwish: 0 });
     }
     return this.cats.get(cat.id);
@@ -353,6 +356,16 @@ export class Scene {
     }
     this.pmesh.instanceColor.needsUpdate = true;
   }
+  // A directed spray (flame jets, gusts, squirts, forks): specks fly out along (nx, nz).
+  jet(x, y, z, nx, nz, speed, color, n = 12, size = 0.07, spread = 0.35) {
+    if (!this.pool) this.buildParticles();
+    const P = this.pool;
+    for (let k = 0; k < n; k++) {
+      const i = P.head; this.spawnParticles(x, y, z, Array.isArray(color) ? color[k % color.length] : color, 1, 0, size);
+      const sp = speed * (0.6 + Math.random() * 0.6), sx = -nz, sz = nx, side = (Math.random() - 0.5) * 2 * spread;
+      P.vx[i] = (nx + sx * side) * sp; P.vz[i] = (nz + sz * side) * sp; P.vy[i] = 1 + Math.random() * 1.5;
+    }
+  }
   stepParticles(dt) {
     if (!this.pool) this.buildParticles();
     const P = this.pool, L = this._l, v = this._v, q = this._q.identity(), s = this._s;
@@ -398,11 +411,19 @@ export class Scene {
 
   // Burst of colour where an item goes off.
   itemFx(e) {
-    const col = { laser: 0xff2020, bola: 0xe0a0c0, catnip: 0x8ae06a, flea: 0x6a5a2a, tonic: 0x6ad0ff, squeaky: 0xffd020 }[e.item] || 0xffffff;
+    const col = { laser: 0xff2020, bola: 0xe0a0c0, catnip: 0x8ae06a, flea: 0x6a5a2a, tonic: 0x6ad0ff, squeaky: 0xffd020, bell: 0xffd060, pistol: 0x6ab0ff, matches: 0xff7a20, holy: 0xfff4b0 }[e.item] || 0xffffff;
+    if (e.item === 'bell') { const c = this.sim.cats.get(e.id); if (c) { this.ring(c.x, c.z, 7, col, 0.6, false, true); return; } }
     if (e.r) this.ring(e.x, e.z, e.r, col, 0.5, false, true);
     this.spawnParticles(e.x, 0.5, e.z, col, 12, 3, 0.06);
   }
 
+  // Jagged lightning line between two points (zappers, chain shocks). Freed when it fades.
+  bolt(x0, y0, z0, x1, y1, z1, color = 0xbfe4ff) {
+    const pts = [], a = new THREE.Vector3(x0, y0, z0), b = new THREE.Vector3(x1, y1, z1);
+    for (let k = 0; k <= 6; k++) { const p = a.clone().lerp(b, k / 6); if (k && k < 6) { p.x += (Math.random() - 0.5) * 0.5; p.z += (Math.random() - 0.5) * 0.5; p.y += (Math.random() - 0.5) * 0.3; } pts.push(p); }
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color, transparent: true }));
+    line.userData = { life: 0.2 }; this.scene.add(line); this.particles.push(line);
+  }
   // Flat ring on the floor: warn = pulsing danger zone; grow = shockwave expanding to r.
   ring(x, z, r, color, life, warn = false, grow = false, y = 0) {
     const m = new THREE.Mesh(new THREE.RingGeometry(warn ? 0 : r * 0.85, r, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
@@ -427,7 +448,27 @@ export class Scene {
         this.scene.add(g); this.trapMeshes.set(e.trap.id, g); break;
       }
       case 'trapRemove': { const g = trap(e.id); if (g) { this.spawnParticles(g.position.x, 0.4, g.position.z, 0xc4a46a, 10); this.scene.remove(g); this.trapMeshes.delete(e.id); } break; }
-      case 'snap': case 'flip': case 'punch': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
+      case 'snap': case 'flip': case 'punch': case 'roll': case 'hypno': { const g = trap(e.id); if (g) g.userData.anim = 1; if (e.t === 'roll' && g) this.spawnParticles(g.position.x, 0.2, g.position.z, 0xd8c8a8, 12, 3); break; }
+      case 'sizzle': { const g = trap(e.id); if (g) { g.userData.anim = 1; this.spawnParticles(g.position.x, 0.25, g.position.z, 0xff8a30, 10, 2.5, 0.06); } break; }
+      case 'chill': { const g = trap(e.id); if (g) { g.userData.anim = 1; this.spawnParticles(g.position.x, 0.3, g.position.z, 0xcfefff, 10, 2, 0.06); } break; }
+      case 'darts': {
+        const g = trap(e.id); if (g) g.userData.anim = 1;
+        for (let k = 0; k < 5; k++) {   // forks flashing across the lane
+          const len = e.reach, off = (k - 2) * 0.35, sx = -e.nz, sz = e.nx;
+          const streak = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, len), new THREE.MeshBasicMaterial({ color: 0xe0e0e8, transparent: true, opacity: 0.9, depthWrite: false }));
+          streak.position.set(e.x + e.nx * len / 2 + sx * off, 0.35 + (k % 2) * 0.2, e.z + e.nz * len / 2 + sz * off); streak.rotation.y = Math.atan2(e.nx, e.nz);
+          streak.userData = { life: 0.12, max: 0.12 }; this.scene.add(streak); this.rings.push(streak);
+        }
+        break;
+      }
+      case 'gust': { const g = trap(e.id); if (g) g.userData.anim = 1; this.jet(e.x + e.nx * 0.5, 0.5, e.z + e.nz * 0.5, e.nx, e.nz, e.reach * 2.4, e.hot ? [0xff7a2a, 0xffd040, 0xe8f0f0] : 0xe8f0f0, 18, 0.06, 0.5); break; }
+      case 'flame': { const g = trap(e.id); if (g) g.userData.anim = 1; this.jet(e.x + e.nx * 0.4, 0.45, e.z + e.nz * 0.4, e.nx, e.nz, e.reach * 2.6, [0xff5a10, 0xffa030, 0xffe060], 26, 0.1, 0.3); break; }
+      case 'squirt': this.jet(e.x + e.nx * 0.5, 0.5, e.z + e.nz * 0.5, e.nx, e.nz, e.reach * 2.4, [0x6ab0ff, 0xbfe0ff], 22, 0.05, 0.12); break;
+      case 'potDrop': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.3, e.z, 0xc8643a, 14, 4, 0.1); this.spawnParticles(e.x, 0.2, e.z, 0x4a3020, 14, 3, 0.07); this.decal(e.x, e.z, 0x4a3020, 1.1); this.shake = Math.max(this.shake, 0.12); break; }
+      case 'splashDown': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.4, e.z, 0x6ab0ff, 22, 3.5, 0.07); this.ring(e.x, e.z, e.r, 0x3a7ad8, 0.4, false, true); break; }
+      case 'salt': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 8; k++) this.spawnParticles(e.x + (Math.random() - 0.5) * e.r * 1.4, 1.6, e.z + (Math.random() - 0.5) * e.r * 1.4, 0xffffff, 1, 0.3, 0.04); break; }
+      case 'slip': this.spawnParticles(e.x, 0.15, e.z, 0x2a2420, 4, 1.5, 0.05); break;
+      case 'stickBird': this.spawnParticles(e.x, 2, e.z, 0xe8d050, 8, 2, 0.06); break;
       case 'stompWarn': this.ring(e.x, e.z, e.r, 0xe0302a, 0.7, true); break;
       case 'stomp': this.ring(e.x, e.z, e.r, 0xd8d0c0, 0.5, false, true); this.spawnParticles(e.x, 0.2, e.z, 0x8a8478, 30, 7, 0.14); this.shake = 0.5; break;
       case 'bossRoar': this.shake = 0.8; break;
@@ -435,12 +476,7 @@ export class Scene {
       case 'globSplat': this.spawnParticles(e.x, e.y + 0.05, e.z, 0x9adf3a, 8, 2); this.decal(e.x, e.z, 0x6a8a2a, 0.35, Math.max(0.02, e.y + 0.02)); break;
       case 'zap': {
         const g = trap(e.id); if (!g) break; g.userData.anim = 1;
-        for (const v of e.hits || []) {
-          const pts = [], a = new THREE.Vector3(g.position.x, g.position.y - 0.5, g.position.z), b = new THREE.Vector3(v[0], 0.3, v[1]);
-          for (let k = 0; k <= 6; k++) { const p = a.clone().lerp(b, k / 6); if (k && k < 6) { p.x += (Math.random() - 0.5) * 0.5; p.z += (Math.random() - 0.5) * 0.5; } pts.push(p); }
-          const bolt = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xbfe4ff, transparent: true }));
-          bolt.userData = { vx: 0, vy: 0, vz: 0, life: 0.2 }; this.scene.add(bolt); this.particles.push(bolt);
-        }
+        for (const v of e.hits || []) this.bolt(g.position.x, g.position.y - 0.5, g.position.z, v[0], 0.3, v[1]);
         break;
       }
       case 'kill':
@@ -492,6 +528,14 @@ export class Scene {
       case 'groom': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.6, cat.z, 0x9af08a, 14, 2, 0.06); break; }
       case 'skyswipe': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.2, cat.z, 0xd8d0c0, 8, 3); break; }
       case 'points': if (Math.random() < 0.35) this.spawnParticles(e.x, 0.6, e.z, 0xffd060, 2, 1.5, 0.05); break;
+      case 'combo': {
+        const col = COMBO_COL[e.kind] || 0xffffff;
+        this.ring(e.x, e.z, e.kind === 'blaze' || e.kind === 'spread' ? 1.6 : 1, col, 0.45, false, true, e.y || 0);
+        this.spawnParticles(e.x, (e.y || 0) + 0.4, e.z, col, e.kind === 'steam' ? 10 : 14, e.kind === 'steam' ? 1.5 : 4, 0.07);
+        if (e.kind === 'chain' && e.pts) for (let k = 1; k < e.pts.length; k++) this.bolt(e.pts[0][0], 0.35, e.pts[0][1], e.pts[k][0], 0.35, e.pts[k][1], 0xf8f060);
+        break;
+      }
+      case 'execute': this.spawnParticles(e.x, 0.5, e.z, 0x9a7ab8, 12, 2.5, 0.08); this.ring(e.x, e.z, 0.8, 0x6a4a8a, 0.4, false, true); break;
     }
   }
 
@@ -586,6 +630,8 @@ export class Scene {
     // Item effects: the laser dot, flea clouds, squeaky toys.
     this.syncSimple(sim.zones, this.zoneMeshes, (z) => {
       if (z.kind === 'laser') { const m = new THREE.Mesh(new THREE.CircleGeometry(0.25, 12), new THREE.MeshBasicMaterial({ color: 0xff2020 })); m.rotation.x = -Math.PI / 2; return m; }
+      if (z.kind === 'fire') { const m = new THREE.Mesh(new THREE.CircleGeometry(z.r, 20), new THREE.MeshBasicMaterial({ color: 0xff6a20, transparent: true, opacity: 0.35, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.userData.fire = true; return m; }
+      if (z.kind === 'soil') { const m = new THREE.Mesh(new THREE.CircleGeometry(z.r, 18), new THREE.MeshBasicMaterial({ color: 0x4a3020, transparent: true, opacity: 0.7, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.userData.soil = true; return m; }
       if (z.kind === 'spill') {   // what came out of the pot: water, milk, oil, grain
         const col = { pot: 0x3a6a8a, jug: 0xe8e4d8, basket: 0xc8a050, bucket: 0x3a6a8a }[z.what] || 0x3a6a8a;
         const m = new THREE.Mesh(new THREE.CircleGeometry(z.r, 20), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.userData.spill = true; return m;
@@ -593,6 +639,8 @@ export class Scene {
       const m = new THREE.Mesh(new THREE.SphereGeometry(z.r, 16, 10), new THREE.MeshBasicMaterial({ color: 0x8a7a3a, transparent: true, opacity: 0.25, depthWrite: false })); m.scale.y = 0.35; return m;
     }, (g, z) => {
       if (z.kind === 'laser') g.position.set(z.x + Math.sin(now / 160) * 0.8, 0.06, z.z + Math.cos(now / 130) * 0.8);   // the dot dances about
+      else if (g.userData.fire) { g.position.set(z.x, 0.03, z.z); g.material.opacity = 0.25 + Math.sin(now / 60) * 0.1; if (Math.random() < 0.6) this.spawnParticles(z.x + (Math.random() - 0.5) * z.r * 1.4, 0.2, z.z + (Math.random() - 0.5) * z.r * 1.4, Math.random() < 0.5 ? 0xff7a20 : 0xffd040, 1, 2, 0.08); }
+      else if (g.userData.soil) { g.position.set(z.x, 0.025, z.z); g.material.opacity = Math.min(0.7, z.t / 2); }
       else if (g.userData.spill) { g.position.set(z.x, this.sim.groundAt(cellOf(z.x, z.z), 5, 0.3, true) + 0.03, z.z); g.material.opacity = Math.min(0.55, z.t / 3); }
       else { g.position.set(z.x, 0.3, z.z); g.material.opacity = 0.18 + Math.sin(now / 90) * 0.06; if (Math.random() < 0.3) this.spawnParticles(z.x + (Math.random() - 0.5) * z.r * 1.5, 0.4, z.z + (Math.random() - 0.5) * z.r * 1.5, 0x3a3a1a, 1, 1, 0.03); }
     });
@@ -608,7 +656,7 @@ export class Scene {
       g.position.set(b.x, b.y, b.z); g.rotation.y = b.yaw;
       const flap = b.stunT > 0 ? 0.2 : Math.sin(now / (b.state === 'act' ? 60 : 110) + b.id) * 0.9;
       g.userData.wings[0].rotation.z = flap; g.userData.wings[1].rotation.z = -flap;
-      g.rotation.z = b.stunT > 0 ? now / 80 : 0;
+      g.rotation.z = b.stunT > 0 ? now / 80 : b.stuckT > 0 ? Math.sin(now / 40) * 0.4 : 0;   // tumbling (roared at) / struggling (flypaper)
       g.userData.cargo.visible = b.carry > 0;
     });
     // Projectiles share one geometry + material per kind (made once): hundreds fly per wave.
@@ -644,6 +692,19 @@ export class Scene {
       }
       if (ud.kind === 'gluepad') ud.goo.material.opacity = tr.charges > 0 ? 0.25 + 0.55 * tr.charges / TRAPS.gluepad.charges : 0.1;
       if (ud.kind === 'barricade') g.scale.y = 0.55 + 0.45 * (tr.hp / tr.maxHp);
+      // New traps (0.11).
+      if (ud.kind === 'hotplate') ud.coilMat.color.setHex(ud.anim > 0.3 ? 0xffe080 : f > 0 ? 0x5a1a0a : 0xff4a1a);
+      if (ud.kind === 'icetray') ud.cubes.scale.setScalar(1 + ud.anim * 0.15);
+      if (ud.kind === 'rollingpin') { const z = ud.anim > 0 ? -0.72 + 1.44 * (1 - ud.anim) : f > 0 ? 0.72 - 1.44 * (1 - f) : -0.72; ud.pin.position.z = z; ud.pin.rotation.x = z * 3; }
+      if (ud.kind === 'skull') { const pulse = 0.5 + Math.sin(now / 250) * 0.5; ud.eyeMat.color.setHex(tr.active && pulse > 0.5 ? 0xe0b0ff : 0x9a5ae0); if (ud.aura) ud.aura.material.opacity = 0.12 + (tr.active ? 0.2 : 0.05) * pulse; }
+      if (ud.kind === 'forkdarts') ud.forks.scale.z = f > 0 ? Math.max(0.05, 1 - f) : 1;
+      if (ud.kind === 'bellows') ud.bag.scale.y = ud.anim > 0 ? 0.4 : 0.4 + 0.6 * (1 - f);
+      if (ud.kind === 'candle') { const n = Math.sin(now / 70) * 0.15; ud.flame.scale.set(1 + n, (ud.anim > 0 ? 2.2 : 1) + n, 1 + n); }
+      if (ud.kind === 'hypno') ud.spiral.rotation.z -= dt * (2.5 + ud.anim * 12);
+      if (ud.kind === 'flowerpot') ud.pot.visible = f === 0 && ud.anim === 0;
+      if (ud.kind === 'bucket') ud.tip.rotation.z = ud.anim > 0 ? 2.2 : f > 0 ? 2.2 * Math.min(1, f * 1.5) : 0;
+      if (ud.kind === 'salt') ud.shaker.rotation.z = ud.anim > 0 ? Math.sin(now / 30) * 0.25 : 0;
+      if (ud.kind === 'flypaper') ud.strips.children.forEach((st, k) => { if (st.geometry.type === 'PlaneGeometry') st.rotation.y = k * 0.8 + Math.sin(now / 600 + k) * 0.3; });
       if (ud.kind === 'bait') ud.cheese.scale.setScalar(Math.max(0.05, tr.charges / TRAPS.bait.nibbles));
     }
     // Warning/shockwave rings on the floor (boss stomps, pounce landings).
@@ -734,7 +795,7 @@ export class Scene {
       if (!p) { p = { x: mo.x, y: mo.y, z: mo.z }; this.mouseLerp.set(mo.id, p); }
       p.x += (mo.x - p.x) * k; p.y += (mo.y - p.y) * k; p.z += (mo.z - p.z) * k;
       const d = MICE[mo.type], s = d.size * (mo.scale || 1);
-      const bob = mo.state === 'walk' ? Math.abs(Math.sin(now / 60 + mo.id)) * 0.04 * s : 0;
+      const bob = d.ghost ? 0.25 + Math.sin(now / 300 + mo.id) * 0.12 : mo.state === 'walk' ? Math.abs(Math.sin(now / 60 + mo.id)) * 0.04 * s : 0;   // ghosts float
       const tumble = mo.state === 'air' ? now / 90 : 0;
       M.compose(v.set(p.x, p.y + bob, p.z), q.setFromEuler(e.set(tumble, mo.yaw || 0, 0, 'YXZ')), sc.set(s, s, s));
       set(body, n, 0, 0.42, 0, 0, 0.8, 0.7, 1.15);
@@ -745,11 +806,20 @@ export class Scene {
       set(tail, n, 0, 0.3, -0.75, Math.PI / 2 - 0.3 + Math.sin(now / 150 + mo.id) * 0.2, 1, 1, 1);
       set(eyes, n, 0, 0.56, 0.75, 0, 1, 1, 1);
       col.setHex(d.color).offsetHSL(0, 0, mo.shade || 0);
+      // Status tints, most important first: frozen, burning, glued, wet, oily, dirty, confused.
       if (mo.flash > 0) col.lerp(this._w, 0.7);
+      else if (mo.frozen) col.lerp(TINT.frozen, 0.75);
+      else if (mo.burnT > 0) col.lerp(TINT.burn, 0.35 + Math.sin(now / 50 + mo.id) * 0.15);
       else if (mo.state === 'stuck') col.lerp(TINT.stuck, 0.5);
+      else if (mo.wetT > 0) col.lerp(TINT.wet, 0.35);
+      else if (mo.oilT > 0) col.lerp(TINT.oil, 0.5);
+      else if (mo.dirtyT > 0) col.lerp(TINT.dirty, 0.45);
+      else if (mo.confuseT > 0) col.lerp(TINT.confuse, 0.4 + Math.sin(now / 80) * 0.15);
       else if (mo.slowT > 0) col.lerp(TINT.slow, 0.5);
       else if (mo.stunT > 0) col.lerp(TINT.stun, 0.4);
       body.setColorAt(n, col); head.setColorAt(n, col);
+      if (mo.burnT > 0 && Math.random() < dt * 9) this.spawnParticles(p.x + (Math.random() - 0.5) * s * 0.6, p.y + s * 0.7, p.z + (Math.random() - 0.5) * s * 0.6, Math.random() < 0.5 ? 0xff8a20 : 0xffd040, 1, 1.5, 0.07);
+      else if (mo.wetT > 0 && Math.random() < dt * 2) this.spawnParticles(p.x, p.y + s * 0.5, p.z, 0x8ac8ff, 1, 0.5, 0.04);
       eyes.setColorAt(n, col.setHex(d.boss ? 0xff2a1a : 0x111111));
       n++;
       if (mo.stunT > 0 && ns < MAX_MICE * 3 - 3) {

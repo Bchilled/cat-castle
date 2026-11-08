@@ -1,5 +1,78 @@
 # Changelog
 
+## 0.11.0 — 2026-11-07
+Elements
+- Every attack and trap now carries one of 12 elements: physical, fire, ice, water, wind, earth, electric, psychic, poison, physics, holy, death.
+- Mice have weaknesses and resistances:
+  - plague rats shrug off poison and hate holy and fire
+  - sewer rats resist claws and fry on electricity
+  - fat rats burn well and barely budge
+  - bosses resist psychic and death
+  - birds are blown about by wind
+- Elements leave statuses on mice: wet, burning, chilled, oily, dirty, confused, poisoned.
+- Statuses combo:
+  - wet + electric = Chain Shock (arcs to nearby mice)
+  - oily + fire = Blaze (3x burn, spreads)
+  - wet or three chills + ice = Frozen Solid
+  - wind spreads burning and poison through a pack
+  - dirty + physics = Knockdown
+  - wet + fire = Steam (it fizzles)
+  - death finishes off anything under 20%
+- The first time each combo happens, it explains itself. The pause screen lists them all. Mice glow with their status (blue = wet, orange = burning, ice-white = frozen, brown = dirty, purple = confused).
+- Map hazards join in. Stables mud makes mice dirty. Spills from knocked-over props soak mice (pots and buckets), oil them (jugs) or cover them in dirt (baskets).
+- Cat attacks have elements:
+  - Fred's hairball soaks (water)
+  - Meow Meow's burrs and Mimo's pebbles dirty (earth)
+  - Puddin's pounce and Casper's leap strike are physics
+  - hiss, yawn and roar are psychic
+  - The cat menu shows each move's element.
+- `src/config.js` ELEMENTS, COMBOS, STATUS, ATTACK_EL, MICE res (39-80, 222-227). `src/sim/sim.js` damageMouse, applyStatus, chainShock, combo, status ticks and confusion in stepMouse (570-650 and around). `src/render/scene.js` status tints, combo effects, bolt(). `src/audio/sfx.js` combo sounds.
+
+New mouse
+- Ghost Mouse (from wave 11): floats, takes only 40% from claws and physics, nothing from poison, double-plus from holy and psychic.
+
+13 new traps (22 in all)
+- Floor:
+  - Hot Plate (fire)
+  - Ice Tray (ice)
+  - Oil Slick (oils mice and makes them slip)
+  - Rolling Pin (physics, flattens the tile)
+  - Mouse Skull (death aura that kills the badly hurt)
+- Wall:
+  - Fork Darts (physical volley, bleeds)
+  - Bellows (wind: blows mice back, spreads fire and poison, knocks birds down)
+  - Candle Torch (fire jet)
+  - Hypno Wheel (psychic: mice wander back the way they came)
+- Ceiling:
+  - Flower Pot (earth drop, dirties for knockdowns)
+  - Leaky Bucket (water: soaks for chain shocks and freezes)
+  - Salt Shaker (holy)
+  - Flypaper (catches birds, gums up small mice)
+- Every trap reads its numbers from one place (`trapParams`), so upgrades apply to all of them. `src/sim/sim.js` stepTraps (rewritten). `src/render/models.js` makeTrap (357-475). `src/render/scene.js` animations and effects. `src/audio/sfx.js` 13 new sounds.
+
+4 new items (10 in all)
+- Bell Collar (everything near you panics)
+- Water Pistol (soaking stream)
+- Box of Matches (patch of fire; oily mice blaze)
+- Holy Water (holy splash)
+
+The shop (between runs)
+- Paw prints:
+  - Earned: 1 per 3 waves cleared, win or lose; your rating on a win; +5 for the first win on each map.
+  - Spent on: unlocking traps and items, tier upgrades (tier 2: +25% power; tier 3: 20% faster reset), and then a choice of two specials per trap (44 in all, e.g. Snapper: Bleeding Edge or Chain Snap; Bug Zapper: Arc or Stun Coil). Buy both and swap freely.
+- Yarn (from bosses) buys 10 hats. Each cat wears its own; you see it on the menu and in game.
+- You start with 8 traps and 3 items unlocked; the rest are in the shop.
+- The loadout picker shows trap pictures and only what you own. The end screen shows what you earned, with a Shop button.
+- `?sandbox` in the URL unlocks everything with 999 paw prints to try things out; nothing is saved.
+- `src/meta/profile.js` (new), `src/ui/shop.js` (new), `src/ui/icons.js` (new, shared trap pictures), `src/main.js` (menu, loadout, rewards), `src/ui/hud.js` (end screen), `src/render/models.js` makeHat, `index.html` (shop screen and styles).
+
+Tests: 155 checks, all passing:
+- every element combo and resistance
+- every trap placed and hitting a mouse
+- upgrade numbers
+- shop buying, swapping and rewards
+- old saves loading
+
 ## 0.10.2 — 2026-11-07
 Performance
 - Mouse pathing is about 3x faster: the flow field samples its rules into typed arrays once per cell instead of calling them 8 times per cell. Doors, mazes and route choices re-path mid-wave without a hitch. `src/sim/path.js` computeFlow (lines 43–80).

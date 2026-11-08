@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.10.2';
+export const VERSION = '0.11.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -34,6 +34,48 @@ export const RULES = {
   packCount: 5,
   packSpeed: 1.2,
   packDamageTaken: 0.85,
+};
+
+// Elements. Every attack and trap carries one. Mice can be weak (x>1) or tough (x<1)
+// against each (MICE[..].res), and statuses combine into combos:
+//   wet + electric = chain shock · oiled + fire = blaze · wet or 3 chills + ice = frozen solid
+//   burning/poisoned + wind = it spreads · dirty + physics = knocked down · wet + fire = steam (fizzles)
+export const ELEMENTS = {
+  physical: { name: 'Physical', color: '#d8d0c0', note: 'claws, teeth, tacks, forks' },
+  fire:     { name: 'Fire',     color: '#ff7a2a', note: 'sets mice burning; oiled mice go up in a blaze' },
+  ice:      { name: 'Ice',      color: '#9ad8ff', note: 'chills (slow); three chills, or a wet mouse, freezes solid' },
+  water:    { name: 'Water',    color: '#3a8ad8', note: 'soaks: puts fires out, and wet mice conduct electricity' },
+  wind:     { name: 'Wind',     color: '#c8f0e8', note: 'blows mice back; spreads burning and poison to the pack' },
+  earth:    { name: 'Earth',    color: '#a07a4a', note: 'covers mice in dirt: the next physics hit knocks them flat' },
+  electric: { name: 'Electric', color: '#f0e040', note: 'jolts; arcs between wet mice' },
+  psychic:  { name: 'Psychic',  color: '#c070ff', note: 'confuses: mice wander back the way they came' },
+  poison:   { name: 'Poison',   color: '#8ae040', note: 'damage over time' },
+  physics:  { name: 'Physics',  color: '#e0e0e0', note: 'flings and crushes; knocks dirty mice flat' },
+  holy:     { name: 'Holy',     color: '#fff4b0', note: 'scourge of plague rats and ghosts' },
+  death:    { name: 'Death',    color: '#9a7ab8', note: 'finishes off badly hurt mice outright' },
+};
+export const ELEMENT_ORDER = Object.keys(ELEMENTS);
+// Combos: what they do, shown the first time each one happens.
+export const COMBOS = {
+  chain: 'Chain Shock: wet mice conduct electricity to their friends.',
+  blaze: 'Blaze: oiled mice burn three times as hot, and set the pack alight.',
+  freeze: 'Frozen Solid: wet (or thrice-chilled) mice freeze in place.',
+  spread: 'Spread: wind carries burning and poison through the pack.',
+  knockdown: 'Knockdown: dirty mice hit by physics are knocked flat.',
+  steam: 'Steam: fire on a wet mouse just fizzles. Dry them first.',
+};
+// Status tuning.
+export const STATUS = {
+  burnSecs: 3, burnDps: 6, blazeSecs: 5, blazeDps: 18,
+  wetSecs: 6, oilSecs: 8, dirtySecs: 6, chillSecs: 3, chillSlow: 0.6, freezeSecs: 2.5,
+  confuseSecs: 2.5, toxSecs: 4, toxDps: 4, executeAt: 0.2, chainJumps: 3, chainRange: 2.6, chainMul: 0.6,
+  knockdownSecs: 1.5, spreadRange: 1.6,
+};
+// Which element each cat attack carries.
+export const ATTACK_EL = {
+  pellet: 'physical', hairball: 'water', bite: 'physical', pounce: 'physics', slam: 'physics', whip: 'physical', hiss: 'psychic',
+  whisker: 'physical', purr: null, claw: 'physical', frenzy: 'physical', strike: 'physics', burr: 'earth', yawn: 'psychic',
+  pebble: 'earth', roar: 'psychic', dash: 'physical', sit: 'physics', skyswipe: 'physical',
 };
 
 // Shared cat combat numbers.
@@ -177,8 +219,12 @@ export const ITEMS = {
   flea:    { name: 'Flea Bomb',      cd: 28, radius: 3, secs: 6, dps: 12, desc: 'A cloud of fleas where you aim: steady damage to every mouse inside for 6 s.' },
   tonic:   { name: 'Fish-Oil Tonic', cd: 35, heal: 0.5,                   desc: 'Knock it back: heal half your health now.' },
   squeaky: { name: 'Squeaky Toy',    cd: 30, hp: 150, radius: 6, secs: 15, desc: 'Drop a squeaky toy: mice nearby attack it instead of moving on.' },
+  bell:    { name: 'Bell Collar',    cd: 22, radius: 7, secs: 3, el: 'psychic', desc: 'Ring it: every mouse near you panics and runs away for 3 s.' },
+  pistol:  { name: 'Water Pistol',   cd: 12, range: 6, damage: 6, el: 'water', desc: 'Squirt a stream where you aim: soaks mice (then zap or freeze them).' },
+  matches: { name: 'Box of Matches', cd: 20, radius: 2, secs: 5, dps: 12, el: 'fire', desc: 'Toss a lit match: a patch of fire for 5 s. Oily mice go up in a blaze.' },
+  holy:    { name: 'Holy Water',     cd: 25, radius: 3, damage: 60, el: 'holy', desc: 'A splash of holy water where you aim. Ghosts and plague rats hate it.' },
 };
-export const ITEM_ORDER = ['laser', 'bola', 'catnip', 'flea', 'tonic', 'squeaky'];
+export const ITEM_ORDER = ['laser', 'bola', 'catnip', 'flea', 'tonic', 'squeaky', 'bell', 'pistol', 'matches', 'holy'];
 export const LOADOUT_SIZE = 8;   // traps you bring into a map
 
 // Playable cats. Fred: quick, fragile, ranged, parkour. Puddin: slow tank, melee.
@@ -240,21 +286,23 @@ export const CAT_ORDER = ['fred', 'puddin', 'scary', 'nebbie', 'casper', 'meow',
 // split = what it bursts into when it dies. intro = the wave it first shows up (it arrives alone
 // first so players learn it). Speed tiers: pup/runner fast, mouse normal, tank/fatty slow.
 export const MICE = {
-  pup:     { name: 'Pinkie',      points: 2, hp: 7,    speed: 3.0, size: 0.28, tails: 1, tailChance: 0.5, bite: 2,  gateDmg: 3,  color: 0x948a82, aggro: 0 },
-  mouse:   { name: 'House Mouse', points: 5, hp: 26,   speed: 2.6, size: 0.45, tails: 1, tailChance: 1,   bite: 5,  gateDmg: 10, color: 0x8a8580, aggro: 2.5 },
-  runner:  { name: 'Scamper',     points: 4, hp: 16,   speed: 4.6, size: 0.4,  tails: 1, tailChance: 1,   bite: 4,  gateDmg: 6,  color: 0x7a5a3a, aggro: 0, intro: 3 },
-  splitter:{ name: 'Mama Mouse',  points: 6, hp: 40,   speed: 2.4, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x9a6a8a, aggro: 2.5, split: 'pup', splitN: 2, intro: 4 },
-  tank:    { name: 'Sewer Rat',   points: 12, hp: 100,  speed: 1.8, size: 0.75, tails: 1, tailChance: 1,   bite: 10, gateDmg: 25, color: 0x4f4b48, aggro: 3.5, intro: 5 },
-  lobber:  { name: 'Siege Mouse', points: 10, hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45, aggro: 0, ranged: true },
-  plague:  { name: 'Plague Rat',  points: 10, hp: 45,   speed: 2.2, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 8,  color: 0x6f7a4a, aggro: 0, spit: { range: 7, dmg: 7, every: 2.2, speed: 11 }, intro: 7, ranged: true },
-  fatty:   { name: 'Fat Rat',     points: 25, hp: 260,  speed: 1.3, size: 1.0,  tails: 2, tailChance: 1,   bite: 18, gateDmg: 40, color: 0x5a4a40, aggro: 3, split: 'mouse', splitN: 3, intro: 9 },
+  pup:     { name: 'Pinkie', res: {},      points: 2, hp: 7,    speed: 3.0, size: 0.28, tails: 1, tailChance: 0.5, bite: 2,  gateDmg: 3,  color: 0x948a82, aggro: 0 },
+  mouse:   { name: 'House Mouse', res: {}, points: 5, hp: 26,   speed: 2.6, size: 0.45, tails: 1, tailChance: 1,   bite: 5,  gateDmg: 10, color: 0x8a8580, aggro: 2.5 },
+  runner:  { name: 'Scamper', res: { ice: 1.5, physics: 1.25 },     points: 4, hp: 16,   speed: 4.6, size: 0.4,  tails: 1, tailChance: 1,   bite: 4,  gateDmg: 6,  color: 0x7a5a3a, aggro: 0, intro: 3 },
+  splitter:{ name: 'Mama Mouse', res: { fire: 1.5 },  points: 6, hp: 40,   speed: 2.4, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x9a6a8a, aggro: 2.5, split: 'pup', splitN: 2, intro: 4 },
+  tank:    { name: 'Sewer Rat', res: { physical: 0.75, poison: 0.75, electric: 1.5 },   points: 12, hp: 100,  speed: 1.8, size: 0.75, tails: 1, tailChance: 1,   bite: 10, gateDmg: 25, color: 0x4f4b48, aggro: 3.5, intro: 5 },
+  lobber:  { name: 'Siege Mouse', res: { psychic: 1.5 }, points: 10, hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45, aggro: 0, ranged: true },
+  plague:  { name: 'Plague Rat', res: { poison: 0.25, holy: 2, fire: 1.5 },  points: 10, hp: 45,   speed: 2.2, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 8,  color: 0x6f7a4a, aggro: 0, spit: { range: 7, dmg: 7, every: 2.2, speed: 11 }, intro: 7, ranged: true },
+  fatty:   { name: 'Fat Rat', res: { physics: 0.6, fire: 1.5, poison: 1.25 },     points: 25, hp: 260,  speed: 1.3, size: 1.0,  tails: 2, tailChance: 1,   bite: 18, gateDmg: 40, color: 0x5a4a40, aggro: 3, split: 'mouse', splitN: 3, intro: 9 },
+  // Ghost Mouse: pale and see-through. Shrugs off claws, physics and poison; holy and psychic tear it apart.
+  ghost:   { name: 'Ghost Mouse', res: { physical: 0.4, physics: 0.4, poison: 0, death: 0, holy: 2.5, psychic: 1.5 }, points: 8, hp: 34, speed: 2.9, size: 0.45, tails: 1, tailChance: 1, bite: 5, gateDmg: 6, color: 0xdce6f0, aggro: 2, intro: 11, ghost: true },
   // Birds (flying; ignore the routes). Magpies steal cheese and dropped tails; crows carry
   // mice past your traps and drop them. Kill a crow in the air and its mice fall to their deaths.
-  magpie:  { name: 'Magpie',      points: 10, hp: 30,   speed: 7,   size: 0.6,  tails: 0, tailChance: 0,   bite: 4,  gateDmg: 0,  color: 0x1a1a22, bird: true, intro: 8, reward: 10 },
-  crow:    { name: 'Crow',        points: 15, hp: 45,   speed: 6,   size: 0.7,  tails: 0, tailChance: 0,   bite: 4,  gateDmg: 0,  color: 0x121216, bird: true, intro: 10, reward: 15, carry: 3 },
-  miniboss:{ name: 'Rat Captain', points: 150, hp: 900,  speed: 2.1, size: 2.0,  tails: 6, tailChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true, aggro: 6,
+  magpie:  { name: 'Magpie', res: { wind: 2, electric: 1.5 },      points: 10, hp: 30,   speed: 7,   size: 0.6,  tails: 0, tailChance: 0,   bite: 4,  gateDmg: 0,  color: 0x1a1a22, bird: true, intro: 8, reward: 10 },
+  crow:    { name: 'Crow', res: { wind: 2, electric: 1.5 },        points: 15, hp: 45,   speed: 6,   size: 0.7,  tails: 0, tailChance: 0,   bite: 4,  gateDmg: 0,  color: 0x121216, bird: true, intro: 10, reward: 15, carry: 3 },
+  miniboss:{ name: 'Rat Captain', res: { psychic: 0.5, death: 0.5, poison: 0.75 }, points: 150, hp: 900,  speed: 2.1, size: 2.0,  tails: 6, tailChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true, aggro: 6,
              stomp: { every: 5, radius: 3.5, dmg: 15, stun: 1.0, fling: 7 } },
-  bigboss: { name: 'King Rat',    points: 400, hp: 2600, speed: 1.6, size: 2.8,  tails: 15, tailChance: 1,  bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true, aggro: 7,
+  bigboss: { name: 'King Rat', res: { psychic: 0.3, death: 0.3, poison: 0.5, holy: 1.25 },    points: 400, hp: 2600, speed: 1.6, size: 2.8,  tails: 15, tailChance: 1,  bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true, aggro: 7,
              stomp: { every: 4, radius: 4.5, dmg: 22, stun: 1.4, fling: 9 } },
 };
 
@@ -265,18 +313,80 @@ export const MICE = {
 // Costs are sardines. Selling refunds the full price (barricades: by health left).
 export const TILE = 4;
 export const TRAPS = {
-  barricade: { name: 'Poison Box', desc: "A crate of rat poison. Mice hate it: they only chew through if there's no other way, and the poison eats them while they do.", cost: 20, surface: 'floor', size: [4, 4], hp: 160, height: 1.4, poisonDps: 9 },
-  mousetrap: { name: 'Snapper', desc: "A proper human mousetrap. Snaps everything standing on the tile, then cranks back.",     cost: 30,  surface: 'floor',   size: [4, 4], damage: 70, cooldown: 3, maxHits: 6, pathCost: 0 },   // OMD spike trap
-  flipper:   { name: 'Flinger', desc: "Spring plate. Throws mice the way the arrow points — into walls, the moat, other traps. Splat.", cost: 60,  surface: 'floor',   size: [4, 4], cooldown: 3.5, launchH: 11, launchV: 14, launchDamage: 10, pathCost: 0 },
-  grinder:   { name: 'Cheese Grater', desc: "Spinning grater on a wall. Shreds anything walking within a tile of it.",  cost: 80,  surface: 'wall',    size: [4, 1], dps: 45, reach: 2, pathCost: 0 },
-  zapper:    { name: 'Bug Zapper', desc: "Hangs under roofs, tables and benches. Fries the whole crowd underneath.",    cost: 90,  surface: 'ceiling', size: [4, 4], damage: 35, cooldown: 2, radius: 2.4, pathCost: 0 },
-  gluepad:   { name: 'Glue Trap', desc: "Sticks mice in place. Holds ten, then needs to dry before it works again.",      cost: 30,  surface: 'floor',   size: [4, 4], stickSecs: 2.5, charges: 10, recharge: 6, pathCost: 0 },   // OMD tar
-  tacks:     { name: 'Thumbtacks', desc: "A carpet of tacks. Everyone crossing it bleeds.",    cost: 35,  surface: 'floor',   size: [4, 4], damage: 3, tick: 0.4, pathCost: 0 },                      // OMD briar
-  bait:      { name: 'Cheese Chunk', desc: 'A big lump of cheese. Mice nearby leave their route to nibble it, standing still on whatever traps you put around it.', cost: 25, surface: 'floor', size: [4, 4], lure: 6, nibbles: 30, eatSecs: 2.5, recharge: 12, pathCost: 0 },
-  glove:     { name: 'Boxing Glove', desc: "Spring-loaded wall punch. Knocks small mice across the lane, dazes the big ones.",  cost: 70,  surface: 'wall',    size: [4, 1], cooldown: 3, reach: 4, push: 10, damage: 15, bigStun: 1.2, pathCost: 0 },   // OMD push trap
+  barricade: { el: 'poison', name: 'Poison Box', desc: "A crate of rat poison. Mice hate it: they only chew through if there's no other way, and the poison eats them while they do.", cost: 20, surface: 'floor', size: [4, 4], hp: 160, height: 1.4, poisonDps: 9 },
+  mousetrap: { el: 'physical', name: 'Snapper', desc: "A proper human mousetrap. Snaps everything standing on the tile, then cranks back.",     cost: 30,  surface: 'floor',   size: [4, 4], damage: 70, cooldown: 3, maxHits: 6, pathCost: 0 },   // OMD spike trap
+  flipper:   { el: 'physics', name: 'Flinger', desc: "Spring plate. Throws mice the way the arrow points — into walls, the moat, other traps. Splat.", cost: 60,  surface: 'floor',   size: [4, 4], cooldown: 3.5, launchH: 11, launchV: 14, launchDamage: 10, pathCost: 0 },
+  grinder:   { el: 'physical', name: 'Cheese Grater', desc: "Spinning grater on a wall. Shreds anything walking within a tile of it.",  cost: 80,  surface: 'wall',    size: [4, 1], dps: 45, reach: 2, pathCost: 0 },
+  zapper:    { el: 'electric', name: 'Bug Zapper', desc: "Hangs under roofs, tables and benches. Fries the whole crowd underneath.",    cost: 90,  surface: 'ceiling', size: [4, 4], damage: 35, cooldown: 2, radius: 2.4, pathCost: 0 },
+  gluepad:   { el: 'physical', name: 'Glue Trap', desc: "Sticks mice in place. Holds ten, then needs to dry before it works again.",      cost: 30,  surface: 'floor',   size: [4, 4], stickSecs: 2.5, charges: 10, recharge: 6, pathCost: 0 },   // OMD tar
+  tacks:     { el: 'physical', name: 'Thumbtacks', desc: "A carpet of tacks. Everyone crossing it bleeds.",    cost: 35,  surface: 'floor',   size: [4, 4], damage: 3, tick: 0.4, pathCost: 0 },                      // OMD briar
+  bait:      { el: null, name: 'Cheese Chunk', desc: 'A big lump of cheese. Mice nearby leave their route to nibble it, standing still on whatever traps you put around it.', cost: 25, surface: 'floor', size: [4, 4], lure: 6, nibbles: 30, eatSecs: 2.5, recharge: 12, pathCost: 0 },
+  // ---- new in 0.11: elemental traps ----
+  hotplate:  { el: 'fire', name: 'Hot Plate', desc: 'A stove ring left on. Scorches everything standing on it and sets it burning.', cost: 70, surface: 'floor', size: [4, 4], damage: 14, cooldown: 1.2, pathCost: 0 },
+  icetray:   { el: 'ice', name: 'Ice Tray', desc: 'Freezer-cold tray. Chills mice on it; three chills (or one wet mouse) freezes them solid.', cost: 55, surface: 'floor', size: [4, 4], damage: 8, cooldown: 1.5, pathCost: 0 },
+  oilslick:  { el: null, name: 'Oil Slick', desc: 'A tipped oil can. Mice crossing it get oily (fire makes them blaze) and slip over.', cost: 25, surface: 'floor', size: [4, 4], oilSecs: 8, slip: 0.25, pathCost: 0 },
+  rollingpin:{ el: 'physics', name: 'Rolling Pin', desc: 'A giant rolling pin on rails. Rolls across the tile and flattens everything on it.', cost: 85, surface: 'floor', size: [4, 4], damage: 55, cooldown: 4, pathCost: 0 },
+  skull:     { el: 'death', name: 'Mouse Skull', desc: "A grim little skull. Mice near it wither, and any that are badly hurt just drop dead.", cost: 95, surface: 'floor', size: [4, 4], damage: 4, cooldown: 1, radius: 3, execute: 0.2, pathCost: 0 },
+  forkdarts: { el: 'physical', name: 'Fork Darts', desc: 'Wall launcher that fires a volley of forks across the lane. Every fork draws blood.', cost: 75, surface: 'wall', size: [4, 1], damage: 22, cooldown: 2, reach: 6, maxHits: 5, pathCost: 0 },
+  bellows:   { el: 'wind', name: 'Bellows', desc: "Fireplace bellows. Blasts mice back across the lane, spreads fire and poison through a pack, and knocks birds out of the air.", cost: 60, surface: 'wall', size: [4, 1], damage: 5, cooldown: 3, reach: 5, push: 7, birdDmg: 30, pathCost: 0 },
+  candle:    { el: 'fire', name: 'Candle Torch', desc: 'A fat candle with a bellows behind it. Spits a jet of flame across the lane.', cost: 80, surface: 'wall', size: [4, 1], damage: 22, cooldown: 2.5, reach: 3.5, pathCost: 0 },
+  hypno:     { el: 'psychic', name: 'Hypno Wheel', desc: 'A spinning spiral. Mice that look at it forget where they were going and wander back.', cost: 70, surface: 'wall', size: [4, 1], damage: 2, cooldown: 5, reach: 5, confuse: 2.5, pathCost: 0 },
+  flowerpot: { el: 'earth', name: 'Flower Pot', desc: 'Hangs from a hook. Drops on mice: heavy earth damage, and it covers them in dirt (physics then knocks them flat).', cost: 65, surface: 'ceiling', size: [4, 4], damage: 45, cooldown: 5, radius: 1.8, pathCost: 0 },
+  bucket:    { el: 'water', name: 'Leaky Bucket', desc: 'Tips cold water on everything below. Wet mice conduct electricity and freeze in a blink.', cost: 50, surface: 'ceiling', size: [4, 4], damage: 4, cooldown: 3, radius: 2.2, pathCost: 0 },
+  salt:      { el: 'holy', name: 'Salt Shaker', desc: 'Blessed salt. A steady sprinkle that burns plague rats and ghosts.', cost: 75, surface: 'ceiling', size: [4, 4], damage: 7, cooldown: 1, radius: 2.2, pathCost: 0 },
+  flypaper:  { el: 'physical', name: 'Flypaper', desc: 'Sticky strips hanging from the roof. Catches birds that swoop through, and gums up mice running under.', cost: 40, surface: 'ceiling', size: [4, 4], radius: 2.5, hold: 4, birdDps: 12, stickSecs: 1, charges: 6, recharge: 8, pathCost: 0 },
+  glove:     { el: 'physics', name: 'Boxing Glove', desc: "Spring-loaded wall punch. Knocks small mice across the lane, dazes the big ones.",  cost: 70,  surface: 'wall',    size: [4, 1], cooldown: 3, reach: 4, push: 10, damage: 15, bigStun: 1.2, pathCost: 0 },   // OMD push trap
 };
 // Trap bar order = keys 1..8.
-export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove', 'bait'];
+export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove', 'bait',
+  'hotplate', 'icetray', 'oilslick', 'rollingpin', 'skull', 'forkdarts', 'bellows', 'candle', 'hypno', 'flowerpot', 'bucket', 'salt', 'flypaper'];
+
+// Trap upgrades, bought in the shop with paw prints (kept between runs).
+// Tier 2: more power (damage/effect x1.25). Tier 3: resets 20% faster. Then pick one of two
+// specials (buy one, the other costs the same; once you own both you can swap freely).
+// A special changes numbers (mul / set) and/or switches on a behaviour flag the sim checks.
+export const UPGRADE = { tier2: 6, tier3: 10, special: 15, unlock: 8, power: 1.25, speed: 0.8 };
+export const POWER_KEYS = ['damage', 'dps', 'launchDamage', 'poisonDps', 'birdDmg', 'hp'];   // what tier 2 boosts
+export const TIME_KEYS = ['cooldown', 'recharge'];                                           // what tier 3 shortens
+export const SPECIALS = {
+  barricade:  { a: { name: 'Fumes', desc: 'Poisons mice walking past within a tile.', set: { fumes: true } }, b: { name: 'Steel Box', desc: 'Double health; mice chew half as fast.', mul: { hp: 2 }, set: { tough: true } } },
+  mousetrap:  { a: { name: 'Bleeding Edge', desc: 'Victims bleed (3 stacks).', set: { bleed: 3 } }, b: { name: 'Chain Snap', desc: 'Also snaps the two nearest mice off the tile for half.', set: { chain: 2 } } },
+  flipper:    { a: { name: 'Big Spring', desc: 'Throws 40% harder and lifts big mice too.', mul: { launchH: 1.4, launchV: 1.3 }, set: { big: true } }, b: { name: 'Hair Spring', desc: 'Resets in about a second.', mul: { cooldown: 0.35 } } },
+  grinder:    { a: { name: 'Fine Grate', desc: 'Shredded mice bleed.', set: { bleed: 1 } }, b: { name: 'Long Reach', desc: 'Reaches two tiles out.', mul: { reach: 2 } } },
+  zapper:     { a: { name: 'Arc', desc: 'Every jolt arcs to three more mice, wet or not.', set: { arc: true } }, b: { name: 'Stun Coil', desc: 'Stuns everything it hits for a second.', set: { stun: 1 } } },
+  gluepad:    { a: { name: 'Super Glue', desc: 'Holds twice as long, bosses too.', mul: { stickSecs: 2 } }, b: { name: 'Sticky Feet', desc: 'Mice that pull free stay slow for 4 s.', set: { sticky: 4 } } },
+  tacks:      { a: { name: 'Rusty Tacks', desc: 'Poisons as well as bleeds.', set: { rusty: true } }, b: { name: 'Caltrops', desc: 'Mice crossing are slowed.', set: { caltrops: true } } },
+  glove:      { a: { name: 'Haymaker', desc: 'Double damage, and knocks big mice flying too.', mul: { damage: 2 }, set: { haymaker: true } }, b: { name: 'One-Two', desc: 'Resets twice as fast.', mul: { cooldown: 0.5 } } },
+  bait:       { a: { name: 'Stinky Cheese', desc: 'Lures from 60% further away.', mul: { lure: 1.6 } }, b: { name: 'Poisoned Cheese', desc: 'Nibblers are poisoned.', set: { poisoned: true } } },
+  hotplate:   { a: { name: 'Searing', desc: 'Burns last twice as long and burn hotter.', set: { searing: true } }, b: { name: 'Wide Burner', desc: 'Also scorches mice a tile around it.', set: { wide: 1 } } },
+  icetray:    { a: { name: 'Deep Freeze', desc: 'Each pulse chills twice: freezes in two pulses.', set: { deep: true } }, b: { name: 'Slush', desc: 'Leaves mice wet, so the next pulse (or a zapper) freezes or fries them.', set: { slush: true } } },
+  oilslick:   { a: { name: 'Lamp Oil', desc: 'Oil lasts twice as long.', mul: { oilSecs: 2 } }, b: { name: 'Banana Peels', desc: 'Mice slip three times as often.', mul: { slip: 3 } } },
+  rollingpin: { a: { name: 'Marble Pin', desc: '+50% damage, and it knocks survivors flat.', mul: { damage: 1.5 }, set: { flatten: true } }, b: { name: 'Quick Roll', desc: 'Resets twice as fast.', mul: { cooldown: 0.5 } } },
+  skull:      { a: { name: 'Reaper', desc: 'Kills anything under 35% outright.', set: { execute: 0.35 } }, b: { name: 'Wither', desc: 'Double damage, and mice near it are slowed.', mul: { damage: 2 }, set: { wither: true } } },
+  forkdarts:  { a: { name: 'Barbed Forks', desc: 'Each fork leaves 2 bleed stacks.', set: { bleed: 2 } }, b: { name: 'Cutlery Drawer', desc: 'Hits up to 10 mice per volley.', mul: { maxHits: 2 } } },
+  bellows:    { a: { name: 'Gale', desc: 'Blows 50% further and hammers birds.', mul: { push: 1.5, birdDmg: 2 } }, b: { name: 'Hot Air', desc: 'Blows embers: sets mice burning (and oily ones blaze).', set: { hot: true } } },
+  candle:     { a: { name: 'Wide Wick', desc: 'Flame reaches 5 units.', mul: { reach: 1.45 } }, b: { name: 'Blue Flame', desc: '+60% damage.', mul: { damage: 1.6 } } },
+  hypno:      { a: { name: 'Deep Trance', desc: 'Confusion lasts twice as long.', mul: { confuse: 2 } }, b: { name: 'Mass Hypnosis', desc: 'Reaches 8 units and spins up 40% faster.', mul: { reach: 1.6, cooldown: 0.6 } } },
+  flowerpot:  { a: { name: 'Cast-Iron Pot', desc: '+60% damage, and the impact knocks them flat.', mul: { damage: 1.6 }, set: { heavy: true } }, b: { name: 'Cactus', desc: 'Leaves a patch of prickly soil: dirty and poisoned.', set: { cactus: true } } },
+  bucket:     { a: { name: 'Ice Water', desc: 'Freezing cold: soaked mice freeze on the spot.', set: { icy: true } }, b: { name: 'Bath Night', desc: 'Bigger splash, tips twice as often.', mul: { radius: 1.5, cooldown: 0.5 } } },
+  salt:       { a: { name: 'Rock Salt', desc: '+60% damage.', mul: { damage: 1.6 } }, b: { name: 'Blessed', desc: 'Cats underneath slowly heal.', set: { blessed: true } } },
+  flypaper:   { a: { name: 'Extra Sticky', desc: 'Holds birds twice as long and catches bigger mice.', mul: { hold: 2, stickSecs: 2 } }, b: { name: 'Wide Strips', desc: '50% wider and twice the charges.', mul: { radius: 1.5, charges: 2 } } },
+};
+// A trap's working numbers for a given upgrade state ({ tier, special }): base numbers,
+// tier 2 power, tier 3 speed, then the chosen special. The sim reads these, never TRAPS directly,
+// so every trap and every upgrade goes through one place.
+export function trapParams(kind, up) {
+  const def = TRAPS[kind], p = { ...def }, tier = (up && up.tier) || 1;
+  if (tier >= 2) for (const k of POWER_KEYS) if (typeof p[k] === 'number') p[k] *= UPGRADE.power;
+  if (tier >= 3) for (const k of TIME_KEYS) if (typeof p[k] === 'number') p[k] *= UPGRADE.speed;
+  const sp = up && up.special && SPECIALS[kind] && SPECIALS[kind][up.special];
+  if (sp) { for (const [k, v] of Object.entries(sp.mul || {})) if (typeof p[k] === 'number') p[k] *= v; Object.assign(p, sp.set || {}); }
+  if (p.maxHits) p.maxHits = Math.round(p.maxHits); if (p.charges) p.charges = Math.round(p.charges);
+  return p;
+}
+// Starting traps (everything else is unlocked in the shop).
+export const STARTER_TRAPS = ['barricade', 'mousetrap', 'flipper', 'gluepad', 'tacks', 'bait', 'grinder', 'zapper'];
+export const STARTER_ITEMS = ['laser', 'bola', 'tonic'];
 
 export const GATE = { hp: 60 };   // falls in a few bites, stays down once broken
 

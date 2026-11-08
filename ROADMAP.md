@@ -24,7 +24,7 @@ In from v0.10.0: all six maps, mazing with Poison Boxes, knock-over props, food 
   6. The Kitchen: under the counters, behind the ovens (fire), the pantry. The last stand.
 
 ## B. Many more traps (each with its own size, surface and ability)
-Ideas still to pick from, cat-and-mouse versions of Orcs Must Die traps:
+In from v0.11.0: Hot Plate, Ice Tray, Oil Slick, Rolling Pin, Mouse Skull, Fork Darts, Bellows, Candle Torch, Hypno Wheel, Flower Pot, Leaky Bucket, Salt Shaker, Flypaper (22 traps in all). Ideas still to pick from:
 - **Floor:**
   - Hot plate (fire)
   - Ice tray (freeze)
@@ -49,12 +49,14 @@ Ideas still to pick from, cat-and-mouse versions of Orcs Must Die traps:
 - **Placed on furniture:** knife block, spice jar bombs, kettle steam.
 
 ## C. Out-of-game progression (like Orcs Must Die 2's spellbook)
+In from v0.11.0: the shop (unlocks, tier 2 and 3, a choice of two specials per trap, hats for yarn).
 - Currencies kept between runs: paw prints (rating) and yarn (from bosses).
 - Shop: buy and unlock traps, cats, items and hats.
 - Upgrades: each trap has upgrade tiers, then a choice between 2 special abilities. For example, a Snapper that either chains to the next mouse or leaves them bleeding.
 - Loadout: pick which traps and items to bring before a map.
 
 ## D. Elements
+In from v0.11.0: all twelve, with resistances and the combos below.
 Physical, fire, ice, water, wind, earth, electric, psychic, poison, physics, holy and death.
 - Traps and attacks carry an element.
 - Mice have weaknesses and resistances. For example, plague rats resist poison and are weak to holy and fire; ghost mice are weak to holy.

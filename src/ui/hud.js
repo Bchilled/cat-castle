@@ -6,33 +6,12 @@ import * as THREE from 'three';
 import { TRAPS, TRAP_ORDER, RULES, TRINKETS, CAT, MICE, CATS, ITEMS } from '../config.js';
 import { W, H, CELL, T, HOLE, SPAWNS, GATE } from '../sim/map.js';
 import { previewWave } from '../sim/waves.js';
-import { makeTrap } from '../render/models.js';
+import { trapIcons } from './icons.js';
+import { BARKS } from '../sim/sim.js';
 
-import { CAT_INFO } from './catinfo.js';
+import { CAT_INFO, elTag } from './catinfo.js';
 import { portraitURL } from './portraits.js';
 const SURFACE = { floor: 'Floor', wall: 'Wall', ceiling: 'Ceiling (under roofs, tables, benches)' };
-
-// Little pictures of each trap for the trap bar, rendered once from the real 3D models.
-function trapIcons() {
-  const icons = {};
-  try {
-    const cv = document.createElement('canvas'); cv.width = 96; cv.height = 72;
-    const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, preserveDrawingBuffer: true });
-    const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xfff0e0, 0x3a2a1c, 2.2));
-    const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(2, 4, 3); sc.add(dl);
-    const cam = new THREE.PerspectiveCamera(32, 96 / 72, 0.1, 50);
-    for (const k of TRAP_ORDER) {
-      const def = TRAPS[k], m = makeTrap(k);
-      if (m.userData.lamp) m.userData.lamp.visible = false;
-      if (def.surface === 'ceiling') { m.position.y = 1.4; cam.position.set(2.6, 0.2, 3.4); cam.lookAt(0, 0.6, 0); }
-      else if (def.surface === 'wall') { cam.position.set(2.6, 2.4, 3.6); cam.lookAt(0, 0.45, 0.4); }
-      else { cam.position.set(2.4, 3.0, 3.4); cam.lookAt(0, k === 'barricade' ? 0.6 : 0.1, 0); }
-      sc.add(m); r.render(sc, cam); icons[k] = cv.toDataURL(); sc.remove(m);
-    }
-    r.dispose();
-  } catch { /* no WebGL for icons: names only */ }
-  return icons;
-}
 
 const $ = (id) => document.getElementById(id);
 
@@ -52,7 +31,7 @@ const TYPE_RGB = { [T.FLOOR]: '#5a544c', [T.ROAD]: '#5a4630', [T.WATER]: '#2f6f9
 export class Hud {
   constructor(sim, loadout = TRAP_ORDER.slice(0, 8)) {
     this.sim = sim; this.msgT = 0; this.subT = 0;
-    const icons = trapIcons();
+    const icons = trapIcons(loadout);
     $('trapbar').innerHTML = loadout.map((k, i) =>
       `<div class="slot" data-k="${k}"><span class="key">${i + 1}</span>${icons[k] ? `<img src="${icons[k]}" alt="">` : ''}<span class="nm">${TRAPS[k].name}</span><span class="cost">${TRAPS[k].cost}</span></div>`).join('');
     this.preview = null; this.previewWave = -1; this.lastTk = '';
@@ -125,7 +104,7 @@ export class Hud {
     // Trap info card while a trap is in hand.
     if (sel) {
       const d = TRAPS[sel];
-      $('trapinfo').innerHTML = `<b>${d.name}</b> <span class="cost">${d.cost}</span><small>${SURFACE[d.surface]} · ${d.size[0] / 4}×${Math.max(1, d.size[1] / 4)} tile${d.surface === 'wall' ? ' of wall' : ''}</small><p>${d.desc}</p>`;
+      $('trapinfo').innerHTML = `<b>${d.name}</b> ${elTag(d.el)} <span class="cost">${d.cost}</span><small>${SURFACE[d.surface]} · ${d.size[0] / 4}×${Math.max(1, d.size[1] / 4)} tile${d.surface === 'wall' ? ' of wall' : ''}</small><p>${d.desc}</p>`;
     }
     $('trapinfo').style.display = sel ? '' : 'none';
     // Trap bar.
@@ -187,18 +166,21 @@ export class Hud {
   bark(who, text, kind) { $('sub').innerHTML = `<img class="face" src="${portraitURL(kind)}" alt=""><b style="color:${(CATS[kind] || CATS.fred).collar}">${who}:</b> ${text}`; $('sub').classList.add('show'); this.subT = 3.2; }
   flashHurt() { const v = $('hurt'); v.classList.remove('go'); void v.offsetWidth; v.classList.add('go'); }
 
-  showEnd(won, rating, sim, profile) {
+  // End of a map: the result, your cat's last word, what you earned (paw prints, yarn) and the way to the shop.
+  showEnd(won, rating, sim, profile, reward, kind = 'fred') {
     const el = $('end'); el.classList.add('show');
-    const quip = won ? ['Fred: Told you. Easy.', "Puddin: Wake me for the next castle."] : ["Fred: That was the toy block's fault. Not mine.", "Puddin: I blame Fred."];
-    let html = `<h1>${won ? 'The hall holds' : 'They got through'}</h1><p class="quip">${quip[Math.floor(Math.random() * 2)]}</p>`;
-    html += `<p>${won ? `All ${RULES.winWave} waves cleared` : `Fell on wave ${sim.wave}`} · ${sim.stats.kills} mice killed · ${sim.yarn} yarn</p>`;
+    const lines = (BARKS[kind] || BARKS.fred)[won ? 'clear' : 'death'];
+    let html = `<h1>${won ? 'The hall holds' : 'They got through'}</h1><p class="quip">${CATS[kind] ? CATS[kind].name : 'Fred'}: ${lines[Math.floor(Math.random() * lines.length)]}</p>`;
+    html += `<p>${won ? `All ${RULES.winWave} waves cleared` : `Fell on wave ${sim.wave}`} · ${sim.stats.kills} mice killed · ${sim.stats.combos || 0} combos</p>`;
     if (won && rating) {
       html += `<div class="paws">${Array.from({ length: 5 }, (_, i) => PAW(i < rating.base)).join('')}</div>`;
       html += '<ul class="bonus">' + rating.bonus.map(b => `<li class="${b.got ? 'got' : ''}">${PAW(b.got)} ${b.name}</li>`).join('') + '</ul>';
-      html += `<p>+${rating.total} paw prints</p>`;
     }
-    html += `<p class="dim">Saved: ${profile.paws} paw prints · ${profile.yarn} yarn (the unlock shop and yarn crafting come next)</p>`;
-    html += `<button onclick="location.reload()">Back to menu</button>`;
+    if (reward) {
+      html += '<ul class="bonus">' + reward.lines.map(([t, n]) => `<li class="got">+${n} paw prints · ${t}</li>`).join('') + (reward.yarn ? `<li class="got">+${reward.yarn} yarn · bosses</li>` : '') + '</ul>';
+    }
+    html += `<p class="dim">You have ${profile.paws} paw prints · ${profile.yarn} yarn${profile.sandbox ? ' (sandbox: not saved)' : ''}. Spend them in the shop.</p>`;
+    html += `<button onclick="window.__relaunch('shop')">Shop</button><button onclick="window.__relaunch('')">Back to menu</button>`;
     el.innerHTML = html;
   }
 }

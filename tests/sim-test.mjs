@@ -396,4 +396,105 @@ for (const id of MAP_ORDER) {
   const sm = eve.find(e => e.t === 'smash');
   ok(sm && sm.hits >= 2, `it smashes onto the mice below (${sm ? sm.hits : 0} hit)`);
 }
+// 31. Elements: resistances, statuses, combos.
+{
+  const mk = (type = 'mouse', x = 20, z = 40) => { const m = el.spawnAt(type, x, z, 200); m.state = 'stuck'; m.stuckT = 99; return m; };
+  const el = new Sim({ seed: 201 }); el.addPlayer('p1'); el.step();
+  const pl = mk('plague'); el.damageMouse(pl, 40, 'trap', false, 'poison');
+  ok(Math.abs(pl.maxHp - pl.hp - 10) < 0.01, `plague rats shrug off poison (40 -> ${(pl.maxHp - pl.hp).toFixed(0)})`);
+  const pl2 = mk('plague'); el.damageMouse(pl2, 40, 'trap', false, 'holy');
+  ok(Math.abs(pl2.maxHp - pl2.hp - 80) < 0.01, 'holy hits plague rats double');
+  // wet + electric = chain shock
+  const a = mk('mouse', 30, 40), b = mk('mouse', 31, 40), c = mk('mouse', 31.5, 40.5); el.buildMouseGrid();
+  for (const m of [a, b, c]) el.damageMouse(m, 0.01, 'trap', false, 'water');
+  ok(a.wetT > 0, 'water soaks a mouse');
+  el.events.length = 0; el.damageMouse(a, 20, 'trap', false, 'electric');
+  ok(el.events.some(e => e.t === 'combo' && e.kind === 'chain') && b.hp < 200 && c.hp < 200, 'wet + electric chains to nearby mice');
+  // oil + fire = blaze
+  const o = mk('mouse', 40, 40); o.oilT = 5; el.events.length = 0; el.damageMouse(o, 5, 'trap', false, 'fire');
+  ok(el.events.some(e => e.kind === 'blaze') && o.burnDps >= 18, 'oiled + fire = blaze');
+  const hpb = o.hp; run(el, 1); ok(hpb - o.hp > 15, `blazing mouse burns fast (${(hpb - o.hp).toFixed(0)} in 1 s)`);
+  // wet + ice = frozen solid
+  const f = mk('mouse', 50, 40); f.wetT = 3; el.damageMouse(f, 5, 'trap', false, 'ice');
+  ok(f.frozen && f.stunT > 2, 'wet + ice = frozen solid');
+  const f2 = mk('mouse', 52, 40); for (let k = 0; k < 3; k++) el.damageMouse(f2, 1, 'trap', false, 'ice');
+  ok(f2.frozen, 'three chills freeze too');
+  // wet + fire = steam (no burning)
+  const st = mk('mouse', 54, 40); st.wetT = 3; el.damageMouse(st, 10, 'trap', false, 'fire');
+  ok(!(st.burnT > 0) && !(st.wetT > 0), 'fire on a wet mouse just steams');
+  // dirty + physics = knockdown
+  const dk = mk('mouse', 56, 40); el.damageMouse(dk, 1, 'cat', false, 'earth'); el.damageMouse(dk, 1, 'trap', false, 'physics');
+  ok(dk.stunT >= 1.4, 'dirty + physics = knocked flat');
+  // wind spreads burning
+  const w1 = mk('mouse', 60, 40), w2 = mk('mouse', 60.8, 40); el.buildMouseGrid(); w1.burnT = 3; w1.burnDps = 6;
+  el.damageMouse(w1, 1, 'trap', false, 'wind'); ok(w2.burnT > 0, 'wind spreads fire through the pack');
+  // death executes the badly hurt
+  const dd = mk('mouse', 62, 40); dd.hp = 35; el.damageMouse(dd, 1, 'trap', false, 'death');
+  ok(dd.dead, 'death finishes off a mouse under 20%');
+  const ghost = mk('ghost', 64, 40); el.damageMouse(ghost, 50, 'cat', false, 'physical');
+  ok(Math.abs(ghost.maxHp - ghost.hp - 20) < 0.01, 'ghosts shrug off claws');
+  // psychic confuses: the mouse walks back the way it came
+  const cs = new Sim({ seed: 202 }); cs.addPlayer('p1'); cs.gate.up = false; cs.flowDirty = true; cs.step();
+  const cm = cs.spawnAt('mouse', 48, 50, 100); cs.step(); const i0 = cs.flow[cellOf(cm.x, cm.z)];
+  cs.damageMouse(cm, 1, 'cat', false, 'psychic'); run(cs, 1.5);
+  ok(cs.flow[cellOf(cm.x, cm.z)] > i0, `a confused mouse wanders away from the hole (${i0.toFixed(0)} -> ${cs.flow[cellOf(cm.x, cm.z)].toFixed(0)})`);
+}
+// 32. Every trap works: placed somewhere legal, a mouse put in its reach gets hurt or affected.
+{
+  const { TRAP_ORDER, trapParams } = await import('../src/config.js');
+  const { DIRS4 } = await import('../src/sim/map.js');
+  for (const kind of TRAP_ORDER) {
+    const t = new Sim({ seed: 300 }); t.addPlayer('p1'); t.sardines = 1e6; t.gate.up = false; t.flowDirty = true; t.step();
+    const def = TRAPS[kind]; let spot = null;
+    for (let z = 20; z < 200 && !spot; z += 2) for (let x = 4; x < 188 && !spot; x += 2) for (const wd of def.surface === 'wall' ? [0, 1, 2, 3] : [-1]) {
+      if (t.canPlace(kind, x, z, 0, wd) !== true) continue;
+      // Need floor in reach for the mouse to stand on.
+      const cells = t.footprint(kind, x, z, 0, wd), xs = cells.map(i => i % W), zs = cells.map(i => (i / W) | 0);
+      let cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2 * CELL, cz = (Math.min(...zs) + Math.max(...zs) + 1) / 2 * CELL;
+      if (wd >= 0) { cx -= DIRS4[wd][0] * 1.4; cz -= DIRS4[wd][1] * 1.4; }
+      const ci = cellOf(cx, cz); if (!(t.flow[ci] < Infinity) || t.map.solid[ci] > 0) continue;
+      if (kind === 'bait') { cx += 2.5; }
+      spot = { x, z, wd, cx, cz };
+    }
+    if (!spot) { ok(false, `${kind}: found a place for it`); continue; }
+    t.command({ type: 'place', id: 'p1', trap: kind, ax: spot.x, az: spot.z, rot: 0, wallDir: spot.wd });
+    const tr = [...t.traps.values()][0];
+    if (kind === 'barricade') { ok(tr && tr.hp === trapParams('barricade').hp, 'barricade placed'); continue; }
+    const m = t.spawnAt('mouse', spot.cx, spot.cz, 100);
+    const ev = run(t, 4, () => { if (kind !== 'bait' && !m.dead && m.state !== 'air') { m.x = spot.cx; m.z = spot.cz; } });
+    const hit = m.dead || m.hp < m.maxHp || m.oilT > 0 || ev.some(e => e.t === 'glue') || m.confuseT > 0 || m.wetT > 0 || (m.eatT > 0) || m.state === 'air';
+    ok(tr && hit, `${kind} (${def.surface}) affects a mouse in reach (hp ${Math.max(0, m.hp).toFixed(0)}/${m.maxHp}${m.oilT > 0 ? ', oily' : ''}${m.wetT > 0 ? ', wet' : ''}${m.confuseT > 0 ? ', confused' : ''}${m.eatT > 0 ? ', eating' : ''})`);
+  }
+  // Upgrades change numbers: tier 2 power, tier 3 speed, specials.
+  const base = trapParams('mousetrap'), t3 = trapParams('mousetrap', { tier: 3, special: 'a' });
+  ok(t3.damage > base.damage && t3.cooldown < base.cooldown && t3.bleed === 3, 'upgrades: tier 2 hits harder, tier 3 resets faster, special switches on');
+}
+// 33. Shop and profile: unlocks, tiers, specials, hats, rewards, old saves.
+{
+  const P = await import('../src/meta/profile.js');
+  const pr = P.freshProfile();
+  ok(P.hasTrap(pr, 'mousetrap') && !P.hasTrap(pr, 'skull'), 'starter traps unlocked, others locked');
+  ok(!P.buy(pr, { type: 'trap', kind: 'skull' }).ok, "can't unlock without paw prints");
+  pr.paws = 100;
+  ok(P.buy(pr, { type: 'trap', kind: 'skull' }).ok && P.hasTrap(pr, 'skull') && pr.paws === 100 - P.UNLOCK.traps.skull, 'unlocking a trap spends paw prints');
+  ok(!P.buy(pr, { type: 'special', kind: 'mousetrap', which: 'a' }).ok, 'specials need tier 3');
+  P.buy(pr, { type: 'tier', kind: 'mousetrap' }); P.buy(pr, { type: 'tier', kind: 'mousetrap' });
+  ok(P.trapState(pr, 'mousetrap').tier === 3 && !P.price(pr, { type: 'tier', kind: 'mousetrap' }), 'two tier upgrades, then maxed');
+  const before = pr.paws; P.buy(pr, { type: 'special', kind: 'mousetrap', which: 'a' }); P.buy(pr, { type: 'special', kind: 'mousetrap', which: 'b' });
+  const mid = pr.paws; P.buy(pr, { type: 'special', kind: 'mousetrap', which: 'a' });
+  ok(before - mid === 30 && pr.paws === mid && P.trapState(pr, 'mousetrap').special === 'a', 'both specials bought once, swapping back is free');
+  ok(P.upgradesFor(pr).mousetrap.tier === 3 && P.upgradesFor(pr).mousetrap.special === 'a', 'upgrades handed to the game');
+  pr.yarn = 3; ok(P.buy(pr, { type: 'hat', kind: 'tophat' }).ok && pr.yarn === 0, 'hats cost yarn');
+  P.buy(pr, { type: 'wear', kind: 'tophat', cat: 'fred' }); ok(pr.worn.fred === 'tophat', 'wear a hat');
+  const lose = P.runReward(P.freshProfile(), { won: false, waves: 10, map: 'entrance' });
+  ok(lose.paws === 3, `a loss at wave 11 still pays (${lose.paws})`);
+  const win = P.runReward(P.freshProfile(), { won: true, waves: 24, rating: { total: 6 }, yarn: 8, map: 'market' });
+  ok(win.paws === 8 + 6 + P.FIRST_WIN_BONUS && win.yarn === 8, `a first win pays waves + rating + bonus (${win.paws})`);
+  const old = P.normalise({ paws: 4, yarn: 1 }); ok(old.paws === 4 && old.traps && Array.isArray(old.hats), 'old saves load');
+  // Upgrades reach the traps in the game.
+  const g = new Sim({ seed: 400 }); g.addPlayer('p1', 'fred', { upgrades: P.upgradesFor(pr) }); g.sardines = 1e5; g.step();
+  g.placeTrap(g.cats.get('p1'), 'mousetrap', 80, 90, 0, -1);
+  const tr = [...g.traps.values()][0];
+  ok(tr && tr.p.bleed === 3 && tr.p.damage > TRAPS.mousetrap.damage, 'placed traps carry your upgrades');
+}
 process.exit(fails ? 1 : 0);

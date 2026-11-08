@@ -197,8 +197,28 @@ export function makeMimo() {
 
 // Every cat wears a collar in its own colour (contrasting its fur), with a little tag.
 // The same colour marks the cat on the radar.
-export function makeCat(kind) {
+// Hats (bought with yarn in the shop). Built in head units: sits between the ears.
+export function makeHat(kind) {
+  const g = new THREE.Group();
+  const P = (geo, c, x, y, z, sx = 1, sy = 1, sz = 1, line = true) => { const m = part(geo, c, x, y, z, sx, sy, sz, line); g.add(m); return m; };
+  switch (kind) {
+    case 'paper': for (let k = 0; k < 5; k++) { const pt = P(new THREE.ConeGeometry(0.06, 0.16, 3), 0xf0d060, Math.cos(k * 1.256) * 0.13, 0.1, Math.sin(k * 1.256) * 0.13, 1, 1, 1, false); } P(cyl(0.15, 0.15, 0.08, 12), 0xf0d060, 0, 0.02, 0, 1, 1, 1, false); break;
+    case 'party': P(new THREE.ConeGeometry(0.13, 0.38, 12), 0xe0407a, 0, 0.19, 0); P(new THREE.SphereGeometry(0.05, 6, 5), 0xfff060, 0, 0.4, 0, 1, 1, 1, false); break;
+    case 'beanie': P(new THREE.SphereGeometry(0.17, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0x3a7ad8, 0, 0, 0); P(cyl(0.015, 0.015, 0.12, 4), 0x333333, 0, 0.22, 0, 1, 1, 1, false);
+      { const pr = P(BOX, 0xe0402a, 0, 0.28, 0, 0.36, 0.02, 0.07, false); pr.userData.spin = true; } break;
+    case 'chef': P(cyl(0.15, 0.14, 0.16, 12), 0xf4f4f0, 0, 0.06, 0); P(new THREE.SphereGeometry(0.2, 10, 8), 0xf4f4f0, 0, 0.22, 0, 1, 0.7, 1); break;
+    case 'tophat': P(cyl(0.24, 0.24, 0.025, 14), 0x1a1a1a, 0, 0, 0); P(cyl(0.14, 0.15, 0.3, 14), 0x1a1a1a, 0, 0.15, 0); P(cyl(0.152, 0.152, 0.05, 14), 0xa02a2a, 0, 0.05, 0, 1, 1, 1, false); break;
+    case 'pirate': P(BOX, 0x1a1a1a, 0, 0.08, 0, 0.5, 0.16, 0.22); P(new THREE.SphereGeometry(0.035, 6, 5), 0xf0f0f0, 0, 0.1, 0.12, 1, 1, 1, false); break;
+    case 'wizard': P(new THREE.ConeGeometry(0.17, 0.5, 12), 0x3a2a8a, 0, 0.25, 0); P(cyl(0.27, 0.27, 0.025, 14), 0x3a2a8a, 0, 0, 0); for (let k = 0; k < 4; k++) P(new THREE.OctahedronGeometry(0.03, 0), 0xffe060, Math.cos(k * 1.6) * 0.1, 0.12 + k * 0.08, Math.sin(k * 1.6) * 0.1 + 0.03, 1, 1, 1, false); break;
+    case 'viking': P(new THREE.SphereGeometry(0.18, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0x8a8a92, 0, -0.02, 0); for (const x of [-1, 1]) { const hn = P(new THREE.ConeGeometry(0.045, 0.25, 6), 0xf0e8d0, x * 0.2, 0.1, 0); hn.rotation.z = -x * 0.9; } break;
+    case 'flower': for (let k = 0; k < 7; k++) P(new THREE.SphereGeometry(0.05, 6, 5), [0xff6a8a, 0xffe060, 0xffffff, 0xa070ff][k % 4], Math.cos(k * 0.9) * 0.17, 0.02, Math.sin(k * 0.9) * 0.17, 1, 1, 1, false); P(new THREE.TorusGeometry(0.17, 0.02, 4, 16), 0x4a8a3a, 0, 0, 0, 1, 1, 1, false).rotation.x = Math.PI / 2; break;
+    case 'crown': P(cyl(0.16, 0.15, 0.12, 12), 0xe8b830, 0, 0.05, 0); for (let k = 0; k < 6; k++) P(new THREE.ConeGeometry(0.04, 0.1, 4), 0xe8b830, Math.cos(k * 1.047) * 0.14, 0.16, Math.sin(k * 1.047) * 0.14, 1, 1, 1, false); P(new THREE.OctahedronGeometry(0.035, 0), 0xe02a3a, 0, 0.07, 0.16, 1, 1, 1, false); break;
+  }
+  return g;
+}
+export function makeCat(kind, hat = null) {
   const g = ({ puddin: makePuddin, scary: makeScary, nebbie: makeNebbie, casper: makeCasper, meow: makeMeow, mimo: makeMimo }[kind] || makeFred)();
+  if (hat && g.userData.head) { const sc = g.userData.scale || 1, h = makeHat(hat); h.position.set(0, 0.27 * sc, -0.02 * sc); h.scale.setScalar(sc); g.userData.head.add(h); g.userData.hat = h; }
   const def = CATS[kind] || CATS.fred, s = g.userData.scale || 1, b = g.userData.body;
   if (b && def.collar) {
     const c = new THREE.Color(def.collar).getHex();
@@ -334,8 +354,124 @@ export function makeTrap(kind, ghost = false) {
     g.userData.armLen = 0;
     lamp(h - 0.15, 1.1, -0.15);
   }
+  else if (kind === 'hotplate') {
+    // Stove ring: black iron plate with two glowing coils. Glows hot when armed.
+    B(0x2a2826, 0, 0.06, 0, S * 0.92, 0.12, S * 0.92);
+    const coilMat = new THREE.MeshBasicMaterial({ color: 0xff4a1a });
+    const coils = new THREE.Group(); coils.position.y = 0.14; add(coils); g.userData.coils = coils; g.userData.coilMat = coilMat;
+    for (const r of [0.62, 0.36]) { const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.06, 6, 28), coilMat); t.rotation.x = Math.PI / 2; coils.add(t); }
+    for (const [x, z] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) P(cyl(0.07, 0.07, 0.06, 6), 0x6a6a6a, x, 0.15, z);
+    lamp(h - 0.15, 0.4, -h + 0.15);
+  } else if (kind === 'icetray') {
+    // Freezer tray: white plastic, a grid of ice cubes, frost on the rim.
+    B(0xe8eef2, 0, 0.06, 0, S * 0.9, 0.12, S * 0.9);
+    const cubes = new THREE.Group(); cubes.position.y = 0.2; add(cubes); g.userData.cubes = cubes;
+    const iceMat = new THREE.MeshLambertMaterial({ color: 0xbfe8ff, transparent: !ghost, opacity: 0.85, flatShading: true });
+    for (let i = 0; i < 9; i++) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.42), iceMat); c.position.set(((i % 3) - 1) * 0.55, 0, (Math.floor(i / 3) - 1) * 0.55); c.rotation.y = (i * 0.37) % 0.4; cubes.add(c); }
+    lamp(h - 0.15, 0.4, -h + 0.15);
+  } else if (kind === 'oilslick') {
+    // A tipped oil can and the black glossy puddle running out of it.
+    const pud = new THREE.Mesh(new THREE.CircleGeometry(0.92, 22), new THREE.MeshPhongMaterial({ color: 0x15120e, shininess: 120, specular: 0x6a6a5a }));
+    pud.rotation.x = -Math.PI / 2; pud.position.y = 0.015; pud.scale.set(1.05, 0.85, 1); add(pud);
+    const can = P(cyl(0.2, 0.2, 0.45, 10), 0x7a2a22, 0.7, 0.2, -0.7); can.rotation.z = Math.PI / 2; can.rotation.y = 0.6;
+    P(cyl(0.05, 0.08, 0.18, 6), 0xb0b0b0, 0.42, 0.2, -0.52).rotation.z = Math.PI / 2;
+  } else if (kind === 'rollingpin') {
+    // Rails along the tile and a huge wooden rolling pin that rolls across.
+    for (const x of [-h * 0.92, h * 0.92]) B(0x6a5a48, x, 0.08, 0, 0.12, 0.16, S * 0.95);
+    const pin = new THREE.Group(); pin.position.set(0, 0.36, -0.72); add(pin); g.userData.pin = pin;
+    const body = part(cyl(0.28, 0.28, S * 0.78, 12), 0xd8b080, 0, 0, 0, 1, 1, 1, !ghost); body.rotation.z = Math.PI / 2; pin.add(body);
+    for (const x of [-1, 1]) { const hd = part(cyl(0.09, 0.09, 0.3, 8), 0xa07a50, x * (S * 0.39 + 0.12), 0, 0, 1, 1, 1, !ghost); hd.rotation.z = Math.PI / 2; pin.add(hd); }
+    lamp(h - 0.15, 0.5, -h + 0.15);
+  } else if (kind === 'skull') {
+    // A mouse skull on a grave-stone, eyes glowing purple, a faint ring showing its reach.
+    B(0x5a5a62, 0, 0.1, 0, 1.3, 0.2, 1.3);
+    const sk = new THREE.Group(); sk.position.y = 0.6; sk.scale.setScalar(1.6); add(sk);
+    sk.add(part(new THREE.SphereGeometry(0.3, 10, 8), 0xe8e2d0, 0, 0, 0, 1, 0.9, 1.25, !ghost));
+    sk.add(part(BOX, 0xd8d0bc, 0, -0.2, 0.22, 0.26, 0.1, 0.3, false));
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xb070ff }); g.userData.eyeMat = eyeMat;
+    for (const x of [-0.12, 0.12]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), eyeMat); e.position.set(x, 0.05, 0.3); sk.add(e); }
+    if (!ghost) {
+      const aura = new THREE.Mesh(new THREE.RingGeometry(2.85, 3, 48), new THREE.MeshBasicMaterial({ color: 0x8a5ab8, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }));
+      aura.rotation.x = -Math.PI / 2; aura.position.y = 0.03; add(aura); g.userData.aura = aura;
+    }
+  } else if (kind === 'forkdarts') {
+    // A wooden cutlery block on the wall bristling with forks, tines out.
+    B(0x6e4e30, 0, 0.5, -0.14, S * 0.8, 0.8, 0.22);
+    const forks = new THREE.Group(); add(forks); g.userData.forks = forks;
+    for (let k = 0; k < 5; k++) {
+      const f = new THREE.Group(); f.position.set((k - 2) * 0.3, 0.3 + (k % 2) * 0.35, 0); forks.add(f);
+      f.add(part(BOX, 0xc8c8cc, 0, 0, 0.12, 0.05, 0.03, 0.3, false));
+      for (const tx of [-0.04, 0, 0.04]) f.add(part(BOX, 0xd8d8dc, tx, 0, 0.32, 0.015, 0.015, 0.14, false));
+    }
+    lamp(h - 0.15, 1.05, -0.12);
+  } else if (kind === 'bellows') {
+    // Fireplace bellows on a bracket, nozzle pointing across the lane.
+    B(0x4a3a2a, 0, 0.5, -0.2, 0.8, 0.9, 0.1);
+    const bag = new THREE.Group(); bag.position.set(0, 0.5, 0.05); add(bag); g.userData.bag = bag;
+    bag.add(part(BOX, 0x8a5a30, 0, 0.18, 0.3, 0.7, 0.05, 0.6, !ghost)); bag.add(part(BOX, 0x8a5a30, 0, -0.18, 0.3, 0.7, 0.05, 0.6, !ghost));
+    bag.add(part(BOX, 0x5a3420, 0, 0, 0.3, 0.6, 0.32, 0.5, false));
+    const noz = P(new THREE.ConeGeometry(0.1, 0.45, 8), 0x9a8a6a, 0, 0.5, 0.8); noz.rotation.x = Math.PI / 2;
+    lamp(h - 0.15, 1.05, -0.12);
+  } else if (kind === 'candle') {
+    // A fat church candle in an iron sconce; a little bellows behind it spits the flame.
+    B(0x2f2c29, 0, 0.35, -0.2, 0.6, 0.6, 0.08);
+    B(0x2f2c29, 0, 0.1, 0.1, 0.5, 0.06, 0.5);
+    P(cyl(0.2, 0.22, 0.7, 12), 0xf0e6c8, 0, 0.48, 0.12);
+    const fl = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 8), new THREE.MeshBasicMaterial({ color: 0xffb040 })); fl.position.set(0, 0.98, 0.12); add(fl); g.userData.flame = fl;
+    lamp(h - 0.15, 0.9, -0.12);
+  } else if (kind === 'hypno') {
+    // A black-and-white spiral wheel that never stops turning.
+    B(0x3a2a40, 0, 0.6, -0.2, 0.3, 1.1, 0.1);
+    const wheel = new THREE.Group(); wheel.position.set(0, 0.7, 0.0); add(wheel); g.userData.spiral = wheel;
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.62, 40), new THREE.MeshBasicMaterial({ map: spiralTexture(), side: THREE.DoubleSide })); wheel.add(disc);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.63, 0.04, 6, 32), mat(0x6a3a8a)); wheel.add(rim);
+    lamp(h - 0.15, 1.2, -0.12);
+  } else if (kind === 'flowerpot') {
+    // A terracotta pot on a hook. Drops when mice pass underneath; a new one is hung while it resets.
+    B(0x3a3632, 0, -0.25, 0, 0.04, 0.5, 0.04);
+    const pot = new THREE.Group(); pot.position.y = -0.85; add(pot); g.userData.pot = pot;
+    pot.add(part(cyl(0.42, 0.3, 0.6, 12), 0xc8643a, 0, 0, 0, 1, 1, 1, !ghost));
+    pot.add(part(cyl(0.38, 0.38, 0.04, 12), 0x4a3020, 0, 0.29, 0, 1, 1, 1, false));
+    for (let k = 0; k < 5; k++) { const lf = part(new THREE.ConeGeometry(0.08, 0.4, 4), 0x4a8a3a, Math.cos(k * 1.3) * 0.15, 0.48, Math.sin(k * 1.3) * 0.15, 1, 1, 1, false); lf.rotation.z = Math.cos(k * 1.3) * 0.4; pot.add(lf); }
+    lamp(0.35, -0.25, 0);
+  } else if (kind === 'bucket') {
+    // A wooden bucket on a pivot, full of water, that tips over the mice below.
+    B(0x3a3632, 0, -0.2, 0, 0.04, 0.4, 0.04);
+    const tip = new THREE.Group(); tip.position.y = -0.45; add(tip); g.userData.tip = tip;
+    tip.add(part(cyl(0.42, 0.34, 0.6, 12), 0x8a6a48, 0, -0.3, 0, 1, 1, 1, !ghost));
+    for (const y of [-0.1, -0.45]) { const band = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.025, 4, 20), mat(0x5a5a5a)); band.rotation.x = Math.PI / 2; band.position.y = y; tip.add(band); }
+    const water = new THREE.Mesh(new THREE.CircleGeometry(0.37, 16), mat(0x3a7ad8)); water.rotation.x = -Math.PI / 2; water.position.y = -0.04; tip.add(water);
+    lamp(0.35, -0.25, 0);
+  } else if (kind === 'salt') {
+    // A giant salt shaker hanging cap-down, sprinkling blessed salt.
+    const sh = new THREE.Group(); sh.position.y = -0.2; add(sh); g.userData.shaker = sh;
+    sh.add(part(cyl(0.3, 0.3, 0.8, 12), 0xe8f0f4, 0, -0.45, 0, 1, 1, 1, !ghost));
+    sh.add(part(cyl(0.26, 0.26, 0.55, 12), 0xffffff, 0, -0.5, 0, 1, 1, 1, false));
+    sh.add(part(cyl(0.31, 0.25, 0.22, 12), 0xb8b8c0, 0, -0.95, 0, 1, 1, 1, !ghost));
+    lamp(0.4, -0.25, 0);
+  } else if (kind === 'flypaper') {
+    // Sticky yellow strips hanging off little rolls, a few unlucky flies stuck on.
+    const strips = new THREE.Group(); add(strips); g.userData.strips = strips;
+    for (let k = 0; k < 4; k++) {
+      const x = (k % 2 - 0.5) * 1.1, z = (Math.floor(k / 2) - 0.5) * 1.1;
+      P(cyl(0.06, 0.06, 0.2, 6), 0x8a6a40, x, -0.1, z);
+      const st = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 1.4), new THREE.MeshLambertMaterial({ color: 0xe8d050, side: THREE.DoubleSide, transparent: ghost, opacity: ghost ? 0.5 : 1 }));
+      st.position.set(x, -0.9, z); st.rotation.y = k * 0.8; strips.add(st);
+      for (let f = 0; f < 3; f++) { const fly = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 3), mat(0x111111)); fly.position.set(x + (f - 1) * 0.05, -0.5 - f * 0.3, z); strips.add(fly); }
+    }
+  }
   if (ghost) g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.5; o.material.depthWrite = false; } });
   return g;
+}
+// Hypno Wheel face: a black-and-white spiral drawn once onto a canvas.
+let SPIRAL = null;
+function spiralTexture() {
+  if (SPIRAL) return SPIRAL;
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, 128, 128); x.strokeStyle = '#111'; x.lineWidth = 9; x.beginPath();
+  for (let a = 0; a < Math.PI * 10; a += 0.05) { const r = a * 2; const px = 64 + Math.cos(a) * r, py = 64 + Math.sin(a) * r; if (a === 0) x.moveTo(px, py); else x.lineTo(px, py); }
+  x.stroke();
+  SPIRAL = new THREE.CanvasTexture(c); return SPIRAL;
 }
 
 export function makeCheese(scale = 1) {

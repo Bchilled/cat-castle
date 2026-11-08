@@ -4,7 +4,7 @@
 // other cat. Players only ever talk to it through commands, and it never calls
 // Math.random (seeded RNG instead) so every run is reproducible.
 
-import { DT, GRAVITY, RULES, CAT, CATS, MICE, TRAPS, GATE as GATE_CFG, TRINKETS, ABILITY2, ITEMS } from '../config.js';
+import { DT, GRAVITY, RULES, CAT, CATS, MICE, TRAPS, GATE as GATE_CFG, TRINKETS, ABILITY2, ITEMS, STATUS, COMBOS, ATTACK_EL, trapParams } from '../config.js';
 import {
   W, H, CELL, T, idx, cellOf, cellCenter, buildMap, floorish, miceWalkable, goalCells,
   GATE, SPAWNS, CAT_SPAWN, DIRS4, WORLD_W, WORLD_H, VIAS, useMap, MAP,
@@ -14,7 +14,7 @@ import { buildWave, ratePaws, INTRO_TEXT } from './waves.js';
 
 // Cat lines. Original, crude, bleeped. Each cat has its own voice:
 // Fred is a mouthy back-alley scrapper; Puddin is a lazy, posh glutton.
-const BARKS = {
+export const BARKS = {
   fred: {
     kill: ['Squeak for your mum. Go on.', 'Another one for the gutter.', 'Oh, did that hurt? Good.', 'Tail tax. Pay up, vermin.',
            'Stay down, you mangy little #@!%.', "That's what you get for breathing.", 'Next!', 'Wipe your feet, you filthy little #@!%s.'],
@@ -138,6 +138,9 @@ const BARRICADE_COST = 5000;
 const MUD_SLOW = 0.55;      // stables: mud slows mice and cats
 const FIRE_DPS = 20;        // kitchen: ovens and hearth burn mice (cats take 3/4)
 const GORGE_SECS = 2.5, GORGE_HP = 1.3;   // food piles: time spent eating, and how much tougher they come out
+// Default element for each damage source (a call can name its own instead).
+// 'dot' = a status ticking (burning, poison): resistances apply, but it doesn't re-apply itself.
+const SRC_EL = { cat: 'physical', bleed: 'physical', trap: 'physical', splat: 'physics', poison: 'poison', fire: 'fire', chain: 'electric' };
 
 export class Sim {
   // map = which campaign map ('entrance', 'market', 'stables', 'cellar', 'passages', 'kitchen').
@@ -209,7 +212,7 @@ export class Sim {
     const def = CATS[kind];
     const cat = { id, kind, def, name: def.name, x: CAT_SPAWN.x, y: 0, z: CAT_SPAWN.z, vx: 0, vy: 0, vz: 0, yaw: Math.PI, pitch: 0,
       hp: def.maxHp, energy: def.maxEnergy, alive: true, respawnT: 0, onGround: true, airJumps: def.airJumps,
-      loadout: opts.loadout || null, item: opts.item || null, itemT: 0, guardT: 0, guard: 0, tauntT: 0, dashT: 0,
+      loadout: opts.loadout || null, item: opts.item || null, upgrades: opts.upgrades || {}, hat: opts.hat || null, itemT: 0, guardT: 0, guard: 0, tauntT: 0, dashT: 0,
       attackT: 0, secT: 0, eatT: 0, altT: 0, charge: 0, leaping: false, pouncing: false, dashing: false, attacking: false,
       hissT: 0, flipT: 0, buffT: 0, healT: 0, healRate: 0, rage: 0, rageT: 0, frenzyT: 0, striking: false, strikeUsed: false, stillT: 0, napping: false,
       wallNormal: null, kicksLeft: 1, lastKick: null, hurtT: 0, isCat: true, turn: 0 };
@@ -428,8 +431,11 @@ export class Sim {
     const cells = this.footprint(kind, ax, az, rot, wallDir);
     this.sardines -= def.cost;
     const xs = cells.map(i => i % W), zs = cells.map(i => (i / W) | 0);
-    const tr = { id: this.nextId++, kind, cells, layer: def.surface, rot, wallDir, cd: 0, hp: def.hp || 0, maxHp: def.hp || 0,
-      cost: def.cost, charges: def.charges || def.nibbles || 0, rechargeT: 0, cdMax: def.cooldown || def.recharge || 1,
+    // p = this trap's working numbers with the placing cat's shop upgrades applied.
+    const up = cat.upgrades ? cat.upgrades[kind] : null, P = trapParams(kind, up);
+    const tr = { id: this.nextId++, kind, cells, layer: def.surface, rot, wallDir, cd: 0, hp: P.hp || 0, maxHp: P.hp || 0, p: P, tier: (up && up.tier) || 1, special: (up && up.special) || null,
+      cost: def.cost, charges: P.charges || P.nibbles || 0, rechargeT: 0, cdMax: P.cooldown || P.recharge || 1, tickT: 0,
+      ceil: def.surface === 'ceiling' ? this.map.slabBot[cells[0]] : 0,
       x0: Math.min(...xs) * CELL, x1: (Math.max(...xs) + 1) * CELL, z0: Math.min(...zs) * CELL, z1: (Math.max(...zs) + 1) * CELL };
     for (const i of cells) this.occ[tr.layer][i] = tr.id;
     this.traps.set(tr.id, tr);
@@ -561,14 +567,87 @@ export class Sim {
     return m;
   }
 
-  damageMouse(m, n, source, crit = false) {
+  // el = element (see ELEMENTS in config). Resistances scale the hit, then the element
+  // leaves its status on the mouse (wet, burning, chilled, dirty, confused...) and any
+  // combo with a status it already has goes off.
+  damageMouse(m, n, source, crit = false, el = undefined) {
     if (m.dead) return;
+    const d = MICE[m.type];
+    if (el === undefined) el = SRC_EL[source] || null;
+    if (el && d.res && d.res[el] !== undefined) n *= d.res[el];
     if (m.packed && source !== 'stranded') n *= RULES.packDamageTaken;
     if (m.vulnT > 0) n *= CAT.roarVuln;          // shaken by Mimo's roar
+    let fizzled = false;
+    if (source !== 'dot' && el) {
+      // Combos that change this very hit.
+      if (el === 'electric' && m.wetT > 0 && source !== 'chain') { n *= 1.5; this.chainShock(m, n); }
+      if (el === 'fire' && m.wetT > 0) { n *= 0.5; m.wetT = 0; m.burnT = 0; fizzled = true; this.combo('steam', m); }   // dries it, doesn't light it
+    }
     m.hp -= n; m.flash = 0.12;
-    if (m.asleep && source !== 'bleed') { m.asleep = false; m.stunT = 0; }   // a hit wakes a sleeping mouse
-    if (n >= 1) this.emit({ t: 'dmg', x: m.x, y: m.y + MICE[m.type].size, z: m.z, n: Math.round(n), crit });
-    if (m.hp <= 0) this.killMouse(m, source);
+    if (m.asleep && source !== 'bleed' && source !== 'dot') { m.asleep = false; m.stunT = 0; }   // a hit wakes a sleeping mouse
+    if (n >= 1) this.emit({ t: 'dmg', x: m.x, y: m.y + d.size, z: m.z, n: Math.round(n), crit, el });
+    // Death: finishes off a badly hurt mouse outright (not bosses).
+    if (el === 'death' && m.hp > 0 && !d.boss && m.hp < m.maxHp * STATUS.executeAt) { m.hp = 0; this.emit({ t: 'execute', x: m.x, z: m.z }); }
+    if (m.hp <= 0) { this.killMouse(m, source); return; }
+    if (source !== 'dot' && el && !fizzled) this.applyStatus(m, el);
+  }
+  // The lasting part of an element hit.
+  applyStatus(m, el) {
+    const d = MICE[m.type], boss = !!d.boss;
+    switch (el) {
+      case 'fire':
+        if (m.wetT > 0) break;                                        // steam already handled
+        if (m.oilT > 0) {                                             // BLAZE: oil goes up
+          m.oilT = 0; m.burnT = STATUS.blazeSecs; m.burnDps = STATUS.blazeDps; this.combo('blaze', m);
+          for (const o of this.nearMice(m.x, m.z, STATUS.spreadRange)) if (o !== m && !o.dead && !(o.wetT > 0) && Math.hypot(o.x - m.x, o.z - m.z) < STATUS.spreadRange) { o.burnT = Math.max(o.burnT || 0, STATUS.burnSecs); o.burnDps = Math.max(o.burnDps || 0, STATUS.burnDps); }
+        } else { m.burnT = Math.max(m.burnT || 0, STATUS.burnSecs); m.burnDps = Math.max(m.burnDps || 0, STATUS.burnDps); }
+        break;
+      case 'water': m.wetT = STATUS.wetSecs; m.burnT = 0; break;
+      case 'ice':
+        m.chill = (m.chillT > 0 ? m.chill || 0 : 0) + 1; m.chillT = STATUS.chillSecs; m.slowT = Math.max(m.slowT, 1);
+        if (m.wetT > 0 || m.chill >= 3) {                            // FROZEN SOLID
+          m.chill = 0; m.wetT = 0; m.burnT = 0;
+          if (boss) m.slowT = Math.max(m.slowT, 3); else { m.stunT = m.stunMax = STATUS.freezeSecs; m.frozen = true; m.asleep = false; }
+          this.combo('freeze', m);
+        }
+        break;
+      case 'earth': m.dirtyT = STATUS.dirtySecs; break;
+      case 'physics':
+        if (m.dirtyT > 0) {                                           // KNOCKDOWN
+          m.dirtyT = 0; m.stunT = m.stunMax = Math.max(m.stunT, STATUS.knockdownSecs * (boss ? 0.4 : 1)); m.windT = 0;
+          this.combo('knockdown', m);
+        }
+        break;
+      case 'electric': if (!boss && !(m.stunT > 0)) m.stunT = m.stunMax = 0.25; break;   // a jolt
+      case 'psychic': if (!boss) m.confuseT = STATUS.confuseSecs; break;
+      case 'poison': m.toxT = STATUS.toxSecs; m.toxDps = Math.max(m.toxDps || 0, STATUS.toxDps); break;
+      case 'wind':                                                    // SPREAD: carries fire and poison to the pack
+        if (m.burnT > 0 || m.toxT > 0) {
+          let n = 0;
+          for (const o of this.nearMice(m.x, m.z, STATUS.spreadRange)) {
+            if (o === m || o.dead || Math.hypot(o.x - m.x, o.z - m.z) > STATUS.spreadRange) continue;
+            if (m.burnT > 0 && !(o.wetT > 0)) { o.burnT = Math.max(o.burnT || 0, STATUS.burnSecs); o.burnDps = Math.max(o.burnDps || 0, STATUS.burnDps); n++; }
+            if (m.toxT > 0) { o.toxT = STATUS.toxSecs; o.toxDps = Math.max(o.toxDps || 0, m.toxDps); n++; }
+          }
+          if (n) this.combo('spread', m);
+        }
+        break;
+    }
+  }
+  // Wet mouse hit by electricity: the shock jumps to the nearest few (wet ones first).
+  chainShock(m, n) {
+    const near = this.nearMice(m.x, m.z, STATUS.chainRange).filter(o => o !== m && !o.dead && Math.hypot(o.x - m.x, o.z - m.z) < STATUS.chainRange)
+      .sort((a, b) => (b.wetT > 0) - (a.wetT > 0) || Math.hypot(a.x - m.x, a.z - m.z) - Math.hypot(b.x - m.x, b.z - m.z)).slice(0, STATUS.chainJumps);
+    const pts = [[m.x, m.z]];
+    for (const o of near) { pts.push([o.x, o.z]); this.damageMouse(o, n * STATUS.chainMul, 'chain', false, 'electric'); }
+    this.combo('chain', m, { pts });
+  }
+  // A combo went off: event for the visuals/sound; the first of each kind explains itself.
+  combo(kind, m, extra = {}) {
+    this.stats.combos = (this.stats.combos || 0) + 1;
+    this.emit({ t: 'combo', kind, x: m.x, y: m.y, z: m.z, ...extra });
+    this.combosSeen = this.combosSeen || new Set();
+    if (!this.combosSeen.has(kind)) { this.combosSeen.add(kind); this.emit({ t: 'msg', text: 'COMBO! ' + COMBOS[kind] }); }
   }
   killMouse(m, source, drowned = false, eaten = false) {
     if (m.dead) return;
@@ -594,7 +673,7 @@ export class Sim {
     }
     this.emit({ t: 'kill', x: m.x, y: m.y, z: m.z, type: m.type, drowned, eaten, splat: source === 'splat' });
     const who = this.anyCatName();
-    if (source === 'trap' || source === 'splat') this.bark('trap', who); else if (source === 'cat') this.bark('kill', who);
+    if (source === 'trap' || source === 'splat' || source === 'dot' || source === 'chain') this.bark('trap', who); else if (source === 'cat' || source === 'bleed') this.bark('kill', who);
   }
 
   // ---------- cats ----------
@@ -747,7 +826,7 @@ export class Sim {
     for (const tr of this.baits) {
       if (tr.charges <= 0) continue;
       const dd = Math.hypot((tr.x0 + tr.x1) / 2 - m.x, (tr.z0 + tr.z1) / 2 - m.z);
-      if (dd < TRAPS.bait.lure && dd < bd) { bd = dd; best = tr; }
+      if (dd < tr.p.lure && dd < bd) { bd = dd; best = tr; }
     }
     return best;
   }
@@ -854,8 +933,9 @@ export class Sim {
     if (c) { b.tx = c.x; b.tz = c.z; b.ty = c.y + 0.8; b.target = { kind: 'cat', id: c.id }; return; }
     b.state = 'out';
   }
-  damageBird(b, n) {
+  damageBird(b, n, el = 'physical') {
     if (b.dead) return;
+    const res = MICE[b.type].res; if (el && res && res[el] !== undefined) n *= res[el];
     if (b.vulnT > 0) n *= CAT.roarVuln;
     b.hp -= n; b.flash = 0.12;
     this.emit({ t: 'dmg', x: b.x, y: b.y + 0.4, z: b.z, n: Math.round(n), crit: false });
@@ -877,6 +957,11 @@ export class Sim {
       if (b.dead) continue;
       const d = MICE[b.type];
       b.flash = Math.max(0, b.flash - DT); if (b.vulnT > 0) b.vulnT -= DT;
+      if (b.stuckT > 0) {
+        // Caught on flypaper: flaps helplessly, the glue does the rest.
+        b.stuckT -= DT; this.damageBird(b, (b.stuckDps || 12) * DT, 'physical'); if (b.stuckT <= 0) b.state = 'out';
+        continue;
+      }
       if (b.stunT > 0) {
         // Knocked silly by a roar: tumbles down, flaps back up when it comes to.
         b.stunT -= DT; b.vy -= GRAVITY * 0.5 * DT; b.y = Math.max(0.3, b.y + b.vy * DT);
@@ -905,7 +990,7 @@ export class Sim {
             b.carry = 0;
           } else if (tg.kind === 'bait') {
             const bait = this.traps.get(tg.id);
-            if (bait && bait.charges > 0) { bait.charges = 0; bait.rechargeT = bait.cdMax = TRAPS.bait.recharge; this.emit({ t: 'steal', x: b.x, z: b.z, what: 'cheese' }); }
+            if (bait && bait.charges > 0) { bait.charges = 0; bait.rechargeT = bait.cdMax = bait.p.recharge; this.emit({ t: 'steal', x: b.x, z: b.z, what: 'cheese' }); }
           } else if (tg.kind === 'cat') {
             // Pecks the cat and makes off with some Paw Points.
             const c = this.cats.get(tg.id);
@@ -1020,8 +1105,8 @@ export class Sim {
     for (const tr of this.traps.values()) {
       if (Math.hypot((tr.x0 + tr.x1) / 2 - cat.x, (tr.z0 + tr.z1) / 2 - cat.z) > a.radius || tr.kind === 'barricade') continue;
       tr.cd = 0; tr.boostT = a.buffSecs;
-      if (tr.kind === 'gluepad') tr.charges = TRAPS.gluepad.charges;
-      if (tr.kind === 'bait') tr.charges = TRAPS.bait.nibbles;
+      if (tr.kind === 'gluepad' || tr.kind === 'flypaper') tr.charges = tr.p.charges;
+      if (tr.kind === 'bait') tr.charges = tr.p.nibbles;
       n++;
     }
     this.emit({ t: 'tinker', id: cat.id, x: cat.x, z: cat.z, r: a.radius, n });
@@ -1125,6 +1210,21 @@ export class Sim {
         break;
       case 'flea': this.zones.push({ id: this.nextId++, kind: 'flea', x: p.x, z: p.z, r: it.radius, t: it.secs, dps: it.dps }); break;
       case 'tonic': cat.hp = Math.min(cat.def.maxHp, cat.hp + cat.def.maxHp * it.heal); break;
+      case 'bell':      // Bell Collar: everything near YOU panics and runs
+        for (const m of this.mice) { if (m.dead || Math.hypot(m.x - cat.x, m.z - cat.z) > it.radius || MICE[m.type].boss) continue; m.fearT = it.secs; m.fearX = cat.x; m.fearZ = cat.z; }
+        break;
+      case 'pistol': {  // Water Pistol: a stream along the aim line, soaking everything it passes
+        const dx = p.x - cat.x, dz = p.z - cat.z, l = Math.hypot(dx, dz) || 1, fx = dx / l, fz = dz / l;
+        for (const m of this.nearMice(cat.x + fx * it.range / 2, cat.z + fz * it.range / 2, it.range / 2 + 1)) {
+          const ax = m.x - cat.x, az = m.z - cat.z, along = ax * fx + az * fz, side = Math.abs(ax * fz - az * fx);
+          if (m.dead || along < 0 || along > it.range || side > 0.9) continue;
+          this.damageMouse(m, it.damage, 'cat', false, 'water'); if (!m.dead && !MICE[m.type].boss) { m.x += fx * 0.4; m.z += fz * 0.4; }
+        }
+        this.emit({ t: 'squirt', id: cat.id, x: cat.x, z: cat.z, nx: fx, nz: fz, reach: it.range });
+        break;
+      }
+      case 'matches': this.zones.push({ id: this.nextId++, kind: 'fire', x: p.x, z: p.z, r: it.radius, t: it.secs, dps: it.dps }); break;
+      case 'holy': for (const m of near(it.radius)) this.damageMouse(m, it.damage, 'cat', false, 'holy'); break;
       case 'squeaky': this.decoys.push({ id: this.nextId++, x: p.x, y: 0, z: p.z, hp: it.hp, maxHp: it.hp, t: it.secs, alive: true, decoy: true, onGround: true, def: { radius: 0.3, taunt: 3 } }); break;
     }
     cat.itemT = it.cd;
@@ -1134,7 +1234,16 @@ export class Sim {
     for (const zn of this.zones) {
       zn.t -= DT;
       if (zn.kind === 'flea') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) if (!m.dead && Math.hypot(m.x - zn.x, m.z - zn.z) < zn.r) this.damageMouse(m, zn.dps * DT, 'poison');
-      if (zn.kind === 'spill') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) if (!m.dead && Math.hypot(m.x - zn.x, m.z - zn.z) < zn.r) m.slowT = Math.max(m.slowT, 0.3);
+      // A lit match: burns (and ignites) anything in it; an oily mouse blazes.
+      if (zn.kind === 'fire') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) if (!m.dead && m.y < 1 && Math.hypot(m.x - zn.x, m.z - zn.z) < zn.r) this.damageMouse(m, zn.dps * DT, 'fire');
+      // Cactus soil from a Flower Pot: dirty and prickly.
+      if (zn.kind === 'soil') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) if (!m.dead && Math.hypot(m.x - zn.x, m.z - zn.z) < zn.r) { m.dirtyT = Math.max(m.dirtyT || 0, 1); m.toxT = Math.max(m.toxT || 0, 1); m.toxDps = Math.max(m.toxDps || 0, STATUS.toxDps); }
+      // Spills: water from pots and buckets soaks mice, oil from jugs makes them oily, grain from baskets makes them dirty.
+      if (zn.kind === 'spill') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) {
+        if (m.dead || Math.hypot(m.x - zn.x, m.z - zn.z) > zn.r) continue;
+        m.slowT = Math.max(m.slowT, 0.3);
+        if (zn.what === 'jug') m.oilT = STATUS.oilSecs; else if (zn.what === 'basket') m.dirtyT = STATUS.dirtySecs; else { m.wetT = STATUS.wetSecs; m.burnT = 0; }
+      }
     }
     if (this.zones.some(z => z.t <= 0)) this.zones = this.zones.filter(z => z.t > 0);
     for (const d of this.decoys) { d.t -= DT; if (d.t <= 0 || d.hp <= 0) { d.alive = false; this.emit({ t: 'decoyGone', id: d.id, x: d.x, z: d.z }); } }
@@ -1330,10 +1439,19 @@ export class Sim {
     m.flash = Math.max(0, m.flash - DT);
     m.slowT = Math.max(0, m.slowT - DT);
     if (m.bleed.length) {
-      this.damageMouse(m, m.bleed.length * CAT.bleedDps * DT, 'cat');
+      this.damageMouse(m, m.bleed.length * CAT.bleedDps * DT, 'bleed');
       m.bleed = m.bleed.map(t => t - DT).filter(t => t > 0);
       if (m.dead) return;
     }
+    // Statuses from elements: burning and poison tick; the rest just wear off.
+    if (m.burnT > 0) { m.burnT -= DT; if (m.wetT > 0) m.burnT = 0; else this.damageMouse(m, (m.burnDps || STATUS.burnDps) * DT, 'dot', false, 'fire'); if (m.burnT <= 0) m.burnDps = 0; if (m.dead) return; }
+    if (m.toxT > 0) { m.toxT -= DT; this.damageMouse(m, (m.toxDps || STATUS.toxDps) * DT, 'dot', false, 'poison'); if (m.toxT <= 0) m.toxDps = 0; if (m.dead) return; }
+    if (m.wetT > 0) m.wetT -= DT;
+    if (m.oilT > 0) m.oilT -= DT;
+    if (m.dirtyT > 0) m.dirtyT -= DT;
+    if (m.chillT > 0) { m.chillT -= DT; if (m.chillT <= 0) m.chill = 0; else m.slowT = Math.max(m.slowT, DT); }
+    if (m.confuseT > 0) m.confuseT -= DT;
+    if (m.frozen && !(m.stunT > 0)) m.frozen = false;
 
     if (m.state === 'air') {
       m.vy -= GRAVITY * DT;
@@ -1427,7 +1545,8 @@ export class Sim {
         m.yaw = Math.atan2(dx, dz);
         if (dd < 1.1 + d.size * 0.3) {
           m.eatT = (m.eatT || 0) + DT; bait.charges -= DT;
-          if (bait.charges <= 0) { bait.charges = 0; bait.rechargeT = bait.cdMax = TRAPS.bait.recharge; this.emit({ t: 'baitGone', id: bait.id }); }
+          if (bait.p.poisoned) { m.toxT = STATUS.toxSecs; m.toxDps = Math.max(m.toxDps || 0, STATUS.toxDps * 1.5); }     // Poisoned Cheese
+          if (bait.charges <= 0) { bait.charges = 0; bait.rechargeT = bait.cdMax = bait.p.recharge; this.emit({ t: 'baitGone', id: bait.id }); }
           if (m.eatT > TRAPS.bait.eatSecs) m.fed = true;      // full: back to the route
           return;
         }
@@ -1525,7 +1644,8 @@ export class Sim {
     m.packed = packN >= RULES.packCount;
 
     const ok = (x, z) => { const c = cellOf(x, z); return c >= 0 && pass(c) && !this.isBlocker(c); };
-    const sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * (m.packed ? RULES.packSpeed : 1) * (this.map.mud[i] ? MUD_SLOW : 1);
+    if (this.map.mud[i]) m.dirtyT = Math.max(m.dirtyT || 0, 1);     // stables mud: dirty mice get knocked flat by physics
+    const sp = d.speed * (m.slowT > 0 ? (m.chillT > 0 ? STATUS.chillSlow : CAT.hairballSlow) : 1) * (m.packed ? RULES.packSpeed : 1) * (this.map.mud[i] ? MUD_SLOW : 1);
     let mx, mz;
     m.ignoreT = Math.max(0, (m.ignoreT || 0) - DT);
     const reachT = foe && foe.tauntT > 0 ? ABILITY2.showoff.radius : foe && foe.decoy ? ITEMS.squeaky.radius : d.aggro * (foe ? (foe.def.taunt || 1) : 1);
@@ -1535,6 +1655,13 @@ export class Sim {
       const dx = foe.x - m.x, dz = foe.z - m.z, dd = foeD || 1, reach = d.size * 0.5 + foe.def.radius;
       const go = dd > reach ? 1.15 : 0;
       mx = dx / dd * go; mz = dz / dd * go; m.yaw = Math.atan2(dx, dz);
+    } else if (m.confuseT > 0 && !d.boss) {
+      // Confused (psychic): wander back the way it came — the reverse of its route.
+      const n = nextCell(this.map, flow, i, pass, this.isBlocker, this.extraOf);
+      if (n < 0) return;
+      const [cx, cz] = cellCenter(n), [ix, iz] = cellCenter(i), fl = Math.hypot(cx - ix, cz - iz) || 1;
+      mx = -(cx - ix) / fl * 0.7 + Math.sin(this.time * 3 + m.id) * 0.4; mz = -(cz - iz) / fl * 0.7 + Math.cos(this.time * 3 + m.id) * 0.4;
+      m.yaw = Math.atan2(mx, mz);
     } else {
       // Follow the flow field.
       const n = nextCell(this.map, flow, i, pass, this.isBlocker, this.extraOf);
@@ -1551,7 +1678,7 @@ export class Sim {
             if (this.gate.hp <= 0) this.breakGate();
           } else {
             const b = this.isBarricade(n);
-            if (b) { b.hp -= d.gateDmg; this.emit({ t: 'barricadeHit', id: b.id }); if (b.hp <= 0) this.removeTrap(b); }
+            if (b) { b.hp -= d.gateDmg * (b.p.tough ? 0.5 : 1); this.emit({ t: 'barricadeHit', id: b.id }); if (b.hp <= 0) this.removeTrap(b); }
             m.poisoned = true;   // chewing a Poison Box: see the poison tick below
           }
         }
@@ -1674,7 +1801,7 @@ export class Sim {
       if (b.kind === 'burr') {
         b.done = true;
         if (hitMouse) {
-          this.damageMouse(hitMouse, CAT.burrDamage * (b.mul || 1), 'cat');
+          this.damageMouse(hitMouse, CAT.burrDamage * (b.mul || 1), 'cat', false, ATTACK_EL.burr);
           if (!hitMouse.dead) {
             hitMouse.slowT = Math.max(hitMouse.slowT, CAT.burrSlowSecs);
             hitMouse.drowsy = (hitMouse.drowsy || 0) + 1;
@@ -1689,7 +1816,7 @@ export class Sim {
         // Mimo's pebble: double damage to ranged mice (plague rats, siege mice).
         if (hitMouse) {
           const crit = this.rng() < this.mods.crit, vs = MICE[hitMouse.type].ranged ? CAT.pebbleVsRanged : 1;
-          this.damageMouse(hitMouse, CAT.pebbleDamage * vs * (b.mul || 1) * (crit ? 2 : 1), 'cat', crit);
+          this.damageMouse(hitMouse, CAT.pebbleDamage * vs * (b.mul || 1) * (crit ? 2 : 1), 'cat', crit, ATTACK_EL.pebble);
         }
         this.emit({ t: 'pelletHit', x: b.x, y: Math.max(0, b.y), z: b.z, mouse: !!hitMouse });
         continue;
@@ -1706,7 +1833,7 @@ export class Sim {
         for (const m of this.nearMice(b.x, b.z, CAT.hairballRadius + 0.5)) {
           if (m.dead || Math.hypot(m.x - b.x, m.z - b.z) > CAT.hairballRadius || Math.abs(m.y - b.y) > 1.5) continue;
           m.slowT = CAT.hairballSlowSecs;
-          this.damageMouse(m, CAT.hairballDamage, 'cat', this.rng() < this.mods.crit);
+          this.damageMouse(m, CAT.hairballDamage, 'cat', this.rng() < this.mods.crit, ATTACK_EL.hairball);
         }
       }
     }
@@ -1714,89 +1841,268 @@ export class Sim {
   }
 
   // ---------- trap behaviour ----------
+  // Every trap reads its numbers from tr.p (base + shop upgrades + chosen special).
   stepTraps() {
     const baseMods = this.mods;
     this.baits = [];
     for (const tr of this.traps.values()) if (tr.kind === 'bait') {
       // Eaten-out cheese grows back (well, someone restocks it) after a while.
-      if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) { tr.charges = TRAPS.bait.nibbles; tr.cd = 0; } }
+      if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) { tr.charges = tr.p.nibbles; tr.cd = 0; } }
       this.baits.push(tr);
     }
     const inRect = (b, tr, pad = 0.1) => b.x > tr.x0 - pad && b.x < tr.x1 + pad && b.z > tr.z0 - pad && b.z < tr.z1 + pad;
     const grounded = (m) => (m.state === 'walk' || m.state === 'stuck') && m.y < 0.3;
+    const live = (m) => !m.dead && grounded(m);
     // Wall traps work on the strip of floor in front of them, `reach` units out from the wall.
     const lane = (tr, reach) => {
       const [wx, wz] = DIRS4[tr.wallDir], nx = -wx, nz = -wz;
       return { x0: Math.min(tr.x0, tr.x0 + nx * reach), x1: Math.max(tr.x1, tr.x1 + nx * reach),
                z0: Math.min(tr.z0, tr.z0 + nz * reach), z1: Math.max(tr.z1, tr.z1 + nz * reach), nx, nz };
     };
+    const centre = (tr) => [(tr.x0 + tr.x1) / 2, (tr.z0 + tr.z1) / 2];
+    // Ceiling traps reach the floor in a circle under them.
+    const below = (tr, r) => { const [cx, cz] = centre(tr); return this.nearMice(cx, cz, r + 0.5).filter(m => !m.dead && m.y < 1 && Math.hypot(m.x - cx, m.z - cz) < r); };
     const reset = (tr, secs) => { tr.cd = tr.cdMax = secs * baseMods.trapCd; };
+    const bleed = (m, n, max) => { for (let k = 0; k < n; k++) { if (m.bleed.length < max) m.bleed.push(CAT.bleedSeconds); else m.bleed[0] = CAT.bleedSeconds; } };
     for (const tr of this.traps.values()) {
       tr.cd = Math.max(0, tr.cd - DT);
       // Nebbie's Tinker overclocks a trap for a while.
       if (tr.boostT > 0) tr.boostT -= DT;
       const mods = tr.boostT > 0 ? { ...baseMods, trapDmg: baseMods.trapDmg * ABILITY2.tinker.buff } : baseMods;
-      const def = TRAPS[tr.kind];
-      if (tr.kind === 'mousetrap' && tr.cd === 0) {
-        // Like a spike trap: snaps everything standing on the tile.
-        const vs = this.mice.filter(m => !m.dead && grounded(m) && inRect(m, tr, 0)).slice(0, def.maxHits);
-        if (vs.length) { reset(tr, def.cooldown); this.emit({ t: 'snap', id: tr.id }); for (const m of vs) this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); }
-      } else if (tr.kind === 'flipper' && tr.cd === 0) {
-        const [dx, dz] = DIRS4[ROT_DIR[tr.rot % 4]];
-        const victims = this.mice.filter(m => !m.dead && grounded(m) && inRect(m, tr));
-        const cats = [...this.cats.values()].filter(c => c.alive && c.onGround && c.y < 0.3 && inRect(c, tr, 0));
-        if (victims.length || cats.length) {
-          reset(tr, def.cooldown); this.emit({ t: 'flip', id: tr.id });
+      const P = tr.p, dmg = (P.damage || 0) * mods.trapDmg, el = P.el;
+      switch (tr.kind) {
+        case 'barricade':
+          // Fumes special: poisons mice walking past (not on it — that's chewing).
+          if (P.fumes && (tr.tickT -= DT) <= 0) { tr.tickT = 1; for (const m of this.mice) if (live(m) && inRect(m, tr, 1.2) && !inRect(m, tr, 0)) this.damageMouse(m, 2, 'trap', false, 'poison'); }
+          break;
+        case 'mousetrap': {
+          if (tr.cd > 0) break;
+          // Like a spike trap: snaps everything standing on the tile.
+          const vs = this.mice.filter(m => live(m) && inRect(m, tr, 0)).slice(0, P.maxHits);
+          if (!vs.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'snap', id: tr.id });
+          for (const m of vs) { if (P.bleed) bleed(m, P.bleed, mods.bleedMax); this.damageMouse(m, dmg, 'trap', false, el); }
+          if (P.chain) {   // Chain Snap: the nearest mice just off the tile get it too
+            const [cx, cz] = centre(tr);
+            const near = this.nearMice(cx, cz, 3).filter(m => live(m) && !inRect(m, tr, 0) && Math.hypot(m.x - cx, m.z - cz) < 2.6).sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz)).slice(0, P.chain);
+            for (const m of near) this.damageMouse(m, dmg * 0.5, 'trap', false, el);
+          }
+          break;
+        }
+        case 'flipper': {
+          if (tr.cd > 0) break;
+          const [dx, dz] = DIRS4[ROT_DIR[tr.rot % 4]];
+          const victims = this.mice.filter(m => live(m) && inRect(m, tr));
+          const cats = [...this.cats.values()].filter(c => c.alive && c.onGround && c.y < 0.3 && inRect(c, tr, 0));
+          if (!victims.length && !cats.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'flip', id: tr.id });
           for (const m of victims) {
-            const s = MICE[m.type].size, mul = Math.min(1, 0.5 / (s * s));   // bosses barely budge
-            this.launch(m, dx * def.launchH * mul + (this.rng() - 0.5) * 2, def.launchV * mul * (0.85 + this.rng() * 0.3), dz * def.launchH * mul + (this.rng() - 0.5) * 2);
-            this.damageMouse(m, def.launchDamage * mods.trapDmg, 'trap');
+            const s = MICE[m.type].size, mul = Math.min(1, (P.big ? 0.9 : 0.5) / (s * s));   // bosses barely budge (Big Spring lifts more)
+            this.launch(m, dx * P.launchH * mul + (this.rng() - 0.5) * 2, P.launchV * mul * (0.85 + this.rng() * 0.3), dz * P.launchH * mul + (this.rng() - 0.5) * 2);
+            this.damageMouse(m, P.launchDamage * mods.trapDmg, 'trap', false, el);
           }
-          for (const c of cats) { c.vx = dx * def.launchH; c.vz = dz * def.launchH; c.vy = def.launchV; c.onGround = false; }
+          for (const c of cats) { c.vx = dx * P.launchH; c.vz = dz * P.launchH; c.vy = P.launchV; c.onGround = false; }
+          break;
         }
-      } else if (tr.kind === 'grinder') {
-        const L = lane(tr, def.reach); let hit = false;
-        for (const m of this.mice) if (!m.dead && grounded(m) && inRect(m, L, 0)) { this.damageMouse(m, def.dps * mods.trapDmg * DT, 'trap'); hit = true; }
-        tr.active = hit;
-      } else if (tr.kind === 'zapper' && tr.cd === 0) {
-        const cx = (tr.x0 + tr.x1) / 2, cz = (tr.z0 + tr.z1) / 2;
-        const vs = this.mice.filter(m => !m.dead && Math.hypot(m.x - cx, m.z - cz) < def.radius && m.y < 1);
-        const bs = this.birds.filter(b => !b.dead && b.y < 4 && Math.hypot(b.x - cx, b.z - cz) < def.radius);   // bug zappers fry low-flying birds too
-        if (vs.length || bs.length) {
-          reset(tr, def.cooldown); this.emit({ t: 'zap', id: tr.id, hits: vs.slice(0, 6).map(m => [m.x, m.z]) });
-          for (const m of vs) this.damageMouse(m, def.damage * mods.trapDmg, 'trap');
-          for (const b of bs) this.damageBird(b, def.damage * mods.trapDmg);
-        }
-      } else if (tr.kind === 'gluepad') {
-        if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) tr.charges = def.charges; continue; }
-        for (const m of this.mice) {
-          if (m.dead || m.state !== 'walk' || m.glueId === tr.id || !inRect(m, tr, 0)) continue;
-          m.state = 'stuck'; m.stuckT = def.stickSecs * (MICE[m.type].boss ? 0.4 : 1); m.glueId = tr.id; this.emit({ t: 'glue', x: m.x, z: m.z });
-          if (--tr.charges <= 0) { tr.rechargeT = tr.cdMax = def.recharge * mods.trapCd; break; }
-        }
-      } else if (tr.kind === 'tacks') {
-        for (const m of this.mice) {
-          if (m.dead || !grounded(m) || !inRect(m, tr, 0)) continue;
-          m.tackT -= DT;
-          if (m.tackT <= 0) {
-            m.tackT = def.tick;
-            if (m.bleed.length < mods.bleedMax) m.bleed.push(CAT.bleedSeconds);
-            this.damageMouse(m, def.damage * mods.trapDmg, 'trap');
+        case 'grinder': {
+          const L = lane(tr, P.reach); let hit = false;
+          for (const m of this.mice) if (live(m) && inRect(m, L, 0)) {
+            this.damageMouse(m, P.dps * mods.trapDmg * DT, 'trap', false, el); hit = true;
+            if (P.bleed && (m.grateT = (m.grateT || 0) - DT) <= 0) { m.grateT = 0.5; bleed(m, 1, mods.bleedMax); }
           }
+          tr.active = hit;
+          break;
         }
-      } else if (tr.kind === 'glove' && tr.cd === 0) {
-        // Spring-loaded boxing glove: punches small mice across the lane (into walls,
-        // water, other traps); big ones just get dazed.
-        const L = lane(tr, def.reach);
-        const vs = this.mice.filter(m => !m.dead && grounded(m) && inRect(m, L, 0));
-        if (vs.length) {
-          reset(tr, def.cooldown); this.emit({ t: 'punch', id: tr.id });
+        case 'zapper': {
+          if (tr.cd > 0) break;
+          const [cx, cz] = centre(tr);
+          const vs = this.mice.filter(m => !m.dead && Math.hypot(m.x - cx, m.z - cz) < P.radius && m.y < 1);
+          const bs = this.birds.filter(b => !b.dead && b.y < 4 && Math.hypot(b.x - cx, b.z - cz) < P.radius);   // bug zappers fry low-flying birds too
+          if (!vs.length && !bs.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'zap', id: tr.id, hits: vs.slice(0, 6).map(m => [m.x, m.z]) });
+          for (const m of vs) {
+            this.damageMouse(m, dmg, 'trap', false, el);
+            if (m.dead) continue;
+            if (P.arc) this.chainShock(m, dmg * 0.6);                 // Arc: jumps on regardless of wet
+            if (P.stun && !MICE[m.type].boss) m.stunT = m.stunMax = Math.max(m.stunT, P.stun);
+          }
+          for (const b of bs) this.damageBird(b, dmg, el);
+          break;
+        }
+        case 'gluepad': case 'flypaper': {
+          if (tr.kind === 'flypaper') {
+            // Birds swooping under the roof near the strips get stuck.
+            const [cx, cz] = centre(tr);
+            for (const b of this.birds) if (!b.dead && !(b.stuckT > 0) && b.y < tr.ceil && Math.hypot(b.x - cx, b.z - cz) < P.radius) { b.stuckT = P.hold; b.stuckDps = P.birdDps; this.emit({ t: 'stickBird', x: b.x, z: b.z }); }
+          }
+          if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) tr.charges = P.charges; break; }
+          for (const m of this.mice) {
+            if (m.dead || m.state !== 'walk' || m.glueId === tr.id || !inRect(m, tr, 0)) continue;
+            const d = MICE[m.type];
+            if (tr.kind === 'flypaper' && (d.boss || (d.size > 0.7 && !(P.hold > TRAPS.flypaper.hold * 1.5)))) continue;   // strips only gum up smallish mice (Extra Sticky: bigger ones too)
+            const secs = P.stickSecs * (d.boss ? (P.stickSecs > TRAPS.gluepad.stickSecs * 1.5 ? 0.8 : 0.4) : 1);
+            m.state = 'stuck'; m.stuckT = secs; m.glueId = tr.id; this.emit({ t: 'glue', x: m.x, z: m.z });
+            if (P.sticky) m.slowT = Math.max(m.slowT, secs + P.sticky);          // Sticky Feet
+            if (--tr.charges <= 0) { tr.rechargeT = tr.cdMax = P.recharge * mods.trapCd; break; }
+          }
+          break;
+        }
+        case 'tacks':
+          for (const m of this.mice) {
+            if (!live(m) || !inRect(m, tr, 0)) continue;
+            if (P.caltrops) m.slowT = Math.max(m.slowT, 0.4);
+            m.tackT -= DT;
+            if (m.tackT <= 0) {
+              m.tackT = P.tick; bleed(m, 1, mods.bleedMax);
+              this.damageMouse(m, dmg, 'trap', false, el);
+              if (P.rusty && !m.dead) { m.toxT = STATUS.toxSecs; m.toxDps = Math.max(m.toxDps || 0, STATUS.toxDps); }
+            }
+          }
+          break;
+        case 'glove': {
+          if (tr.cd > 0) break;
+          // Spring-loaded boxing glove: punches small mice across the lane (into walls,
+          // water, other traps); big ones just get dazed (Haymaker: big ones fly too).
+          const L = lane(tr, P.reach);
+          const vs = this.mice.filter(m => live(m) && inRect(m, L, 0));
+          if (!vs.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'punch', id: tr.id });
           for (const m of vs) {
             const md = MICE[m.type];
-            this.damageMouse(m, def.damage * mods.trapDmg, 'trap'); if (m.dead) continue;
-            if (md.boss || md.size >= 0.9) { m.stunT = m.stunMax = def.bigStun; continue; }
-            this.launch(m, L.nx * def.push, 4, L.nz * def.push);
+            this.damageMouse(m, dmg, 'trap', false, el); if (m.dead || m.stunT > 0) continue;   // knocked flat (dirty): stays down
+            if (md.boss || (md.size >= 0.9 && !P.haymaker)) { m.stunT = m.stunMax = P.bigStun; continue; }
+            this.launch(m, L.nx * P.push, 4, L.nz * P.push);
           }
+          break;
+        }
+        case 'hotplate': {
+          if (tr.cd > 0) break;
+          const pad = P.wide ? 2 : 0;
+          const vs = this.mice.filter(m => live(m) && inRect(m, tr, pad));
+          if (!vs.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'sizzle', id: tr.id });
+          for (const m of vs) {
+            this.damageMouse(m, dmg, 'trap', false, el);
+            if (P.searing && m.burnT > 0) { m.burnT = Math.max(m.burnT, STATUS.burnSecs * 2); m.burnDps = Math.max(m.burnDps, STATUS.burnDps * 1.5); }
+          }
+          break;
+        }
+        case 'icetray': {
+          if (tr.cd > 0) break;
+          const vs = this.mice.filter(m => live(m) && inRect(m, tr, 0));
+          if (!vs.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'chill', id: tr.id });
+          for (const m of vs) {
+            this.damageMouse(m, dmg, 'trap', false, el);
+            if (P.deep && !m.dead && !m.frozen) this.damageMouse(m, 0.01, 'trap', false, el);    // a second chill
+            if (P.slush && !m.dead && !m.frozen) m.wetT = STATUS.wetSecs;                         // left wet: next pulse freezes
+          }
+          break;
+        }
+        case 'oilslick':
+          // Oils every mouse crossing; some slip and go down for a moment.
+          for (const m of this.mice) {
+            if (!live(m) || m.state !== 'walk' || !inRect(m, tr, 0)) continue;
+            m.oilT = Math.max(m.oilT || 0, P.oilSecs);
+            if (!MICE[m.type].boss && this.rng() < P.slip * DT) { m.stunT = m.stunMax = 0.6; this.emit({ t: 'slip', x: m.x, z: m.z }); }
+          }
+          break;
+        case 'rollingpin': {
+          if (tr.cd > 0) break;
+          const vs = this.mice.filter(m => live(m) && inRect(m, tr, 0));
+          if (!vs.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'roll', id: tr.id });
+          for (const m of vs) { if (P.flatten) m.dirtyT = Math.max(m.dirtyT || 0, 0.1); this.damageMouse(m, dmg, 'trap', false, el); }   // Marble Pin: always knocks flat
+          break;
+        }
+        case 'skull': {
+          if ((tr.tickT -= DT) > 0) break;
+          tr.tickT = P.cooldown;
+          const [cx, cz] = centre(tr); let n = 0;
+          for (const m of this.nearMice(cx, cz, P.radius + 0.5)) {
+            if (m.dead || m.y > 1 || Math.hypot(m.x - cx, m.z - cz) > P.radius) continue;
+            n++;
+            if (P.wither) m.slowT = Math.max(m.slowT, P.cooldown + 0.1);
+            if (P.execute > STATUS.executeAt && !MICE[m.type].boss && m.hp < m.maxHp * P.execute && (MICE[m.type].res || {}).death !== 0) { m.hp = 0.001; this.emit({ t: 'execute', x: m.x, z: m.z }); }
+            this.damageMouse(m, dmg, 'trap', false, el);
+          }
+          tr.active = n > 0;
+          break;
+        }
+        case 'forkdarts': {
+          if (tr.cd > 0) break;
+          const L = lane(tr, P.reach);
+          const fromWall = (m) => Math.abs(L.nx) ? Math.abs(m.x - (L.nx > 0 ? tr.x0 : tr.x1)) : Math.abs(m.z - (L.nz > 0 ? tr.z0 : tr.z1));
+          const vs = this.mice.filter(m => live(m) && inRect(m, L, 0)).sort((a, b) => fromWall(a) - fromWall(b)).slice(0, P.maxHits);
+          if (!vs.length) break;
+          reset(tr, P.cooldown); const [cx, cz] = centre(tr);
+          this.emit({ t: 'darts', id: tr.id, x: cx, z: cz, nx: L.nx, nz: L.nz, reach: P.reach });
+          for (const m of vs) { bleed(m, P.bleed || 1, mods.bleedMax); this.damageMouse(m, dmg, 'trap', false, el); }
+          break;
+        }
+        case 'bellows': {
+          if (tr.cd > 0) break;
+          const L = lane(tr, P.reach), [cx, cz] = centre(tr);
+          const vs = this.mice.filter(m => live(m) && inRect(m, L, 0));
+          const bs = this.birds.filter(b => !b.dead && Math.hypot(b.x - (cx + L.nx * P.reach / 2), b.z - (cz + L.nz * P.reach / 2)) < P.reach && b.y < 6);
+          if (!vs.length && !bs.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'gust', id: tr.id, x: cx, z: cz, nx: L.nx, nz: L.nz, reach: P.reach, hot: !!P.hot });
+          for (const m of vs) {
+            const md = MICE[m.type];
+            this.damageMouse(m, dmg, 'trap', false, el);
+            if (P.hot && !m.dead) this.damageMouse(m, 2, 'trap', false, 'fire');
+            if (m.dead || md.boss) continue;
+            if (md.size >= 0.9) m.slowT = Math.max(m.slowT, 1.5); else this.launch(m, L.nx * P.push, 2.5, L.nz * P.push);
+          }
+          for (const b of bs) { this.damageBird(b, P.birdDmg * mods.trapDmg, el); b.stunT = Math.max(b.stunT, 1); }
+          break;
+        }
+        case 'candle': {
+          if (tr.cd > 0) break;
+          const L = lane(tr, P.reach), [cx, cz] = centre(tr);
+          const vs = this.mice.filter(m => live(m) && inRect(m, L, 0));
+          if (!vs.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'flame', id: tr.id, x: cx, z: cz, nx: L.nx, nz: L.nz, reach: P.reach });
+          for (const m of vs) this.damageMouse(m, dmg, 'trap', false, el);
+          break;
+        }
+        case 'hypno': {
+          if (tr.cd > 0) break;
+          const L = lane(tr, P.reach);
+          const vs = this.mice.filter(m => live(m) && inRect(m, L, 0));
+          if (!vs.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'hypno', id: tr.id });
+          for (const m of vs) { this.damageMouse(m, dmg, 'trap', false, el); if (!m.dead && !MICE[m.type].boss) m.confuseT = P.confuse; }
+          break;
+        }
+        case 'flowerpot': {
+          if (tr.cd > 0) break;
+          const vs = below(tr, P.radius);
+          if (!vs.length) break;
+          reset(tr, P.cooldown); const [cx, cz] = centre(tr);
+          this.emit({ t: 'potDrop', id: tr.id, x: cx, z: cz });
+          for (const m of vs) { this.damageMouse(m, dmg, 'trap', false, el); if (P.heavy && !m.dead) this.damageMouse(m, 1, 'trap', false, 'physics'); }   // dirt, then the thump: knocked flat
+          if (P.cactus) this.zones.push({ id: this.nextId++, kind: 'soil', x: cx, z: cz, r: P.radius, t: 6 });
+          break;
+        }
+        case 'bucket': {
+          if (tr.cd > 0) break;
+          const vs = below(tr, P.radius);
+          if (!vs.length) break;
+          reset(tr, P.cooldown); const [cx, cz] = centre(tr);
+          this.emit({ t: 'splashDown', id: tr.id, x: cx, z: cz, r: P.radius });
+          for (const m of vs) { this.damageMouse(m, dmg, 'trap', false, el); if (P.icy && !m.dead) this.damageMouse(m, 1, 'trap', false, 'ice'); }
+          break;
+        }
+        case 'salt': {
+          if (tr.cd > 0) break;
+          const vs = below(tr, P.radius), [cx, cz] = centre(tr);
+          const cats = P.blessed ? [...this.cats.values()].filter(c => c.alive && Math.hypot(c.x - cx, c.z - cz) < P.radius && c.y < tr.ceil) : [];
+          if (!vs.length && !cats.length) break;
+          reset(tr, P.cooldown); this.emit({ t: 'salt', id: tr.id, x: cx, z: cz, r: P.radius });
+          for (const m of vs) this.damageMouse(m, dmg, 'trap', false, el);
+          for (const c of cats) c.hp = Math.min(c.def.maxHp, c.hp + c.def.maxHp * 0.03);
+          break;
         }
       }
     }
