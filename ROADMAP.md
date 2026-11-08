@@ -83,6 +83,9 @@ Equippable actives with cooldowns, for example:
 - Already in: they always take the cheapest route, adapt the moment barricades change, and never go over barricades.
 - Next: avoid tiles where many mice just died (they learn), send scouts, and break props to open shortcuts. Siege mice wreck things along a long route.
 
+## G. Co-op
+In from v0.13.0: two-player online co-op (host + guest, room codes, peer-to-peer). Next: client-side prediction so the guest's own cat feels instant, more than two players, carry on to the next map together.
+
 ## Open questions for Brent
 1. Which of A–F comes first? Suggested order: A (climbing and infesting, because everything else sits on it), then C (shop and upgrades), with B, D and E filling in alongside.
 2. ~~Humans: hazards or scenery?~~ Decided: out of zone, scenery in the lit areas; we play in the shadows.

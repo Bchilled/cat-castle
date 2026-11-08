@@ -2262,7 +2262,7 @@ export class Sim {
     const SEC = { hairball: [CAT.hairballCooldown, CAT.hairballCost], pounce: [CAT.pounceCooldown, CAT.pounceCost], hiss: [CAT.hissCooldown, CAT.hissCost],
       purr: [CAT.purrCooldown, CAT.purrCost], frenzy: [CAT.frenzyCooldown, CAT.frenzyCost], yawn: [CAT.yawnCooldown, CAT.yawnCost], roar: [CAT.roarCooldown, CAT.roarCost] };
     const [secCd, secCost] = SEC[def.secondary];
-    return { phase: this.phase, wave: this.wave, phaseTimer: this.phaseTimer, lives: this.lives, sardines: this.sardines,
+    return { id, phase: this.phase, wave: this.wave, phaseTimer: this.phaseTimer, lives: this.lives, sardines: this.sardines,
       yarn: this.yarn, hp: cat ? cat.hp / def.maxHp : 0, energy: cat ? cat.energy / def.maxEnergy : 0, energyAbs: cat ? cat.energy : 0, maxEnergy: def.maxEnergy,
       alive: cat ? cat.alive : false, respawnT: cat ? cat.respawnT : 0, name: cat ? cat.name : '', kind: cat ? cat.kind : 'fred',
       secCd: cat ? cat.secT / (secCd * this.mods.abilityCd) : 0,

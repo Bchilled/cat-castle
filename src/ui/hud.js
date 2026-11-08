@@ -101,6 +101,10 @@ export class Hud {
     if (h.item) { $('ab-item-name').textContent = ITEMS[h.item].name; $('ab-item-note').textContent = h.itemCd > 0 ? `${Math.ceil(h.itemCd * ITEMS[h.item].cd)}s` : 'ready'; setCd($('ab-item'), h.itemCd, true); }
     if (this.portraitKind !== h.kind) { this.portraitKind = h.kind; $('me-face').src = portraitURL(h.kind); $('me-face').style.outline = `3px solid ${(CATS[h.kind] || CATS.fred).collar}`; }
     $('me').classList.toggle('buffed', h.buffT > 0);
+    // Co-op: your friend's health under your name.
+    const mates = [...this.sim.cats.values()].filter(c => c.id !== h.id);
+    const mk = mates.map(c => `${c.name} ${c.alive ? Math.max(0, Math.round(c.hp / c.def.maxHp * 100)) + '%' : 'down'}`).join(' · ');
+    if (mk !== this.lastMates) { this.lastMates = mk; $('mates').textContent = mk; }
     // Trap info card while a trap is in hand.
     if (sel) {
       const d = TRAPS[sel];

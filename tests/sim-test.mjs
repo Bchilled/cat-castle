@@ -541,4 +541,30 @@ for (const id of MAP_ORDER) {
   const evt = run(tt, 8);
   ok(ttr && ttr.y > 3 && evt.some(e => e.t === 'snap'), `the Snapper up on the island snaps a climbing mouse (hp ${Math.max(0, tm.hp).toFixed(0)})`);
 }
+// 35. Co-op: the guest's mirror matches the host's game from snapshots + events, and the
+// guest's commands (sent as p2) work on the host.
+{
+  const C = await import('../src/net/coop.js');
+  const host = new Sim({ seed: 600, map: 'kitchen' }); host.addPlayer('p1', 'fred'); host.addPlayer('p2', 'puddin', { loadout: ['mousetrap', 'hotplate'], hat: 'tophat' }); host.sardines = 1e4;
+  const mirror = new Sim({ seed: 600, map: 'kitchen' }); mirror.addPlayer('p1', 'fred'); mirror.addPlayer('p2', 'puddin');
+  // Guest places a trap: arrives at the host as p2.
+  host.command({ ...{ type: 'place', trap: 'hotplate', ax: 60, az: 120, rot: 0 }, id: 'p2' });
+  host.command({ type: 'startWave' });
+  let ev = [];
+  for (let t = 0; t < 30 * 40; t++) {
+    host.command({ type: 'input', id: 'p2', mx: 0.5, mz: 0, yaw: 1, primary: true });
+    host.step(); ev.push(...host.events.filter(e => !C.SKIP_EVENTS.has(e.t))); host.events.length = 0;
+    if (t % 2 === 0) { const msg = JSON.parse(JSON.stringify({ s: C.snapshot(host), ev })); ev = []; C.applySnapshot(mirror, msg.s); for (const e of msg.ev) C.applyEvent(mirror, e); }
+  }
+  const hm = host.mice.filter(m => !m.dead);
+  ok(hm.length > 5 && mirror.mice.length === hm.length, `mirror has the same mice (${mirror.mice.length}/${hm.length})`);
+  const far = hm.reduce((a, m) => { const q = mirror.mice.find(o => o.id === m.id); return Math.max(a, q ? Math.hypot(q.x - m.x, q.z - m.z) : 99); }, 0);
+  ok(far < 0.5, `and in the same places (worst ${far.toFixed(2)} units)`);
+  const p2 = host.cats.get('p2'), g2 = mirror.cats.get('p2');
+  ok(Math.hypot(p2.x - g2.x, p2.z - g2.z) < 1 && host.cats.get('p2').x > 30, 'the guest cat moves on the host and on the guest');
+  ok(mirror.traps.size === 1 && [...mirror.traps.values()][0].kind === 'hotplate' && host.traps.size === 1, "the guest's trap is placed on the host and shows for the guest");
+  ok(mirror.sardines === host.sardines && mirror.wave === host.wave && mirror.lives === host.lives, 'shared Paw Points, wave and lives match');
+  const bytes = JSON.stringify({ s: C.snapshot(host) }).length;
+  ok(bytes < 20000, `a snapshot is small enough to send 15 times a second (${(bytes / 1024).toFixed(1)} KB)`);
+}
 process.exit(fails ? 1 : 0);

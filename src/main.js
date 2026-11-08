@@ -8,6 +8,7 @@ import { Sim } from './sim/sim.js';
 import { MAPS, MAP_ORDER } from './sim/map.js';
 import { W, CELL, GATE } from './sim/map.js';
 import { LocalTransport } from './net/local.js';
+import { hostRoom, joinRoom, roomCode, snapshot, applySnapshot, applyEvent, SKIP_EVENTS } from './net/coop.js';
 import { Scene } from './render/scene.js';
 import { Hud } from './ui/hud.js';
 import * as THREE from 'three';
@@ -16,7 +17,6 @@ import { loadProfile, saveProfile, sandboxProfile, unlockedTraps, unlockedItems,
 import { openShop } from './ui/shop.js';
 import { trapIcons } from './ui/icons.js';
 
-const LOCAL_ID = 'p1';
 
 // Saved progress between runs: paw prints, yarn, unlocks, upgrades, hats (meta/profile.js).
 // ?sandbox in the URL: everything unlocked with plenty to spend, nothing saved.
@@ -26,6 +26,7 @@ const relaunch = (flag) => { location.href = location.pathname + '?' + [SANDBOX 
 const dropFlags = () => history.replaceState(null, '', location.pathname + (SANDBOX ? '?sandbox' : ''));
 window.__relaunch = relaunch;   // the end screen's buttons use it
 const profile = SANDBOX ? sandboxProfile() : loadProfile();
+let coop = null;   // co-op session (see the co-op section below); null = playing alone
 // Sound: needs a click before the browser allows it, so unlock on the first one.
 const sfx = new Sfx();
 document.addEventListener('pointerdown', () => sfx.unlock(), { once: false });
@@ -87,6 +88,7 @@ function pickCat(k) {
     abilityRows(k).map(([key, name, note, el]) => `<div class="ab-row"><i>${key}</i> <b>${name}</b> ${elTag(el)} — ${note}</div>`).join('') +
     `<div class="stats">Health ${d.maxHp} · Energy ${d.maxEnergy} (+${d.energyRegen}/s) · Speed ${d.speed}</div>`;
   pv.show(k);
+  if (coop && coop.role === 'guest' && coop.link) coop.link.send(hello());   // tell the host which cat you picked
 }
 document.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => { sfx.unlock(); sfx.play('click'); pickCat(b.dataset.cat); }));
 pickCat(chosenCat);
@@ -131,15 +133,66 @@ drawMaps();
 if (new URLSearchParams(location.search).has('go')) setTimeout(() => { previewOn = false; dropFlags(); start('normal'); }, 0);
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
   if (loadout.length < 1) { sfx.play('deny'); return; }
-  previewOn = false; start(b.dataset.mode);
+  if (coop && coop.role === 'guest') { sfx.play('deny'); coopStatus('The host starts the game.'); return; }
+  previewOn = false;
+  if (coop && coop.role === 'host' && coop.link) {
+    // Tell the guest what we're playing, then both start the same map with the same seed.
+    const seed = (Date.now() & 0xffff) | 1, host = { cat: chosenCat, hat: profile.worn[chosenCat] || null, item: chosenItem };
+    coop.link.send({ t: 'start', map: chosenMap, mode: b.dataset.mode, seed, host });
+    start(b.dataset.mode, { ...coop, seed, map: chosenMap });
+  } else { coop = null; start(b.dataset.mode); }   // hosting but nobody joined yet: just play
 }));
 
-function start(mode) {
+// ---------- co-op (two players online) ----------
+// Host: makes a room code. Guest: types it in. The host picks the map and presses Play.
+const coopStatus = (t) => { document.getElementById('coopstatus').textContent = t; };
+const hello = () => ({ t: 'hello', cat: chosenCat, loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null });
+document.getElementById('hostbtn').onclick = async () => {
+  if (coop) return; sfx.unlock(); sfx.play('click');
+  const code = roomCode(); coop = { role: 'host', code };
+  try {
+    const { link, hello: h } = await hostRoom(code, coopStatus);
+    coop.link = link; coop.hello = h;
+    coopStatus(`${CATS[h.cat] ? CATS[h.cat].name : 'A cat'} joined room ${code}! Pick a map and press Play.`); sfx.play('intro');
+    link.on('data', (d) => { if (d && d.t === 'hello') { coop.hello = d; coopStatus(`${CATS[d.cat].name} is ready in room ${code}. Pick a map and press Play.`); } });
+    link.on('close', () => { if (!coop.started) { coop = null; coopStatus('Your friend left.'); } });
+  } catch { coop = null; }
+};
+document.getElementById('joinbtn').onclick = async () => {
+  const code = document.getElementById('joincode').value.trim().toUpperCase();
+  if (coop || code.length !== 4) { sfx.play('deny'); return; }
+  sfx.unlock(); sfx.play('click'); coop = { role: 'guest', code }; coopStatus(`Joining ${code}…`);
+  try {
+    const link = await joinRoom(code, hello(), coopStatus);
+    coop.link = link;
+    link.on('data', (d) => { if (d && d.t === 'start' && !coop.started) { previewOn = false; start(d.mode, { ...coop, seed: d.seed, map: d.map, host: d.host }); } });
+    link.on('close', () => { if (!coop.started) { coop = null; coopStatus('The host closed the room.'); } });
+  } catch { coop = null; }
+};
+
+// co = null (solo) or { role: 'host'|'guest', link, seed, map, hello (host: the guest's cat), host (guest: the host's cat) }.
+function start(mode, co = null) {
   document.getElementById('menu').classList.remove('show');
   sfx.unlock(); sfx.setMusic('build');
-  const sim = new Sim({ mode, seed: (Date.now() & 0xffff) | 1, map: chosenMap });
-  sim.addPlayer(LOCAL_ID, chosenCat, { loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null });
-  const net = new LocalTransport(sim);
+  if (co) { co.started = true; chosenMap = co.map; }
+  const guest = co && co.role === 'guest', LOCAL_ID = guest ? 'p2' : 'p1';
+  const sim = new Sim({ mode, seed: co ? co.seed : (Date.now() & 0xffff) | 1, map: chosenMap });
+  const mine = { loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null };
+  if (!co) sim.addPlayer('p1', chosenCat, mine);
+  else if (!guest) { sim.addPlayer('p1', chosenCat, mine); const h = co.hello; sim.addPlayer('p2', h.cat, { loadout: h.loadout, item: h.item, upgrades: h.upgrades, hat: h.hat }); }
+  else { sim.addPlayer('p1', co.host.cat, { hat: co.host.hat, item: co.host.item }); sim.addPlayer('p2', chosenCat, mine); }
+  // Solo/host: commands go straight into the sim. Guest: they go to the host.
+  const net = guest ? { send: (cmd) => co.link.send({ t: 'cmd', cmd }) } : new LocalTransport(sim);
+  // Host: the guest's commands come in over the link (always as p2, whatever they claim).
+  let outbox = [], snapT = 0, inbox = [];
+  if (co && !guest) {
+    co.link.on('data', (d) => { if (d && d.t === 'cmd' && d.cmd) sim.command({ ...d.cmd, id: 'p2' }); });
+    co.link.on('close', () => { hud.message('Your friend left. Carry on!'); co.gone = true; });
+  }
+  if (guest) {
+    co.link.on('data', (d) => { if (d && d.t === 'snap') inbox.push(d); else if (d && d.t === 'pause') hud.message(d.p ? 'The host paused the game' : 'Back to it!'); });
+    co.link.on('close', () => { if (!ended) { hud.message('The host left the game.'); setTimeout(() => relaunch(''), 3000); } });
+  }
   const canvas = document.getElementById('game');
   const scene = new Scene(canvas, sim);
   const hud = new Hud(sim, loadout);
@@ -153,7 +206,10 @@ function start(mode) {
   // Pause: losing the mouse (Esc) pauses the game and shows volume + controls.
   let paused = false, hadLock = false;
   const pauseEl = document.getElementById('pause');
-  const setPaused = (p) => { paused = p; pauseEl.classList.toggle('show', p); };
+  const setPaused = (p) => {
+    paused = p; pauseEl.classList.toggle('show', p);
+    if (co && !guest && co.link && !co.gone) co.link.send({ t: 'pause', p });   // the host pausing pauses both
+  };
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement === canvas) { hadLock = true; setPaused(false); }
     else if (hadLock && !ended) setPaused(true);
@@ -298,8 +354,17 @@ function start(mode) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now; acc += dt;
     aim = scene.aim();
     if (paused) acc = 0;
-    while (acc >= DT) {
-      sendInput(); sim.step(); acc -= DT;
+    // Guest: apply whatever the host has sent (positions + events), newest last.
+    if (guest) {
+      for (const d of inbox) { applySnapshot(sim, d.s); for (const e of d.ev) { applyEvent(sim, e); sim.events.push(e); } }
+      inbox.length = 0;
+    }
+    while (acc >= DT || (guest && sim.events.length)) {
+      if (acc >= DT) { sendInput(); if (!guest) sim.step(); acc -= DT; }
+      if (co && !guest && !co.gone) {
+        for (const e of sim.events) if (!SKIP_EVENTS.has(e.t)) outbox.push(e);
+        if (++snapT % 2 === 0) { co.link.send({ t: 'snap', s: snapshot(sim), ev: outbox }); outbox = []; }   // 15 snapshots a second
+      }
       for (const e of sim.events) {
         scene.onEvent(e);
         sound(e);
@@ -317,7 +382,7 @@ function start(mode) {
           // Won a map: offer the next stretch of the journey.
           const nextMap = MAP_ORDER[MAP_ORDER.indexOf(chosenMap) + 1];
           const endEl = document.getElementById('end');
-          if (e.won && nextMap) {
+          if (e.won && nextMap && !co) {   // co-op: host a new room to carry on together
             const b = document.createElement('button'); b.className = 'play'; b.textContent = `Onward: ${MAPS[nextMap].name}`;
             b.onclick = () => { save('catcastle.map', nextMap); relaunch('go'); };
             endEl.prepend(b);

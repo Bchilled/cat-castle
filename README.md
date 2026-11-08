@@ -1,6 +1,6 @@
 # Nine Lives Keep
 
-Cats vs mice trap tower defense in the browser (Three.js), at mouse scale in a human castle. Play as Fred (quick, fragile, ranged ginger tom) or Puddin (huge, slow, biting calico) and stop the mice pushing room by room toward the king's chamber. Sound and music are synthesised live in the browser (no audio files).
+Cats vs mice trap tower defense in the browser (Three.js), in the spirit of Orcs Must Die, at mouse scale in a human castle. Seven cats, each with their own attacks, abilities, jump and health. Six maps make one journey from the castle entrance to the kitchen. There are 22 traps, 10 items and 12 elements that combo, and a shop between runs. Play solo or with a friend online. Sound and music are synthesised live in the browser (no audio files).
 
 Play: https://brentsnow.ca/cat-castle/
 
@@ -13,21 +13,73 @@ python -m http.server 8000
 
 Then go to http://localhost:8000. (Opening the file directly won't work; browsers block ES modules from `file://`.)
 
+URL options:
+- `?sandbox` unlocks everything with plenty of paw prints to try things out (nothing is saved).
+- `?local` tests co-op in two tabs on one computer, instead of over the internet.
+
 ## Controls
-Click the game to lock the mouse. WASD move, mouse look, wheel zooms the camera. Hold left click to attack (Fred spits pellets, Puddin bites). Right click is Fred's hairball or Puddin's pounce, or places the trap you're holding. Space jumps (Fred double-jumps and wall-kicks; Puddin holds to charge a leap). Keys 1–8 pick a trap, R rotates it, X sells the trap under the crosshair, Q puts it away. E trades tails at a stash. G starts the next wave. H hides the controls panel.
+Click the game to lock the mouse.
+
+| Key | Action |
+| --- | --- |
+| WASD | Move |
+| Mouse | Look |
+| Wheel | Zoom |
+| Left click (hold) | Attack |
+| Right click | Your cat's ability, or place the trap you're holding |
+| E | Second ability |
+| Space | Jump |
+| Q | Your item |
+| 1–8 | Pick a trap (press again to put it away) |
+| R | Rotate the trap |
+| X | Sell the trap under the crosshair |
+| G | Start the next wave |
+| F (hold) | Sniff out where the mice are going |
+| M | Mute |
+| Esc | Pause |
+| H | Hide the controls |
+
+Floor traps also go on table and counter tops: aim at the top.
 
 ## How it plays
-Map 1 is the castle entrance. Mice pour out of a hole in a tree stump, run the walled forest road, cross the moat on a fallen branch, chew through a board jammed in the portcullis (it breaks in a few bites and stays down; a siege mouse knocks it out on wave 6 if it's still standing), run the roofed gatehouse tunnel, then split around the guardhouse toward the mouse hole into the great hall. They take the cheapest route, which you can see as glowing arrows on the floor, and reroute when traps change. You can't seal every route, but they'll chew through barricades when that's cheaper. They come in mobs, and a packed mob is faster and tougher.
+Mice pour out of the holes and take the cheapest route to the exit. You can see that route as glowing arrows on the floor.
+- **Routes:** they re-route when you build. You can wall them into a maze with Poison Boxes, but never seal them in.
+- **Packs:** they split between lanes. They remember where they keep dying and avoid it, and scouts run ahead.
+- **Shortcuts:** they smash through crate stacks when it's worth it.
+- **Food:** they stop to eat food piles, and climb furniture to eat what's on top. Eating makes them tougher.
+- **Bosses:** a mini boss every 6th wave and a big boss every 12th. Clear wave 24 to win the map and move onward.
 
-Dead mice drop tails; carry them to a stash and trade them for sardines, which buy traps. Rarely they drop trinkets that buff you for the rest of the run. Dying costs 3 lives and drops your tails (lost if you drown). Anything in the moat dies.
+Kills pay Paw Points, which buy traps in the game. Every attack and trap has an element:
+- **Wet + electric** chains between mice.
+- **Oily + fire** blazes.
+- **Wet + ice** freezes.
+- **Wind** spreads fire and poison.
+- **Dirty + physics** knocks mice flat.
 
-20 lives. Clear wave 24 to win; mini boss every 6th wave, big boss rat every 12th. Endless keeps going. Winning rates 1–5 paw prints plus bonus paws, saved in the browser along with yarn from bosses.
+Paw prints and yarn are kept between runs, and spent in the shop:
+- unlock traps and items
+- upgrade traps (tier 2 and 3, then one of two specials)
+- buy hats
+
+## Co-op
+One player presses **Host a game** and reads out the 4-letter code. The other types it in and presses **Join**. The host picks the map and presses Play.
+
+The host's browser runs the game and the guest's browser mirrors it; they connect peer-to-peer over WebRTC using PeerJS. Paw Points and lives are shared. Each player brings their own cat, traps, upgrades and hat. If the host pauses, both pause.
 
 ## Code layout
-`src/sim/` is the game rules with no graphics, on a fixed 30 Hz tick with seeded randomness. `src/render/` draws it, `src/ui/` is the HUD, `src/net/local.js` is the single-player transport. Every player action is a command object, so co-op later means swapping the transport (host runs the sim, clients send commands) without touching the rules.
+- `src/sim/` is the game rules with no graphics. It runs on a fixed 30 Hz tick with seeded randomness.
+- `src/render/` draws the game.
+- `src/ui/` is the HUD, the shop and the menus.
+- `src/meta/profile.js` holds what's kept between runs.
+- `src/net/` is the transport. Every player action is a command object, so co-op only swaps the transport (`coop.js`: snapshots out, commands in) without touching the rules.
 
 ## Tests
 ```
 node tests/sim-test.mjs
 ```
-Runs the rules headless: pathing, rerouting, gate, drowning, trap placement, cat physics, claw, cheese selling, and a long multi-wave run.
+Runs the rules headless:
+- pathing, re-routing and mazes
+- every trap, element combo and resistance
+- the shop
+- smarter mice and climbing
+- co-op snapshots

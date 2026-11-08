@@ -42,7 +42,9 @@
   /* Hold F to sniff: the world dims, scent trails glow green. */
   body.sniffing canvas { filter: brightness(0.7) contrast(1.15); }
   body.sniffing::after { content: "sniffing…"; position: fixed; top: 46%; left: 50%; transform: translateX(-50%); color: #9af08a; font-size: 13px; letter-spacing: 3px; pointer-events: none; }
-  #me b { color: var(--accent); }
+  #me b { color: var(--accent); } #mates { display: block; color: var(--dim); font-size: 12px; margin: 4px 0 0 40px; } #mates:empty { display: none; }
+  #coop { margin: 10px auto 0; } #coop input { font: inherit; font-size: 16px; width: 70px; text-transform: uppercase; text-align: center; padding: 6px; background: #2a2018; color: var(--ink); border: 2px solid #0e0b09; border-radius: 6px; }
+  #coopstatus { color: var(--accent); min-height: 18px; font-size: 13px; }
   /* Whisker crosshair */
   #crosshair { position: fixed; top: 50%; left: 50%; width: 120px; height: 44px; margin: -22px -60px; pointer-events: none; }
   #crosshair svg { width: 100%; height: 100%; overflow: visible; }
@@ -140,7 +142,7 @@
 <div id="bossbar" class="panel" style="display:none"><span id="bossname"></span><div class="bar"><i id="bosshp"></i></div></div>
 <div id="trapinfo" class="panel" style="display:none"></div>
 <div id="radarbox" class="panel"><canvas id="radar" width="200" height="200"></canvas><div id="trinkets"></div></div>
-<div id="me" class="panel"><img id="me-face" alt=""><span id="catname"></span></div>
+<div id="me" class="panel"><img id="me-face" alt=""><span id="catname"></span><small id="mates"></small></div>
 <div id="crosshair"></div>
 <div id="abilities">
   <div class="ab"><span class="k">Left click</span><span id="ab-pri-name"></span><small id="ab-pri-note"></small></div>
@@ -177,6 +179,7 @@
     <button data-mode="endless">Endless</button>
     <button id="shopbtn">Shop</button>
   </div>
+  <div id="coop"><b>Co-op</b> <button id="hostbtn">Host a game</button> or join with a code <input id="joincode" maxlength="4" placeholder="CODE"> <button id="joinbtn">Join</button><div id="coopstatus"></div></div>
   <p id="profile" class="dim"></p>
   <p class="tip" id="tip"></p>
 </div>

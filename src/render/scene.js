@@ -268,7 +268,7 @@ export class Scene {
     this.syncSimple(this.sim.props, this.propMeshes, (p) => makeProp(p.kind), (g, p) => {
       g.position.set(p.x, p.y, p.z); g.rotation.z = p.state === 'up' ? 0 : Math.min(Math.PI / 2, p.tilt);
     });
-    if (this.lantern) { const c = this.sim.cats.values().next().value; if (c) this.lantern.position.set(c.x, c.y + 2.5, c.z); }
+    if (this.lantern) { const c = this.sim.cats.get(this.localId) || this.sim.cats.values().next().value; if (c) this.lantern.position.set(c.x, c.y + 2.5, c.z); }   // your own glow
   }
 
   archHole(x, z, rotY, r, color) {
@@ -590,6 +590,7 @@ export class Scene {
   zoom(delta) { if (this.camDist != null) this.camDist = Math.max(2.5, Math.min(10, this.camDist + delta)); }
 
   render(dt, camYaw, camPitch, localId) {
+    this.localId = localId;
     const sim = this.sim, k = 1 - Math.exp(-dt * 20), now = performance.now();
     // ----- cats -----
     for (const cat of sim.cats.values()) {

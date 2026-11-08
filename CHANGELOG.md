@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.13.0 — 2026-11-07
+Online co-op (two players)
+- On the menu, one player presses Host a game and gets a 4-letter room code; the other types it in and presses Join. The host picks the map and presses Play; both start together.
+- The host's browser runs the game. The guest's browser mirrors it: 15 snapshots a second (about 1–12 KB each) plus the events for sounds and effects. The guest sends its own inputs, trap placing, items and wave starts.
+- Shared: Paw Points, lives and wave. Each player's own: cat, loadout, upgrades, item and hat.
+- Your friend's health shows under your name.
+- If the host pauses, both pause. If either leaves, the other is told (a host leaving ends the guest's game).
+- Each player earns their own paw prints and yarn at the end.
+- Connection: peer-to-peer WebRTC through PeerJS (its free server only introduces the two browsers). `?local` runs co-op between two tabs on one computer for testing.
+- Not tested yet over the real internet from here (the sandbox can't reach the PeerJS server). Tested: two tabs on one browser (connect, start, guest moves and starts the wave, both see the same game) and a headless mirror test.
+- `src/net/coop.js` (new), `src/main.js` (menu co-op panel, start() takes a co-op session, snapshot loop, 136–195 and 357–367), `src/ui/hud.js` (teammate health), `src/render/scene.js` (cellar glow follows your own cat), `index.html` (co-op panel), `src/sim/sim.js` (hud snapshot carries the player id).
+
+Docs
+- README rewritten for the current game (it still described tails, stashes and two cats).
+
+Tests: 167 checks, all passing:
+- co-op: the guest's mirror has the same mice, in the same places
+- the guest's cat moves and its traps go down on the host
+- shared Paw Points, wave and lives match
+- snapshot size
+
 ## 0.12.0 — 2026-11-07
 Smarter mice
 - They learn: every mouse that dies marks its patch of floor (a 4x4-unit area) as dangerous. Small mice add that to their path cost, so a lane they keep dying in gets dearer and packs pick other lanes. In tests, packs take a deadly lane about 1 time in 40 instead of 1 in 3. It fades over about 20 seconds (and halves between waves). Bosses don't care. The radar shows where they're scared of as faint red patches. `src/sim/sim.js` addDanger, stepDanger, updateFlow (danger added for small mice only), extraOfBig.
