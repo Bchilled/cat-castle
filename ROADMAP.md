@@ -9,7 +9,7 @@ Orcs Must Die at heart, but it's cats and mice in a human castle. These are the 
 - Six cats, each with left click, right click, a jump and a passive.
 
 ## A. A living castle you can climb (scale and verticality)
-In from v0.10.0: all six maps, mazing with Poison Boxes, knock-over props, food piles mice gorge on, mud, troughs, darkness, timed doors, fire. In from v0.12.0: mice climb furniture to eat, floor traps on furniture tops, crate stacks mice smash open. Still to do here: full multi-level routes (mice running along tabletops as a path), bigger things that fall over, humans in the background.
+In from v0.10.0: all six maps, mazing with Poison Boxes, knock-over props, food piles mice gorge on, mud, troughs, darkness, timed doors, fire. In from v0.12.0: mice climb furniture to eat, floor traps on furniture tops, crate stacks mice smash open. In from v0.14.0: furniture routes (mice climb over fences, crates and the cheese wheel when it's shorter). Still to do here: longer runs along tabletops and shelves, bigger things that fall over, humans in the background.
 - Furniture at real scale that cats and mice can both jump onto: market stalls, food stands, tables, benches, shelves, barrels, crates and sacks. Traps go on the floor, walls and ceilings of all of it.
 - Mice climb and jump between levels. Pathing becomes multi-level, with jump links between floor, tabletops and shelves. Mice still never go over a barricade.
 - Infesting: mice stop at food (stalls, sacks, the kitchen) to eat. That holds them in place and buys time to build.
@@ -84,7 +84,7 @@ Equippable actives with cooldowns, for example:
 - Next: avoid tiles where many mice just died (they learn), send scouts, and break props to open shortcuts. Siege mice wreck things along a long route.
 
 ## G. Co-op
-In from v0.13.0: two-player online co-op (host + guest, room codes, peer-to-peer). Next: client-side prediction so the guest's own cat feels instant, more than two players, carry on to the next map together.
+In from v0.13.0: online co-op (room codes, peer-to-peer). In from v0.14.0: up to four cats, onward or retry together, instant movement for guests.
 
 ## Open questions for Brent
 1. Which of A–F comes first? Suggested order: A (climbing and infesting, because everything else sits on it), then C (shop and upgrades), with B, D and E filling in alongside.

@@ -51,6 +51,8 @@ const TIPS = [
   "In the servants' passages the doors swing shut on a timer. Watch the radar: brown = shut.",
   'Kitchen fires burn mice and cats alike. Fling mice into them.',
   'Win a map to move onward: entrance, market, stables, cellar, passages, kitchen.',
+  'Mice climb over fences, crates and buckets when it beats going round. Box both sides, or trap the top.',
+  'Co-op: up to four cats. The host picks the map; when you win, the host takes everyone onward.',
 ];
 { let k = Math.floor(Math.random() * TIPS.length); const show = () => { const el = document.getElementById('tip'); if (el) el.textContent = 'Tip: ' + TIPS[k++ % TIPS.length]; }; show(); setInterval(show, 6000); }
 const showWallet = () => { document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn${SANDBOX ? ' · sandbox (nothing saved)' : ''}`; };
@@ -135,29 +137,36 @@ document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click'
   if (loadout.length < 1) { sfx.play('deny'); return; }
   if (coop && coop.role === 'guest') { sfx.play('deny'); coopStatus('The host starts the game.'); return; }
   previewOn = false;
-  if (coop && coop.role === 'host' && coop.link) {
-    // Tell the guest what we're playing, then both start the same map with the same seed.
-    const seed = (Date.now() & 0xffff) | 1, host = { cat: chosenCat, hat: profile.worn[chosenCat] || null, item: chosenItem };
-    coop.link.send({ t: 'start', map: chosenMap, mode: b.dataset.mode, seed, host });
-    start(b.dataset.mode, { ...coop, seed, map: chosenMap });
-  } else { coop = null; start(b.dataset.mode); }   // hosting but nobody joined yet: just play
+  if (coop && coop.role === 'host' && coop.guests.length) hostStart(b.dataset.mode, chosenMap);
+  else { if (coop && coop.room) coop.room.close(); coop = null; start(b.dataset.mode); }   // hosting but nobody joined yet: just play
 }));
 
-// ---------- co-op (two players online) ----------
-// Host: makes a room code. Guest: types it in. The host picks the map and presses Play.
+// ---------- co-op (up to four cats online) ----------
+// Host: makes a room code. Guests: type it in. The host picks the map and presses Play.
+// Players: p1 = host, p2..p4 = guests in the order they joined.
 const coopStatus = (t) => { document.getElementById('coopstatus').textContent = t; };
 const hello = () => ({ t: 'hello', cat: chosenCat, loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null });
+const lobbyLine = () => coop.guests.length ? `Room ${coop.code}: ${[CATS[chosenCat].name + ' (you)', ...coop.guests.map(g => CATS[g.hello.cat].name)].join(', ')}. Pick a map and press Play.` : `Room ${coop.code}: waiting for friends…`;
 document.getElementById('hostbtn').onclick = async () => {
   if (coop) return; sfx.unlock(); sfx.play('click');
-  const code = roomCode(); coop = { role: 'host', code };
+  const code = roomCode(); coop = { role: 'host', code, guests: [] };
   try {
-    const { link, hello: h } = await hostRoom(code, coopStatus);
-    coop.link = link; coop.hello = h;
-    coopStatus(`${CATS[h.cat] ? CATS[h.cat].name : 'A cat'} joined room ${code}! Pick a map and press Play.`); sfx.play('intro');
-    link.on('data', (d) => { if (d && d.t === 'hello') { coop.hello = d; coopStatus(`${CATS[d.cat].name} is ready in room ${code}. Pick a map and press Play.`); } });
-    link.on('close', () => { if (!coop.started) { coop = null; coopStatus('Your friend left.'); } });
+    coop.room = await hostRoom(code, coopStatus, ({ link, hello: h }) => {
+      const g = { link, hello: h, id: 'p' + (coop.guests.length + 2) }; coop.guests.push(g);
+      coopStatus(lobbyLine()); sfx.play('intro');
+      link.on('data', (d) => { if (d && d.t === 'hello') { g.hello = d; if (!coop.started) coopStatus(lobbyLine()); } });
+      link.on('close', () => { g.gone = true; if (!coop.started) { coop.guests = coop.guests.filter(x => x !== g); coopStatus(lobbyLine()); } });
+    });
   } catch { coop = null; }
 };
+// Host: tell every guest what we're playing (same map, same seed, who is who), then start.
+function hostStart(mode, map) {
+  const seed = (Date.now() & 0xffff) | 1;
+  const live = coop.guests.filter(g => !g.gone);
+  const players = [{ id: 'p1', cat: chosenCat, hat: profile.worn[chosenCat] || null, item: chosenItem }, ...live.map(g => ({ id: g.id, cat: g.hello.cat, hat: g.hello.hat, item: g.hello.item }))];
+  for (const g of live) g.link.send({ t: 'start', map, mode, seed, you: g.id, players });
+  start(mode, { ...coop, role: 'host', seed, map, players, guests: live });
+}
 document.getElementById('joinbtn').onclick = async () => {
   const code = document.getElementById('joincode').value.trim().toUpperCase();
   if (coop || code.length !== 4) { sfx.play('deny'); return; }
@@ -165,59 +174,102 @@ document.getElementById('joinbtn').onclick = async () => {
   try {
     const link = await joinRoom(code, hello(), coopStatus);
     coop.link = link;
-    link.on('data', (d) => { if (d && d.t === 'start' && !coop.started) { previewOn = false; start(d.mode, { ...coop, seed: d.seed, map: d.map, host: d.host }); } });
+    // 'start' also arrives mid-game when the host moves everyone on to the next map.
+    link.on('data', (d) => { if (d && d.t === 'start') { previewOn = false; start(d.mode, { ...coop, role: 'guest', seed: d.seed, map: d.map, you: d.you, players: d.players }); } });
     link.on('close', () => { if (!coop.started) { coop = null; coopStatus('The host closed the room.'); } });
   } catch { coop = null; }
 };
 
-// co = null (solo) or { role: 'host'|'guest', link, seed, map, hello (host: the guest's cat), host (guest: the host's cat) }.
+// co = null (solo) or a co-op session: { role: 'host'|'guest', seed, map, players: [{ id, cat, hat, item }],
+// guests (host: [{ link, hello, id }]), link + you (guest: the link to the host and your player id) }.
+// Calling start() again (next map in co-op) tears the running game down first.
+let game = null;
 function start(mode, co = null) {
-  document.getElementById('menu').classList.remove('show');
+  if (game) game.stop();
+  document.getElementById('menu').classList.remove('show'); document.getElementById('end').classList.remove('show');
   sfx.unlock(); sfx.setMusic('build');
-  if (co) { co.started = true; chosenMap = co.map; }
-  const guest = co && co.role === 'guest', LOCAL_ID = guest ? 'p2' : 'p1';
+  if (co) { co.started = true; chosenMap = co.map; coop = co; }
+  const guest = co && co.role === 'guest', LOCAL_ID = guest ? co.you : 'p1';
   const sim = new Sim({ mode, seed: co ? co.seed : (Date.now() & 0xffff) | 1, map: chosenMap });
   const mine = { loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null };
   if (!co) sim.addPlayer('p1', chosenCat, mine);
-  else if (!guest) { sim.addPlayer('p1', chosenCat, mine); const h = co.hello; sim.addPlayer('p2', h.cat, { loadout: h.loadout, item: h.item, upgrades: h.upgrades, hat: h.hat }); }
-  else { sim.addPlayer('p1', co.host.cat, { hat: co.host.hat, item: co.host.item }); sim.addPlayer('p2', chosenCat, mine); }
-  // Solo/host: commands go straight into the sim. Guest: they go to the host.
-  const net = guest ? { send: (cmd) => co.link.send({ t: 'cmd', cmd }) } : new LocalTransport(sim);
-  // Host: the guest's commands come in over the link (always as p2, whatever they claim).
+  else for (const p of co.players) {
+    if (p.id === LOCAL_ID) sim.addPlayer(p.id, chosenCat, mine);
+    else if (!guest) { const g = co.guests.find(x => x.id === p.id), h = g.hello; sim.addPlayer(p.id, h.cat, { loadout: h.loadout, item: h.item, upgrades: h.upgrades, hat: h.hat }); }
+    else sim.addPlayer(p.id, p.cat, { hat: p.hat, item: p.item });
+  }
+  // Everything this game hooks up, so the next game can unhook it: DOM listeners and link handlers.
+  const ac = new AbortController(), sig = { signal: ac.signal }, offs = [];
+  let running = true;
+  // Solo/host: commands go straight into the sim. Guest: they go to the host (with a sequence
+  // number, so the host can say which input it has got to: see prediction below).
+  let seq = 0;
+  const net = guest ? { send: (cmd) => co.link.send({ t: 'cmd', cmd: { ...cmd, seq: cmd.type === 'input' ? seq : undefined } }) } : new LocalTransport(sim);
   let outbox = [], snapT = 0, inbox = [];
   if (co && !guest) {
-    co.link.on('data', (d) => { if (d && d.t === 'cmd' && d.cmd) sim.command({ ...d.cmd, id: 'p2' }); });
-    co.link.on('close', () => { hud.message('Your friend left. Carry on!'); co.gone = true; });
+    // Each guest's commands come in on its own link, as its own player (whatever it claims).
+    for (const g of co.guests) {
+      offs.push(g.link.on('data', (d) => { if (d && d.t === 'cmd' && d.cmd) sim.command({ ...d.cmd, id: g.id }); }));
+      offs.push(g.link.on('close', () => { if (!g.gone) { g.gone = true; hud.message(`${sim.cats.get(g.id).name} left. Carry on!`); } }));
+    }
   }
   if (guest) {
-    co.link.on('data', (d) => { if (d && d.t === 'snap') inbox.push(d); else if (d && d.t === 'pause') hud.message(d.p ? 'The host paused the game' : 'Back to it!'); });
-    co.link.on('close', () => { if (!ended) { hud.message('The host left the game.'); setTimeout(() => relaunch(''), 3000); } });
+    offs.push(co.link.on('data', (d) => { if (d && d.t === 'snap') inbox.push(d); else if (d && d.t === 'pause') hud.message(d.p ? 'The host paused the game' : 'Back to it!'); }));
+    offs.push(co.link.on('close', () => { if (!ended) { hud.message('The host left the game.'); setTimeout(() => relaunch(''), 3000); } }));
   }
+  const sendAll = (o) => { if (co && !guest) for (const g of co.guests) if (!g.gone) g.link.send(o); };
+  // Guest prediction: your own cat moves locally at once; the host's word corrects it gently.
+  // The host says which of our inputs it had reached (inSeq); compare where it has us with where
+  // we had ourselves after that same input, and shift by half the difference (snap if way off:
+  // a respawn, a boss stomp fling...). Old predictions shift too, so a correction isn't re-applied.
+  const hist = new Array(128);
+  const reconcile = () => {
+    const me = sim.cats.get(LOCAL_ID); if (!me || !me.srv) return;
+    const h = hist[me.inSeq & 127], srv = me.srv;
+    const base = h && h.s === me.inSeq ? h : me;
+    const ex = srv.x - base.x, ey = srv.y - base.y, ez = srv.z - base.z, far = Math.hypot(ex, ez) > 3 || Math.abs(ey) > 3 || !me.alive;
+    const k = far ? 1 : 0.5;
+    if (far) Object.assign(me, srv); else { me.x += ex * k; me.y += ey * k; me.z += ez * k; }
+    for (const q of hist) if (q) { q.x += ex * k; q.y += ey * k; q.z += ez * k; }
+  };
   const canvas = document.getElementById('game');
   const scene = new Scene(canvas, sim);
   const hud = new Hud(sim, loadout);
+  game = { stop() {
+    running = false; ac.abort(); offs.forEach(f => f()); scene.dispose(); document.exitPointerLock?.();
+    const c = document.getElementById('game'); c.replaceWith(c.cloneNode(false));   // a clean canvas for the next game
+  } };
 
   // ---------- input ----------
   const keys = new Set();
   let yaw = Math.PI, pitch = 0.3;
   let attackHeld = false, jumpQ = false, jumpHeld = false, secondaryQ = false, altQ = false;
   let selected = null, rot = 0, aim = null;
-  canvas.addEventListener('click', () => { if (document.pointerLockElement !== canvas) canvas.requestPointerLock(); });
+  canvas.addEventListener('click', () => { if (document.pointerLockElement !== canvas) canvas.requestPointerLock(); }, sig);
   // Pause: losing the mouse (Esc) pauses the game and shows volume + controls.
   let paused = false, hadLock = false;
   const pauseEl = document.getElementById('pause');
   const setPaused = (p) => {
     paused = p; pauseEl.classList.toggle('show', p);
-    if (co && !guest && co.link && !co.gone) co.link.send({ t: 'pause', p });   // the host pausing pauses both
+    sendAll({ t: 'pause', p });   // the host pausing pauses everyone
   };
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement === canvas) { hadLock = true; setPaused(false); }
     else if (hadLock && !ended) setPaused(true);
-  });
+  }, sig);
   document.getElementById('resume').onclick = () => { setPaused(false); canvas.requestPointerLock(); };
   // Element combos cheat sheet on the pause screen.
   document.getElementById('combos').innerHTML = '<b>Element combos</b><br>' + Object.values(COMBOS).map(t => `<b>${t.split(':')[0]}</b>:${t.split(':').slice(1).join(':')}`).join('<br>');
   document.getElementById('quit').onclick = () => relaunch('');
+  // Look settings (saved): mouse sensitivity, invert up/down, field of view.
+  const look = { sens: 1, invert: false, fov: 65, ...load('catcastle.look', {}) };
+  const applyLook = () => { scene.camera.fov = look.fov; scene.camera.updateProjectionMatrix(); save('catcastle.look', look); };
+  const sensEl = document.getElementById('look-sens'), fovEl = document.getElementById('look-fov'), invEl = document.getElementById('look-invert');
+  sensEl.value = look.sens; fovEl.value = look.fov; invEl.checked = look.invert;
+  sensEl.oninput = () => { look.sens = +sensEl.value; applyLook(); };
+  fovEl.oninput = () => { look.fov = +fovEl.value; applyLook(); };
+  invEl.onchange = () => { look.invert = invEl.checked; applyLook(); };
+  applyLook();
   for (const k of ['master', 'music', 'sfx']) {
     const el = document.getElementById('vol-' + k); el.value = sfx.prefs[k];
     el.oninput = () => { sfx.set(k, +el.value); sfx.play('click'); };
@@ -225,22 +277,22 @@ function start(mode, co = null) {
   const muteBtn = document.getElementById('mute'), mutedEl = document.getElementById('muted');
   const showMute = () => { muteBtn.textContent = sfx.prefs.muted ? 'Unmute' : 'Mute'; mutedEl.style.display = sfx.prefs.muted ? 'block' : 'none'; };
   muteBtn.onclick = () => { sfx.toggleMute(); showMute(); }; showMute();
-  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('contextmenu', e => e.preventDefault(), sig);
   document.addEventListener('mousemove', e => {
     if (document.pointerLockElement !== canvas) return;
-    yaw -= e.movementX * 0.0025;
+    yaw -= e.movementX * 0.0025 * look.sens;
     // Wide pitch range so you can look up at table undersides for ceiling traps.
-    pitch = Math.max(-1.25, Math.min(1.2, pitch + e.movementY * 0.0025));
-  });
+    pitch = Math.max(-1.25, Math.min(1.2, pitch + e.movementY * 0.0025 * look.sens * (look.invert ? -1 : 1)));
+  }, sig);
   canvas.addEventListener('mousedown', e => {
     if (document.pointerLockElement !== canvas) return;
     if (e.button === 0) attackHeld = true;                     // left: Fred spits, Puddin bites (hold)
     if (e.button === 2) {                                       // right: place the held trap, else hairball / pounce
       if (selected) placeSelected(); else secondaryQ = true;
     }
-  });
-  document.addEventListener('mouseup', e => { if (e.button === 0) attackHeld = false; });
-  canvas.addEventListener('wheel', e => { e.preventDefault(); scene.zoom(e.deltaY * 0.004); }, { passive: false });   // camera distance
+  }, sig);
+  document.addEventListener('mouseup', e => { if (e.button === 0) attackHeld = false; }, sig);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); scene.zoom(e.deltaY * 0.004); }, { passive: false, signal: ac.signal });   // camera distance
   document.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
     if (k === ' ') e.preventDefault();
@@ -257,9 +309,9 @@ function start(mode, co = null) {
     if (k === 'x' && aim && aim.cell >= 0 && aim.surface !== 'none') net.send({ type: 'sellTrap', id: LOCAL_ID, cell: aim.cell, layer: aim.surface });
     if (k === 'g') net.send({ type: 'startWave', id: LOCAL_ID });
     if (k === 'h') document.getElementById('controls').classList.toggle('hidden');
-  });
+  }, sig);
   document.addEventListener('keyup', e => {
-    if (e.key.toLowerCase() === 'f') { scene.sniff = false; document.body.classList.remove('sniffing'); } const k = e.key.toLowerCase(); keys.delete(k); if (k === ' ') jumpHeld = false; });
+    if (e.key.toLowerCase() === 'f') { scene.sniff = false; document.body.classList.remove('sniffing'); } const k = e.key.toLowerCase(); keys.delete(k); if (k === ' ') jumpHeld = false; }, sig);
 
   // Turn the crosshair hit into a trap anchor + footprint.
   function placement() {
@@ -307,7 +359,15 @@ function start(mode, co = null) {
     let face = yaw;
     const me = sim.cats.get(LOCAL_ID);
     if (a && me && Math.hypot(a.x - me.x, a.z - me.z) > 0.8) face = Math.atan2(a.x - me.x, a.z - me.z);
-    net.send({ type: 'input', id: LOCAL_ID, mx, mz, yaw: face, pitch, jump: jumpQ, jumpHeld, primary: attackHeld && !selected, secondary: secondaryQ, alt: altQ, aim: a });
+    const cmd = { type: 'input', id: LOCAL_ID, mx, mz, yaw: face, pitch, jump: jumpQ, jumpHeld, primary: attackHeld && !selected, secondary: secondaryQ, alt: altQ, aim: a };
+    net.send(cmd);
+    if (guest && me) {
+      // Prediction: run this input on our own cat here and now (its sounds and effects come
+      // from the host, so anything it emits locally is dropped), and remember where it put us.
+      sim.command(cmd); const ev = sim.events.length; sim.stepCat(me); sim.events.length = ev;
+      hist[seq & 127] = { s: seq, x: me.x, y: me.y, z: me.z };
+    }
+    seq++;
     jumpQ = secondaryQ = altQ = false;
   }
 
@@ -351,19 +411,21 @@ function start(mode, co = null) {
 
   let last = performance.now(), acc = 0, ended = false, grindT = 0;
   function frame(now) {
+    if (!running) return;                     // this game was torn down (next map in co-op)
     const dt = Math.min(0.1, (now - last) / 1000); last = now; acc += dt;
     aim = scene.aim();
     if (paused) acc = 0;
     // Guest: apply whatever the host has sent (positions + events), newest last.
     if (guest) {
-      for (const d of inbox) { applySnapshot(sim, d.s); for (const e of d.ev) { applyEvent(sim, e); sim.events.push(e); } }
+      for (const d of inbox) { applySnapshot(sim, d.s, LOCAL_ID); for (const e of d.ev) { applyEvent(sim, e); sim.events.push(e); } }
+      if (inbox.length) reconcile();
       inbox.length = 0;
     }
     while (acc >= DT || (guest && sim.events.length)) {
       if (acc >= DT) { sendInput(); if (!guest) sim.step(); acc -= DT; }
-      if (co && !guest && !co.gone) {
+      if (co && !guest) {
         for (const e of sim.events) if (!SKIP_EVENTS.has(e.t)) outbox.push(e);
-        if (++snapT % 2 === 0) { co.link.send({ t: 'snap', s: snapshot(sim), ev: outbox }); outbox = []; }   // 15 snapshots a second
+        if (++snapT % 2 === 0) { sendAll({ t: 'snap', s: snapshot(sim), ev: outbox }); outbox = []; }   // 15 snapshots a second, to every guest
       }
       for (const e of sim.events) {
         scene.onEvent(e);
@@ -382,11 +444,16 @@ function start(mode, co = null) {
           // Won a map: offer the next stretch of the journey.
           const nextMap = MAP_ORDER[MAP_ORDER.indexOf(chosenMap) + 1];
           const endEl = document.getElementById('end');
-          if (e.won && nextMap && !co) {   // co-op: host a new room to carry on together
+          if (e.won && nextMap && !guest) {   // co-op: the host takes everyone on together
             const b = document.createElement('button'); b.className = 'play'; b.textContent = `Onward: ${MAPS[nextMap].name}`;
-            b.onclick = () => { save('catcastle.map', nextMap); relaunch('go'); };
+            b.onclick = () => { save('catcastle.map', nextMap); if (co) { coop = co; hostStart(mode, nextMap); } else relaunch('go'); };
             endEl.prepend(b);
           }
+          if (co && !e.won && !guest) {        // co-op: try the same map again, together
+            const b = document.createElement('button'); b.className = 'play'; b.textContent = 'Try again together';
+            b.onclick = () => hostStart(mode, chosenMap); endEl.prepend(b);
+          }
+          if (guest) { const p = document.createElement('p'); p.className = 'dim'; p.textContent = 'The host can take everyone on to the next map, or try again.'; endEl.prepend(p); }
         }
       }
       sim.events.length = 0;

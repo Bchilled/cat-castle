@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.14.0 — 2026-11-07
+Furniture routes
+- Mice now climb over low furniture when going over is shorter than going round:
+  - the stable fences (14 crossings)
+  - crates and buckets on the entrance, market and cellar maps
+  - the linen basket and coal scuttle in the passages
+  - the big cellar cheese wheel (both ways)
+- They scramble up, run across the top and climb down the far side. Traps up there hit them, and the floor arrows show the route going over.
+- Poison Box walls along the floor don't stop a mouse that can go over the furniture. Put a Poison Box on top (it now fits on furniture tops) to close the route, or box both sides. The "leave them a way through" check counts open furniture routes. Bosses don't climb.
+- `src/sim/map.js` buildMap (links, 348–376) and LINKS; `src/sim/path.js` computeFlow and nextCell take links; `src/sim/sim.js` openLinks, linkFrom, stepLink, routes() drawn over furniture, seal check; `src/render/scene.js` route arrows at furniture height.
+
+Settings
+- Mouse sensitivity, field of view and invert up/down on the pause screen. They're saved. `index.html`, `src/main.js`.
+
+Co-op
+- Up to four cats (the host plus three). The lobby lists everyone.
+- When you win, the host's Onward button takes everyone to the next map together, with no new room. After a loss there's "Try again together".
+- Your own cat responds the instant you press a key. Guests run their own cat's movement locally; the host says which input it has reached, and the guest shifts by half the difference (snaps if it's way off, e.g. a respawn or a boss fling).
+- The game now tears down cleanly between maps (listeners, link handlers, the 3D scene and canvas) instead of needing a page reload.
+- `src/net/coop.js` (multi-guest rooms, removable handlers, predicted fields), `src/main.js` (lobby, hostStart, start/stop, prediction and reconcile), `src/render/scene.js` dispose, `src/sim/sim.js` (inputs carry a sequence number).
+- Tested with three tabs on one computer: lobby, three cats in game, a guest moving before the host has stepped, and Onward taking all three to the market.
+
+Tests: 173 checks, all passing (fence crossing, closing a route with a box on the cheese wheel).
+
 ## 0.13.2 — 2026-11-07
 - Servants' Passages description on the map picker updated for the door change in 0.13.1: mice queue at a shut door, or take another way if it's shorter. `src/sim/map.js` (passages twist).
 

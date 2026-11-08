@@ -49,9 +49,11 @@ export class Scene {
     this.buildRoute();
     this.ghost = null; this.ghostKind = null;
     this.ray = new THREE.Raycaster();
-    this.resize(); window.addEventListener('resize', () => this.resize());
+    this._onResize = () => this.resize(); this.resize(); window.addEventListener('resize', this._onResize);
   }
 
+  // Let go of the GPU and the window (a new game builds a fresh Scene on a fresh canvas).
+  dispose() { window.removeEventListener('resize', this._onResize); this.renderer.dispose(); }
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
@@ -313,10 +315,10 @@ export class Scene {
       // Several lanes share stretches (both entrances, every route choice): draw each spot once.
       let n = 0; const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), used = new Set();
       for (const pts of routes) for (let k = 0; k < pts.length - 2 && n < 1200; k += 3) {
-        const [x, z] = pts[k], [x2, z2] = pts[k + 2], key = Math.round(x) * 1000 + Math.round(z);
+        const [x, z, y = 0] = pts[k], [x2, z2] = pts[k + 2], key = Math.round(x) * 1000 + Math.round(z) + (y > 0 ? 0.5 : 0);   // y: over furniture
         if (used.has(key)) continue; used.add(key);
         q.setFromAxisAngle(up, Math.atan2(x2 - x, z2 - z));
-        m4.compose(new THREE.Vector3(x, 0.04, z), q, new THREE.Vector3(1.4, 1, 1.4)); this.routeMesh.setMatrixAt(n++, m4);
+        m4.compose(new THREE.Vector3(x, y + 0.04, z), q, new THREE.Vector3(1.4, 1, 1.4)); this.routeMesh.setMatrixAt(n++, m4);
       }
       this.routeMesh.count = n; this.routeMesh.instanceMatrix.needsUpdate = true;
     }

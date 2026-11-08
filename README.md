@@ -1,6 +1,6 @@
 # Nine Lives Keep
 
-Cats vs mice trap tower defense in the browser (Three.js), in the spirit of Orcs Must Die, at mouse scale in a human castle. Seven cats, each with their own attacks, abilities, jump and health. Six maps make one journey from the castle entrance to the kitchen. There are 22 traps, 10 items and 12 elements that combo, and a shop between runs. Play solo or with a friend online. Sound and music are synthesised live in the browser (no audio files).
+Cats vs mice trap tower defense in the browser (Three.js), in the spirit of Orcs Must Die, at mouse scale in a human castle. Seven cats, each with their own attacks, abilities, jump and health. Six maps make one journey from the castle entrance to the kitchen. There are 22 traps, 10 items and 12 elements that combo, and a shop between runs. Play solo or with up to three friends online. Sound and music are synthesised live in the browser (no audio files).
 
 Play: https://brentsnow.ca/cat-castle/
 
@@ -45,7 +45,7 @@ Floor traps also go on table and counter tops: aim at the top.
 Mice pour out of the holes and take the cheapest route to the exit. You can see that route as glowing arrows on the floor.
 - **Routes:** they re-route when you build. You can wall them into a maze with Poison Boxes, but never seal them in.
 - **Packs:** they split between lanes. They remember where they keep dying and avoid it, and scouts run ahead.
-- **Shortcuts:** they smash through crate stacks when it's worth it.
+- **Shortcuts:** they smash through crate stacks when it's worth it, and climb over fences, crates and the cellar cheese wheel when that beats going round. A Poison Box on top closes a route.
 - **Food:** they stop to eat food piles, and climb furniture to eat what's on top. Eating makes them tougher.
 - **Bosses:** a mini boss every 6th wave and a big boss every 12th. Clear wave 24 to win the map and move onward.
 
@@ -62,9 +62,13 @@ Paw prints and yarn are kept between runs, and spent in the shop:
 - buy hats
 
 ## Co-op
-One player presses **Host a game** and reads out the 4-letter code. The other types it in and presses **Join**. The host picks the map and presses Play.
+Up to four cats. One player presses **Host a game** and reads out the 4-letter code. The others type it in and press **Join**. The host picks the map and presses Play.
 
-The host's browser runs the game and the guest's browser mirrors it; they connect peer-to-peer over WebRTC using PeerJS. Paw Points and lives are shared. Each player brings their own cat, traps, upgrades and hat. If the host pauses, both pause.
+When the map is won, the host takes everyone onward to the next map; after a loss, the host can try again with everyone.
+
+The host's browser runs the game and the guests' browsers mirror it; they connect peer-to-peer over WebRTC using PeerJS. Your own cat moves the moment you press a key, and the host corrects it gently.
+
+Paw Points and lives are shared. Each player brings their own cat, traps, upgrades and hat. If the host pauses, everyone pauses.
 
 ## Code layout
 - `src/sim/` is the game rules with no graphics. It runs on a fixed 30 Hz tick with seeded randomness.

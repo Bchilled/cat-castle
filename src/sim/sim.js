@@ -9,7 +9,7 @@ import {
   W, H, CELL, T, idx, cellOf, cellCenter, buildMap, floorish, miceWalkable, goalCells,
   GATE, SPAWNS, CAT_SPAWN, DIRS4, WORLD_W, WORLD_H, VIAS, useMap, MAP,
 } from './map.js';
-import { computeFlow, nextCell, nearestReachable } from './path.js';
+import { computeFlow, nextCell, nearestReachable, linkCost } from './path.js';
 import { buildWave, ratePaws, INTRO_TEXT } from './waves.js';
 
 // Cat lines. Original, crude, bleeped. Each cat has its own voice:
@@ -255,6 +255,7 @@ export class Sim {
     switch (cmd.type) {
       case 'input': {
         const inp = this.inputs.get(cmd.id); if (!inp) return;
+        if (cmd.seq !== undefined && cat) cat.inSeq = cmd.seq;      // co-op: the last input we've had from this guest
         Object.assign(inp, { mx: cmd.mx, mz: cmd.mz, yaw: cmd.yaw, pitch: cmd.pitch || 0, primary: !!cmd.primary, jumpHeld: !!cmd.jumpHeld, aim: cmd.aim || inp.aim });
         if (cmd.jump) inp.jump = true;           // edge-triggered: latched until consumed
         if (cmd.secondary) inp.secondary = true;
@@ -356,13 +357,22 @@ export class Sim {
     const extraS = Float32Array.from(extra), DB = this.DB;
     for (let i = 0; i < N; i++) { const dv = this.danger[((((i / W) | 0) / DB) | 0) * this.dbw + (((i % W) / DB) | 0)]; if (dv > 0.5) extraS[i] += Math.min(DANGER_CAP, dv); }
     this.blk = blk; this.extraArr = extraS; this.extraBig = extra;
-    const base = { goals: this.goals, extra: (i) => extraS[i], blocked: (i) => blk[i] === 1 };
+    // Furniture routes that are open (a Poison Box on top closes one). Small mice only.
+    this.links = this.openLinks();
+    this.linkFrom = new Map();
+    for (const L of this.links) {
+      const c = linkCost(L);
+      for (const e of L.entryA) { if (!this.linkFrom.has(e)) this.linkFrom.set(e, []); this.linkFrom.get(e).push({ L, exit: L.cellB, cost: c, from: 'a' }); }
+      for (const e of L.entryB) { if (!this.linkFrom.has(e)) this.linkFrom.set(e, []); this.linkFrom.get(e).push({ L, exit: L.cellA, cost: c, from: 'b' }); }
+    }
+    const base = { goals: this.goals, extra: (i) => extraS[i], blocked: (i) => blk[i] === 1, links: this.links };
     this.flow = computeFlow(this.map, { ...base, pass: this.passSmall });
-    this.flowBig = computeFlow(this.map, { ...base, extra: (i) => extra[i], pass: this.passBig });
+    this.flowBig = computeFlow(this.map, { ...base, extra: (i) => extra[i], pass: this.passBig, links: null });   // bosses don't climb
     this.flowBase = base;
     this.viaDirty.fill(true);          // route-choice fields refresh one per tick (spreads the cost)
     this.flowDirty = false; this.routeCache = null;
   }
+  openLinks() { return (this.map.links || []).filter(L => !L.cells.some(i => { const t = this.trapAt('top', i); return t && t.kind === 'barricade'; })); }
   // Flow field toward one route choice (VIAS). Same costs as the main field.
   viaField(k) {
     if (this.viaDirty[k] || !this.viaFlow[k]) {
@@ -408,7 +418,13 @@ export class Sim {
         pts.push(cellCenter(i));
         if (this.map.type[i] === T.HOLE) break;
         if (f !== this.flow && f[i] < 2) f = this.flow;      // reached the route choice: head for the hole
-        i = nextCell(this.map, f, i, this.passSmall, this.isBlocker, this.extraOf);
+        const at = i;
+        i = nextCell(this.map, f, i, this.passSmall, this.isBlocker, this.extraOf, this.linkFrom);
+        if (i <= -2) {   // over the furniture: draw the climb, then carry on from the far side
+          const o = this.linkFrom.get(at)[-2 - i], P = o.from === 'a' ? o.L.path : [...o.L.path].reverse();
+          for (const [x, z] of P) pts.push([x, z, o.L.y]);
+          i = o.exit; continue;
+        }
         if (i < 0 && f !== this.flow) { f = this.flow; i = cellOf(pts[pts.length - 1][0], pts[pts.length - 1][1]); }
       }
       return pts;
@@ -443,7 +459,7 @@ export class Sim {
     const def = TRAPS[kind]; if (!def) return false;
     const cells = this.footprint(kind, ax, az, rot, wallDir);
     if (top) {
-      if (def.surface !== 'floor' || kind === 'barricade' || kind === 'bait') return false;
+      if (def.surface !== 'floor' || kind === 'bait') return false;   // a Poison Box on top closes a furniture route
       const h0 = this.topHeight(cells[0]);
       for (const i of cells) if (i < 0 || this.occ.top[i] || !h0 || Math.abs(this.topHeight(i) - h0) > 0.05 || this.crateAt[i]) return false;
       return true;
@@ -470,7 +486,7 @@ export class Sim {
       let sealed = this.sealCache.get(key);
       if (sealed === undefined) {
         const extraWall = new Set(cells);
-        const test = computeFlow(this.map, { goals: this.goals, pass: this.passSmall, wall: (i) => extraWall.has(i) || this.occBarricade(i) });
+        const test = computeFlow(this.map, { goals: this.goals, pass: this.passSmall, wall: (i) => extraWall.has(i) || this.occBarricade(i), links: this.openLinks() });   // climbing over furniture counts as a way through
         sealed = this.spawnCells.some(c => !(test[c] < Infinity)); this.sealCache.set(key, sealed);
       }
       if (sealed) return 'seal';
@@ -1520,7 +1536,7 @@ export class Sim {
     return out;
   }
   launch(m, vx, vy, vz) {
-    m.climb = null;                                 // knocked off whatever it was climbing
+    m.climb = null; m.link = null;                  // knocked off whatever it was climbing
     m.state = 'air'; m.onGround = false; m.vx = vx; m.vy = vy; m.vz = vz; m.y += 0.05;
   }
 
@@ -1586,6 +1602,7 @@ export class Sim {
     }
     // Climbing to food on a furniture top: the whole trip (walk over, scramble up, eat, climb down).
     if (m.climb) { this.stepClimb(m, d); return; }
+    if (m.link) { this.stepLink(m, d); return; }
     if (m.climber && !m.gorged && !d.big && m.state === 'walk' && this.tops.length && !(m.fearT > 0)) {
       const f = this.tops.find(f => f.left > 0 && Math.hypot(f.climb[0] - m.x, f.climb[1] - m.z) < 7);
       if (f) { m.climb = { f, phase: 'to', t: 0, stuck: 0 }; this.stepClimb(m, d); return; }
@@ -1761,7 +1778,11 @@ export class Sim {
       m.yaw = Math.atan2(mx, mz);
     } else {
       // Follow the flow field.
-      const n = nextCell(this.map, flow, i, pass, this.isBlocker, d.big ? this.extraOfBig : this.extraOf);
+      const n = nextCell(this.map, flow, i, pass, this.isBlocker, d.big ? this.extraOfBig : this.extraOf, d.big ? null : this.linkFrom);
+      if (n <= -2) {   // the best way on is over the furniture
+        const o = this.linkFrom.get(i)[-2 - n];
+        m.link = { L: o.L, from: o.from, phase: 'up', t: 0, k: 0, sx: m.x, sz: m.z }; this.stepLink(m, d); return;
+      }
       if (n < 0) return;
       const [cx, cz] = cellCenter(n);
       const dx = cx - m.x, dz = cz - m.z, dist = Math.hypot(dx, dz) || 1;
@@ -1861,6 +1882,27 @@ export class Sim {
       case 'back': m.y = f.y; if (toward(ex, ez, true) < 0.1) { c.phase = 'down'; c.t = 0; } break;
     }
     m.climbing = !!m.climb && (c.phase === 'up' || c.phase === 'down');
+  }
+
+  // Over the furniture: scramble up at one end, run along the top, climb down the far side.
+  // Traps on the top hit it on the way; cats can jump up and swat it.
+  stepLink(m, d) {
+    const c = m.link, L = c.L, P = c.from === 'a' ? L.path : [...L.path].reverse(), end = c.from === 'a' ? L.b : L.a;
+    const sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * (m.chillT > 0 ? STATUS.chillSlow / CAT.hairballSlow : 1) * DT;
+    if (c.phase === 'up' || c.phase === 'down') {
+      c.t += DT; const k = Math.min(1, c.t / CLIMB_SECS), up = c.phase === 'up';
+      const [fx, fz] = up ? [c.sx, c.sz] : P[P.length - 1], [tx, tz] = up ? P[0] : end;
+      m.x = fx + (tx - fx) * k; m.z = fz + (tz - fz) * k; m.y = L.y * (up ? k : 1 - k); m.yaw = Math.atan2(tx - fx, tz - fz);
+      m.climbing = true;
+      if (k >= 1) { if (up) { c.phase = 'top'; c.k = 1; } else { m.link = null; m.climbing = false; m.y = 0; } }
+      return;
+    }
+    // On top: walk the path.
+    m.climbing = false; m.y = L.y;
+    const [tx, tz] = P[Math.min(c.k, P.length - 1)], dx = tx - m.x, dz = tz - m.z, dd = Math.hypot(dx, dz);
+    if (dd > 0.01) m.yaw = Math.atan2(dx, dz);
+    if (dd <= sp) { m.x = tx; m.z = tz; if (++c.k >= P.length) { c.phase = 'down'; c.t = 0; } }
+    else { m.x += dx / dd * sp; m.z += dz / dd * sp; }
   }
 
   // One place for "a mouse hurt a cat" (bites, spit, stomps).

@@ -1,19 +1,21 @@
-// coop.js — two-player online co-op.
+// coop.js — online co-op for up to four cats.
 //
-// Host-authoritative: the host runs the one real Sim with both cats in it. The guest runs a
-// "mirror" Sim of the same map that never steps: it only receives snapshots (where everything
-// is, 15 times a second) plus the events (for sounds and effects), and sends its own commands
+// Host-authoritative: the host runs the one real Sim with every cat in it. Each guest runs a
+// "mirror" Sim of the same map that never steps: it receives snapshots (where everything is,
+// 15 times a second) plus the events (for sounds and effects), and sends its own commands
 // (inputs, trap placing, items) to the host. Nothing in sim.js knows about networking.
+// The guest's own cat is predicted locally so it moves the instant you press a key.
 //
-// Connection: WebRTC via PeerJS (peer-to-peer; the free PeerJS server only introduces the two
+// Connection: WebRTC via PeerJS (peer-to-peer; the free PeerJS server only introduces the
 // browsers). Room code = 4 letters. For testing on one computer, ?local uses a
-// BroadcastChannel between two tabs instead.
+// BroadcastChannel between tabs instead.
 
 import { MICE, CATS } from '../config.js';
 import { cellCenter, T } from '../sim/map.js';
 
 const PEER_URL = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
 const PREFIX = 'ninelives-keep-';
+export const MAX_PLAYERS = 4;
 export const LOCAL_TEST = typeof location !== 'undefined' && new URLSearchParams(location.search).has('local');
 
 export function roomCode() { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; let s = ''; for (let k = 0; k < 4; k++) s += A[Math.floor(Math.random() * A.length)]; return s; }
@@ -30,46 +32,66 @@ function loadPeer() {
   return peerLib;
 }
 
-// A link: send(obj), on('data'|'close', fn), close(). Same shape for PeerJS and the local test.
-function wrapPeerConn(conn, peer) {
-  const h = { data: [], close: [] };
-  conn.on('data', (d) => h.data.forEach(f => f(d)));
-  conn.on('close', () => h.close.forEach(f => f()));
-  conn.on('error', () => h.close.forEach(f => f()));
-  return { send: (o) => { if (conn.open) conn.send(o); }, on: (k, f) => h[k].push(f), close: () => { try { conn.close(); peer.destroy(); } catch { /* gone */ } } };
+// A link: send(obj), on('data'|'close', fn) -> off(), close(). Same shape for PeerJS and the
+// local test. on() returns a function that removes the handler (a new game re-registers).
+function makeLink(sendFn, closeFn) {
+  const h = { data: new Set(), close: new Set() };
+  const link = {
+    send: sendFn, close: closeFn,
+    on: (k, f) => { h[k].add(f); return () => h[k].delete(f); },
+    _data: (d) => h.data.forEach(f => f(d)), _close: () => { if (link.closed) return; link.closed = true; h.close.forEach(f => f()); },
+  };
+  return link;
 }
-function localLink(code, role) {
-  const ch = new BroadcastChannel(PREFIX + code), h = { data: [], close: [] }, other = role === 'host' ? 'guest' : 'host';
-  ch.onmessage = (e) => { if (e.data.to === role) { if (e.data.bye) h.close.forEach(f => f()); else h.data.forEach(f => f(e.data.m)); } };
-  return { ch, send: (m) => ch.postMessage({ to: other, m }), on: (k, f) => h[k].push(f), close: () => { ch.postMessage({ to: other, bye: true }); ch.close(); } };
+function wrapPeerConn(conn, peer) {
+  const link = makeLink((o) => { if (conn.open) conn.send(o); }, () => { try { conn.close(); if (peer) peer.destroy(); } catch { /* gone */ } });
+  conn.on('data', (d) => link._data(d)); conn.on('close', () => link._close()); conn.on('error', () => link._close());
+  return link;
 }
 
-// Host: open a room and resolve with the link once a guest connects.
-export async function hostRoom(code, status) {
+// Host: open a room. onGuest({ link, hello }) is called for each cat that joins (up to 3 guests).
+// Returns { close() }.
+export async function hostRoom(code, status, onGuest) {
+  let count = 0;
   if (LOCAL_TEST) {
-    const link = localLink(code, 'host');
-    status(`Room ${code} (local test) — open another tab with ?local and join ${code}`);
-    return new Promise(res => { link.ch.addEventListener('message', function hi(e) { if (e.data.to === 'host' && e.data.m && e.data.m.t === 'hello') { link.ch.removeEventListener('message', hi); res({ link, hello: e.data.m }); } }); });
+    const ch = new BroadcastChannel(PREFIX + code), guests = new Map();
+    status(`Room ${code} (local test): open another tab with ?local and join ${code}`);
+    ch.onmessage = (e) => {
+      const { to, from, m, bye } = e.data || {}; if (to !== 'host') return;
+      let g = guests.get(from);
+      if (bye) { if (g) g._close(); return; }
+      if (!g) {
+        if (!m || m.t !== 'hello' || count >= MAX_PLAYERS - 1) return;
+        count++; g = makeLink((o) => ch.postMessage({ to: from, m: o }), () => ch.postMessage({ to: from, bye: true }));
+        guests.set(from, g); onGuest({ link: g, hello: m }); return;
+      }
+      g._data(m);
+    };
+    return { close: () => { for (const g of guests.values()) g.close(); ch.close(); } };
   }
   const Peer = await loadPeer();
   return new Promise((res, rej) => {
     const peer = new Peer(PREFIX + code);
-    peer.on('open', () => status(`Room ${code} — tell your friend the code. Waiting…`));
+    peer.on('open', () => { status(`Room ${code}: tell your friends the code. Waiting…`); res({ close: () => peer.destroy() }); });
     peer.on('error', (err) => { status(`Co-op error: ${err.type || err.message}`); rej(err); });
-    let taken = false;
     peer.on('connection', (conn) => {
-      if (taken) { conn.on('open', () => conn.close()); return; }   // two players only
-      taken = true;
+      if (count >= MAX_PLAYERS - 1) { conn.on('open', () => conn.close()); return; }   // four cats at most
+      count++;
       conn.on('open', () => {
-        const link = wrapPeerConn(conn, peer);
-        conn.on('data', function hi(d) { if (d && d.t === 'hello') { conn.off && conn.off('data', hi); res({ link, hello: d }); } });
+        const link = wrapPeerConn(conn, null);
+        const off = link.on('data', (d) => { if (d && d.t === 'hello') { off(); onGuest({ link, hello: d }); } });
       });
     });
   });
 }
 // Guest: join a room by code.
 export async function joinRoom(code, hello, status) {
-  if (LOCAL_TEST) { const link = localLink(code, 'guest'); link.send(hello); status(`Joined ${code} (local test). Waiting for the host to start…`); return link; }
+  if (LOCAL_TEST) {
+    const ch = new BroadcastChannel(PREFIX + code), me = 'g' + Math.random().toString(36).slice(2, 8);
+    const link = makeLink((m) => ch.postMessage({ to: 'host', from: me, m }), () => { ch.postMessage({ to: 'host', from: me, bye: true }); ch.close(); });
+    ch.onmessage = (e) => { const { to, m, bye } = e.data || {}; if (to !== me) return; if (bye) link._close(); else link._data(m); };
+    link.send(hello); status(`Joined ${code} (local test). Waiting for the host to start…`); return link;
+  }
   const Peer = await loadPeer();
   return new Promise((res, rej) => {
     const peer = new Peer();
@@ -87,7 +109,9 @@ const MK = ['pellet', 'whisker', 'burr', 'pebble', 'hairball'];
 const r2 = (v) => Math.round(v * 100) / 100;
 // Cat fields the renderer and HUD read.
 const CAT_KEYS = ['x', 'y', 'z', 'vx', 'vy', 'vz', 'yaw', 'pitch', 'hp', 'energy', 'alive', 'respawnT', 'onGround', 'attacking', 'pouncing', 'striking', 'dashing', 'charge',
-  'hurtT', 'hissT', 'flipT', 'frenzyT', 'rage', 'napping', 'buffT', 'secT', 'altT', 'itemT', 'eatT', 'turn', 'guardT', 'tauntT', 'stunT'];
+  'hurtT', 'hissT', 'flipT', 'frenzyT', 'rage', 'napping', 'buffT', 'secT', 'altT', 'itemT', 'eatT', 'turn', 'guardT', 'tauntT', 'stunT', 'inSeq'];
+// For the guest's own cat these stay as its local prediction (the host's copy goes to c.srv).
+const PREDICTED = new Set(['x', 'y', 'z', 'vx', 'vy', 'vz', 'yaw', 'pitch', 'onGround', 'pouncing', 'striking', 'dashing', 'charge', 'turn']);
 // Mouse flags packed into one number.
 const F = { asleep: 4, frozen: 8, burn: 16, wet: 32, oil: 64, dirty: 128, confuse: 256, slow: 512, climbing: 1024, flash: 2048, gorged: 4096 };
 const STATES = ['walk', 'air', 'stuck', 'stranded'];
@@ -119,7 +143,7 @@ export function snapshot(sim) {
 }
 
 // Apply a snapshot to the guest's mirror sim (reusing objects so the renderer's smoothing keeps working).
-export function applySnapshot(sim, s) {
+export function applySnapshot(sim, s, localId = null) {
   Object.assign(sim, { phase: s.phase, wave: s.wave, phaseTimer: s.phaseTimer >= 1e9 ? Infinity : s.phaseTimer, lives: s.lives, sardines: s.sardines, yarn: s.yarn, time: s.time, trinkets: s.trinkets, rating: s.rating });
   sim.stats.kills = s.kills; sim.stats.combos = s.combos;
   if (s.gate.up !== sim.gate.up) { sim.gate.up = s.gate.up; sim.flowDirty = true; }
@@ -128,7 +152,8 @@ export function applySnapshot(sim, s) {
   for (const row of s.cats) {
     const [id, kind, hat, item] = row; let c = sim.cats.get(id);
     if (!c) { c = sim.addPlayer(id, kind, { hat, item }); }
-    CAT_KEYS.forEach((k, j) => { c[k] = row[4 + j]; });
+    if (id === localId) { c.srv = {}; CAT_KEYS.forEach((k, j) => { if (PREDICTED.has(k)) c.srv[k] = row[4 + j]; else c[k] = row[4 + j]; }); }
+    else CAT_KEYS.forEach((k, j) => { c[k] = row[4 + j]; });
     c.item = item;
   }
   // Mice: flat array, 11 numbers each.

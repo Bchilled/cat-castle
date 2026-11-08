@@ -534,7 +534,7 @@ for (const id of MAP_ORDER) {
   // Floor traps on furniture tops: a Snapper on the island catches the diner.
   const tt = new Sim({ map: 'kitchen', seed: 504 }); tt.addPlayer('p1'); tt.sardines = 1e5; tt.step();
   const ax = Math.floor(47 / CELL), az = Math.floor(47 / CELL);
-  ok(tt.canPlace('mousetrap', ax, az, 0, -1, true) === true && tt.canPlace('barricade', ax, az, 0, -1, true) !== true, 'floor traps go on furniture tops (not Poison Boxes)');
+  ok(tt.canPlace('mousetrap', ax, az, 0, -1, true) === true && tt.canPlace('bait', ax, az, 0, -1, true) !== true, 'floor traps go on furniture tops (not Cheese Chunks)');
   tt.command({ type: 'place', id: 'p1', trap: 'mousetrap', ax, az, rot: 0, top: true });
   const ttr = [...tt.traps.values()][0];
   const tm = tt.spawnAt('mouse', 48, 61.5, 100); tm.climber = true; tm.via = -1;
@@ -585,5 +585,18 @@ for (const id of MAP_ORDER) {
   const dr = new Sim({ seed: 702 }); dr.addPlayer('p1'); dr.step();
   const picks = new Set(); for (let k = 0; k < 60; k++) picks.add(dr.chooseVia(0));
   ok(picks.has(-1) && picks.size >= 2, `the direct route gets a share of the packs (${[...picks].join(',')})`);
+}
+// 37. Furniture routes: mice climb over the stable fences when it's shorter than going round.
+{
+  const st = new Sim({ map: 'stables', seed: 800 }); st.addPlayer('p1'); st.step();
+  ok(st.map.links.length >= 10 && st.links.length === st.map.links.length, `the stables have furniture routes over the fences (${st.map.links.length})`);
+  const m = st.spawnAt('mouse', 46, 75, 999); m.via = -1; m.climber = false; let topY = 0, crossed = false;   // between the fence and the trough
+  for (let t = 0; t < 30 * 12; t++) { st.step(); st.events.length = 0; topY = Math.max(topY, m.y); if (m.z < 70 && !m.link) { crossed = true; break; } }
+  ok(crossed && topY > 1, `a mouse climbs over the fence instead of going round (top ${topY.toFixed(1)})`);
+  // A Poison Box up on the cellar cheese wheel closes the routes over it.
+  const cw = new Sim({ map: 'cellar', seed: 801 }); cw.addPlayer('p1'); cw.sardines = 1e5; cw.step();
+  const n0 = cw.links.length, ok1 = cw.canPlace('barricade', 82, 126, 0, -1, true);
+  cw.placeTrap(cw.cats.get('p1'), 'barricade', 82, 126, 0, -1, true); cw.updateFlow();
+  ok(ok1 === true && cw.links.length < n0, `a Poison Box on top of the cheese wheel closes the routes over it (${n0 - cw.links.length} closed)`);
 }
 process.exit(fails ? 1 : 0);

@@ -233,7 +233,12 @@ const CRATES = {
   market: [[38, 76, 50, 78]],     // the centre alley
   passages: [[34, 20, 40, 22]],   // the last stretch of the main passage, before the hall
 };
-for (const k of MAP_ORDER) { MAPS[k].tops = TOPS[k] || []; MAPS[k].crates = CRATES[k] || []; }
+// Hand-made furniture routes (low things get them automatically; see buildMap).
+const LINKS = {
+  cellar: [{ name: 'Cheese wheel', a: [42, 69.5], b: [42, 58.5], y: 3, path: [[42, 67.6], [42, 60.4]] },
+           { name: 'Cheese wheel', a: [36.5, 64], b: [47.5, 64], y: 3, path: [[38.4, 64], [45.6, 64]] }],
+};
+for (const k of MAP_ORDER) { MAPS[k].tops = TOPS[k] || []; MAPS[k].crates = CRATES[k] || []; MAPS[k].links = LINKS[k] || []; }
 
 // Point every live export at map `id`. Call before building a Sim.
 export function useMap(id) {
@@ -340,7 +345,35 @@ export function buildMap() {
   for (let z = Math.round(HOLE.z0 / CELL); z < Math.round(HOLE.z0 / CELL) + 6; z++)
     for (let x = Math.round(HOLE.x0 / CELL) - 3; x < Math.round(HOLE.x1 / CELL) + 3; x++)
       if (miceWalkable(type[z * W + x])) bigOk[z * W + x] = 1;
-  return { type, solid, slabBot, slabTop, furn, covered, wallDir, bigOk, forest, mud, door };
+  // Furniture routes (v0.14): mice climb over low furniture (fences, crates, buckets...) and
+  // a few big things (the cellar cheese wheel) when going over is shorter than going round.
+  // A link: climb up at a, run along the path on top (height y), climb down at b. Either way.
+  const links = [];
+  const floorAt = (x, z) => { const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL); if (cx < 1 || cz < 1 || cx >= W - 1 || cz >= H - 1) return -1; const i = cz * W + cx; return miceWalkable(type[i]) && type[i] !== T.HOLE && type[i] !== T.GATE && (slabBot[i] === 0 || slabBot[i] > 2.5) ? i : -1; };   // not under a low table
+  const entry = (x, z) => { const out = []; for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) { const i = floorAt(x + dx * CELL, z + dz * CELL); if (i >= 0 && Math.hypot(dx, dz) * CELL <= 0.8) out.push(i); } return out; };
+  const addLink = (name, a, b, y, path) => {
+    const ia = floorAt(a[0], a[1]), ib = floorAt(b[0], b[1]); if (ia < 0 || ib < 0) return;
+    let len = 0, prev = a; const cells = new Set();
+    for (const q of [...path, b]) {
+      const n = Math.ceil(Math.hypot(q[0] - prev[0], q[1] - prev[1]) / 0.25);
+      for (let k = 0; k <= n; k++) { const x = prev[0] + (q[0] - prev[0]) * k / n, z = prev[1] + (q[1] - prev[1]) * k / n, cx = Math.floor(x / CELL), cz = Math.floor(z / CELL); if (type[cz * W + cx] === T.SOLID || slabTop[cz * W + cx] > 0) cells.add(cz * W + cx); }
+      len += Math.hypot(q[0] - prev[0], q[1] - prev[1]); prev = q;
+    }
+    links.push({ id: links.length, name, a, b, y, path, cellA: ia, cellB: ib, entryA: entry(a[0], a[1]), entryB: entry(b[0], b[1]), len, cells: [...cells] });
+  };
+  FURNITURE.forEach(f => {
+    if (f.kind !== 'solid' || f.h > 1.8 || f.h < 0.5) return;
+    const [x0, z0, x1, z1] = f.rect, w = x1 - x0, d = z1 - z0;
+    if (Math.min(w, d) > 4) return;                               // only thin things you can scramble over
+    const alongX = w >= d, L = alongX ? w : d, n = Math.max(1, Math.floor(L / 4));
+    for (let k = 0; k < n; k++) {
+      const t = (k + 0.5) / n;
+      if (alongX) { const x = x0 + w * t; addLink(f.name, [x, z0 - 1], [x, z1 + 1], f.h, [[x, z0 + 0.25], [x, z1 - 0.25]]); }
+      else { const z = z0 + d * t; addLink(f.name, [x0 - 1, z], [x1 + 1, z], f.h, [[x0 + 0.25, z], [x1 - 0.25, z]]); }
+    }
+  });
+  for (const l of MAP.links || []) addLink(l.name, l.a, l.b, l.y, l.path);
+  return { type, solid, slabBot, slabTop, furn, covered, wallDir, bigOk, forest, mud, door, links };
 }
 
 export function floorish(t) { return t === T.FLOOR || t === T.ROAD || t === T.BRIDGE; }

@@ -8,7 +8,7 @@
 // mice and one for big bosses, who can't fit under low benches or through
 // one-cell gaps.
 
-import { W, H, miceWalkable, BASE_COST } from './map.js';
+import { W, H, CELL, miceWalkable, BASE_COST } from './map.js';
 
 const NB = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
             [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
@@ -49,7 +49,11 @@ class Heap {
 const NDX = new Int8Array([1, -1, 0, 0, 1, 1, -1, -1]), NDZ = new Int8Array([0, 0, 1, -1, 1, -1, 1, -1]);
 const NMUL = new Float32Array([1, 1, 1, 1, 1.414, 1.414, 1.414, 1.414]);
 let heap = null;   // reused between calls (no garbage)
-export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]), extra = () => 0, blocked = () => false, wall = () => false }) {
+// links: furniture routes (map.links that are open): reaching one end costs LINK_CLIMB twice
+// (up and down) plus the distance over the top.
+export const LINK_CLIMB = 6;
+export const linkCost = (L) => LINK_CLIMB * 2 + L.len / CELL;
+export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]), extra = () => 0, blocked = () => false, wall = () => false, links = null }) {
   const N = W * H, dist = new Float32Array(N).fill(Infinity);
   const okA = new Uint8Array(N), openA = new Uint8Array(N), cost = new Float32Array(N), type = map.type;
   for (let j = 0; j < N; j++) {
@@ -58,6 +62,13 @@ export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]
     cost[j] = (BASE_COST[type[j]] || 1) + extra(j);
   }
   if (!heap) heap = new Heap(); heap.n = 0;
+  // Link exits -> the cells that can climb in at the other end (walking backwards from the goal).
+  let linkIn = null;
+  if (links && links.length) {
+    linkIn = new Map();
+    const add = (exit, entries, cost) => { if (!linkIn.has(exit)) linkIn.set(exit, []); linkIn.get(exit).push([entries, cost]); };
+    for (const L of links) { const c = linkCost(L); add(L.cellB, L.entryA, c); add(L.cellA, L.entryB, c); }
+  }
   for (const g of goals) { dist[g] = 0; heap.push(g, 0); }
   while (heap.n) {
     const key = heap.keys[0], i = heap.pop();
@@ -78,6 +89,12 @@ export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]
       const nd = Math.fround(d + stepCost * NMUL[k]);
       if (nd < dist[n]) { dist[n] = nd; heap.push(n, nd); }
     }
+    const li = linkIn && linkIn.get(i);
+    if (li) for (const [entries, cost] of li) for (const n of entries) {
+      if (!okA[n]) continue;
+      const nd = Math.fround(d + stepCost + cost);
+      if (nd < dist[n]) { dist[n] = nd; heap.push(n, nd); }
+    }
   }
   return dist;
 }
@@ -87,7 +104,9 @@ export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]
 // cheapest total (its distance + the cost of stepping into it). Counting the step cost
 // matters: a Poison Box cell's own distance can be low, but stepping into it is dear,
 // so mice walk round a maze instead of trying to chew through it.
-export function nextCell(map, dist, i, pass, blocked, extra = () => 0) {
+// linkFrom: Map entry cell -> [{ L, exit, cost, from }] for the open furniture routes. If climbing
+// one is the best move it returns -2 - index into that list (the caller starts the climb).
+export function nextCell(map, dist, i, pass, blocked, extra = () => 0, linkFrom = null) {
   if (!(dist[i] > 0)) return -1;
   const x = i % W, z = (i / W) | 0;
   const open = (j) => pass(j) && !blocked(j);
@@ -101,6 +120,8 @@ export function nextCell(map, dist, i, pass, blocked, extra = () => 0) {
     const sc = dist[n] + ((BASE_COST[map.type[n]] || 1) + extra(n)) * (mul || 1);
     if (sc < bd) { bd = sc; best = n; }
   }
+  const lf = linkFrom && linkFrom.get(i);
+  if (lf) lf.forEach((o, k) => { const sc = dist[o.exit] + (BASE_COST[map.type[o.exit]] || 1) + extra(o.exit) + o.cost; if (sc < bd - 0.01) { bd = sc; best = -2 - k; } });
   return best;
 }
 
