@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.22.0 — 2026-11-08
+Long runs along the furniture
+- The kitchen's west and east counter tops and the island top, and the stables hay loft (up a ladder at each end), are now routes the mice can take. Climbing up and down costs them, so with the floor open they stay underneath; wall the floor off or maze it and they take to the tops instead and walk right past your floor traps.
+- Catch them up there with traps on the top (Knife Block, Kettle, Spice Jar, or any floor trap set on the counter), or put a Poison Box anywhere along a run to close it.
+- Ladders drawn up to the hay loft. The route arrows already show a run when mice use it.
+- `src/sim/map.js` LINKS for the kitchen and stables (237–247), `ladder` flag on links (391, 399, 412); `src/render/scene.js` ladders (315–324).
+
+Tests: 233 checks, all passing (mice walk under the island when the floor is open, climb over it when the floor is walled off, and a Poison Box on top closes the run).
+
 ## 0.21.0 — 2026-11-08
 Four more traps (30 in all). Unlock them in the shop.
 - **Cuckoo Clock** (wall, 55 Paw Points, 7 paw prints). It strikes on the beat, every 3 s, whether there are mice or not: a mallet slams the lane in front for 60 damage. The cuckoo calls when it hits something.

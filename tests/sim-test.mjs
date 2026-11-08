@@ -798,4 +798,21 @@ let findSpot, setup;
     ok(sneeze && dirty && m.stunT >= 1.2, 'the Spice Jar makes mice sneeze, and peppered mice get knocked flat');
   }
 }
+// 44. Long runs (0.22): wall off the floor under the kitchen island and mice take to the
+// island top instead; a Poison Box up there closes the run.
+{
+  const loft = new Sim({ map: 'stables', seed: 1 }).map.links.some(l => l.name === 'Hay loft' && l.ladder);   // (one map at a time: check this first)
+  const ks = new Sim({ map: 'kitchen', seed: 1300 }); ks.addPlayer('p1'); ks.sardines = 1e6; ks.step();
+  const L = ks.map.links.find(l => l.name === 'Over the island');
+  ok(ks.map.links.filter(l => /counter top|island/.test(l.name)).length === 3 && loft, 'the kitchen has three counter-top runs, the stables a hay-loft run with ladders');
+  // (m.climber = false: not one of the mice that go for the roast on the island)
+  const climbs = (sim) => { const m = sim.spawnAt('mouse', L.a[0], L.a[1], 500); m.climber = false; let on = false; run(sim, 3, () => { if (m.link && m.link.L.name === L.name) on = true; }); sim.mice = sim.mice.filter(x => x !== m); return on; };
+  ok(!climbs(ks), 'with the floor open, mice walk under the island');
+  // A Poison Box wall right across the middle of the kitchen (the counters stay open underneath).
+  for (let x = q(14); x < q(82); x += 2) ks.command({ type: 'place', id: 'p1', trap: 'barricade', ax: x, az: q(47), rot: 0 });
+  ks.updateFlow();
+  ok(ks.flow[L.cellB] < Infinity && climbs(ks), `wall the floor off and they climb over the island instead (${ks.traps.size} Poison Boxes)`);
+  ks.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(45) - 1, az: q(46), rot: 0, top: true }); ks.updateFlow();
+  ok(!ks.links.includes(L) && !climbs(ks), 'a Poison Box on the island top closes the run');
+}
 process.exit(fails ? 1 : 0);

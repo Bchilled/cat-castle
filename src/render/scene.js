@@ -312,6 +312,16 @@ export class Scene {
       const [fx0, fz0, fx1, fz1] = sh.fall, L = (dx ? fx1 - fx0 : fz1 - fz0) - thick;
       s.add(g); return { g, sh, theta: L < sh.h - 0.3 ? Math.asin(L / sh.h) : Math.PI / 2, fallAt: null, wob: 0 };
     });
+    // Ladders up to the long runs that need them (the stables hay loft): two rails and rungs
+    // leaning from the floor spot to the run's first point on top.
+    const wood = new THREE.MeshLambertMaterial({ color: 0x8a6a48 });
+    for (const L of this.sim.map.links || []) if (L.ladder) for (const [f, t] of [[L.a, L.path[0]], [L.b, L.path[L.path.length - 1]]]) {
+      const lad = new THREE.Group(), len = Math.hypot(t[0] - f[0], L.y, t[1] - f[1]);
+      lad.position.set(f[0], 0, f[1]); lad.rotation.y = Math.atan2(t[0] - f[0], t[1] - f[1]); s.add(lad);
+      const lean = new THREE.Group(); lean.rotation.x = Math.atan2(Math.hypot(t[0] - f[0], t[1] - f[1]), L.y); lad.add(lean);   // tip it toward the top
+      for (const x of [-0.45, 0.45]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.12, len, 0.12), wood); r.position.set(x, len / 2, 0); lean.add(r); }
+      for (let y = 0.5; y < len; y += 0.7) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.1), wood); r.position.set(0, y, 0); lean.add(r); }
+    }
     // Market stalls: the counter drops and tips onto its broken legs.
     this.stallFx = this.sim.stalls.map(st => ({ st, g: this.furnMesh[st.fi], fallAt: null, wob: 0 }));
     this.barrelFx = this.sim.barrels.map(b => {

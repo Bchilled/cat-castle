@@ -234,9 +234,17 @@ const CRATES = {
   passages: [[34, 20, 40, 22]],   // the last stretch of the main passage, before the hall
 };
 // Hand-made furniture routes (low things get them automatically; see buildMap).
+// Long runs (v0.22): counter tops and the hay loft. Mice only take them when the floor
+// route is worse (a maze, a blocked lane) or, over the kitchen island, when it's simply
+// the short way. Top traps (Knife Block, Kettle, Spice Jar, a Snapper up there...) catch
+// them up there; a Poison Box anywhere on the run closes it. ladder: draw ladders at the ends.
 const LINKS = {
   cellar: [{ name: 'Cheese wheel', a: [42, 69.5], b: [42, 58.5], y: 3, path: [[42, 67.6], [42, 60.4]] },
            { name: 'Cheese wheel', a: [36.5, 64], b: [47.5, 64], y: 3, path: [[38.4, 64], [45.6, 64]] }],
+  kitchen: [{ name: 'West counter top', a: [8, 84], b: [8, 16], y: 3.4, path: [[8, 81.6], [8, 18.4]] },
+            { name: 'East counter top', a: [88, 84], b: [88, 16], y: 3.4, path: [[88, 81.6], [88, 18.4]] },
+            { name: 'Over the island', a: [45, 60], b: [45, 36], y: 3.4, path: [[45, 57.6], [45, 38.4]] }],
+  stables: [{ name: 'Hay loft', a: [23, 88], b: [23, 12], y: 6.2, path: [[23, 85.6], [23, 14.4]], ladder: true }],
 };
 // Things that fall over (v0.17). Shelves stand against a wall; knock one over (hit it a few
 // times) and it falls across the corridor, crushing what's under it and blocking the way
@@ -380,7 +388,7 @@ export function buildMap() {
   const links = [];
   const floorAt = (x, z) => { const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL); if (cx < 1 || cz < 1 || cx >= W - 1 || cz >= H - 1) return -1; const i = cz * W + cx; return miceWalkable(type[i]) && type[i] !== T.HOLE && type[i] !== T.GATE && (slabBot[i] === 0 || slabBot[i] > 2.5) ? i : -1; };   // not under a low table
   const entry = (x, z) => { const out = []; for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) { const i = floorAt(x + dx * CELL, z + dz * CELL); if (i >= 0 && Math.hypot(dx, dz) * CELL <= 0.8) out.push(i); } return out; };
-  const addLink = (name, a, b, y, path) => {
+  const addLink = (name, a, b, y, path, ladder = false) => {
     const ia = floorAt(a[0], a[1]), ib = floorAt(b[0], b[1]); if (ia < 0 || ib < 0) return;
     let len = 0, prev = a; const cells = new Set();
     for (const q of [...path, b]) {
@@ -388,7 +396,7 @@ export function buildMap() {
       for (let k = 0; k <= n; k++) { const x = prev[0] + (q[0] - prev[0]) * k / n, z = prev[1] + (q[1] - prev[1]) * k / n, cx = Math.floor(x / CELL), cz = Math.floor(z / CELL); if (type[cz * W + cx] === T.SOLID || slabTop[cz * W + cx] > 0) cells.add(cz * W + cx); }
       len += Math.hypot(q[0] - prev[0], q[1] - prev[1]); prev = q;
     }
-    links.push({ id: links.length, name, a, b, y, path, cellA: ia, cellB: ib, entryA: entry(a[0], a[1]), entryB: entry(b[0], b[1]), len, cells: [...cells] });
+    links.push({ id: links.length, name, a, b, y, path, ladder, cellA: ia, cellB: ib, entryA: entry(a[0], a[1]), entryB: entry(b[0], b[1]), len, cells: [...cells] });
   };
   FURNITURE.forEach(f => {
     if (f.kind !== 'solid' || f.h > 1.8 || f.h < 0.5) return;
@@ -401,7 +409,7 @@ export function buildMap() {
       else { const z = z0 + d * t; addLink(f.name, [x0 - 1, z], [x1 + 1, z], f.h, [[x0 + 0.25, z], [x1 - 0.25, z]]); }
     }
   });
-  for (const l of MAP.links || []) addLink(l.name, l.a, l.b, l.y, l.path);
+  for (const l of MAP.links || []) addLink(l.name, l.a, l.b, l.y, l.path, !!l.ladder);
   return { type, solid, slabBot, slabTop, furn, covered, wallDir, bigOk, forest, mud, door, links };
 }
 
