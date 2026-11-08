@@ -156,6 +156,10 @@ const BARREL_R = 1.0, BARREL_SPEED = 8, BARREL_FRICTION = 2.2;                  
 // Siege mice (v0.23) lob rocks at traps along their route: Poison Boxes take damage,
 // anything else jams for a while.
 const SIEGE_RANGE = 9, SIEGE_EVERY = 7, SIEGE_AIM = 1.0, SIEGE_DMG = 60, SIEGE_JAM = 5;
+// Ceiling traps hang on a rod or chain to at most this height (1.05 m), however high the
+// ceiling is, so they sit just over the mice instead of up in the rafters (v0.30). What they
+// drop falls from there.
+export const CEIL_HANG = 3.5;
 const LANE_SPLIT = false;   // packs split across the map's lanes (off: one cheapest route per hole)
 const TILE = 4;   // trap grid: one tile = 4x4 cells (2 x 2 units, 60 cm)
 const STALL_HITS = 6, STALL_FALL_SECS = 0.45, STALL_CRUSH = 150, STALL_HP = 260, STALL_PILE_H = 0.9;
@@ -571,7 +575,7 @@ export class Sim {
     const up = cat.upgrades ? cat.upgrades[kind] : null, P = trapParams(kind, up);
     const tr = { id: this.nextId++, by: cat.id, kind, cells, layer: top ? 'top' : def.surface, y: top ? this.topHeight(cells[0]) : 0, rot, wallDir, cd: 0, hp: P.hp || 0, maxHp: P.hp || 0, p: P, tier: (up && up.tier) || 1, special: (up && up.special) || null,
       cost: def.cost, charges: P.charges || P.nibbles || 0, rechargeT: 0, cdMax: P.cooldown || P.recharge || 1, tickT: 0,
-      ceil: def.surface === 'ceiling' ? this.map.slabBot[cells[0]] : 0,
+      ceil: def.surface === 'ceiling' ? Math.min(this.map.slabBot[cells[0]], CEIL_HANG) : 0,
       x0: Math.min(...xs) * CELL, x1: (Math.max(...xs) + 1) * CELL, z0: Math.min(...zs) * CELL, z1: (Math.max(...zs) + 1) * CELL };
     for (const i of cells) this.occ[tr.layer][i] = tr.id;
     this.traps.set(tr.id, tr);
@@ -1514,6 +1518,9 @@ export class Sim {
       if (m.dead || m.state !== 'walk' || m.y > 1) continue;
       const dx = m.x - b.x, dz = m.z - b.z, d = Math.hypot(dx, dz) || 0.01, min = BARREL_R + MICE[m.type].size * 0.35;
       if (d < min) {
+        // A big rat or a boss doesn't squeeze round a barrel: it shoves it out of the way (it
+        // rolls off and can flatten whoever is in front of it). Small mice slide round.
+        if (MICE[m.type].size >= 0.9 && !(b.vx || b.vz)) { b.vx = -dx / d * 3.5; b.vz = -dz / d * 3.5; continue; }
         // Out to the rim, plus a step along it the way the mouse is heading, so it slides round
         // the barrel (pushing straight out left a mouse walking at the centre stuck there forever).
         const ox = dx / d, oz = dz / d, f = -Math.sin(m.yaw) * oz + Math.cos(m.yaw) * ox, side = Math.abs(f) < 0.2 ? (m.id % 2 ? 1 : -1) : Math.sign(f);

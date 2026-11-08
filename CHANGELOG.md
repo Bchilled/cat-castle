@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.30.0 — 2026-11-08
+Real models, real light, new layouts, and cats that move like cats.
+- **Built from a 3D model kit**, not boxes. Every map's walls, floors, buildings, barrels, crates, kegs, sacks, tables, benches, banners, shelves and lanterns now use the KayKit castle packs by Kay Lousberg (free to use, CC0).
+  - Walls are stone or timber modules with windows, doorways, pillars and cracks, and battlements on the castle walls.
+  - Buildings get pitched roofs.
+  - Floors are flagstones (one stone per trap tile) or planks.
+  - Tables and worktops carry plates, bottles, candles, pots, chopping boards and jars.
+  - The exit hole sits under a real wooden door.
+- **Light:**
+  - The sun (or the light through the high windows indoors) is low and from one side. Walls, tables and cats throw soft shadows, and the shadows follow your cat.
+  - Filmic tone mapping, and less flat fill light, so corners go dark and torchlight glows.
+- **All six maps re-laid out** with more ways through, more height and more clutter:
+  - **Castle Entrance:**
+    - The west road runs straight to the moat, over a fallen log and in through a breach in the curtain wall into the woodyard. The east road comes by the clearing to the main gate.
+    - The gate is a short arch between two towers, not a long tunnel; the board still jams it.
+    - A smithy fills the east ward.
+    - North of the courtyard: the colonnade, the guard passage, and the east lane past a parked cart.
+    - Box up the breach and everyone goes for the gate.
+  - **Market:**
+    - Two alleys come up from the holes into a market square with four stall counters, a well and food piles.
+    - Three ways on north: through the tavern arch (crates across it), the north alley, or the narrow back alley behind the west houses.
+  - **Stables:** a barn in the middle of the muddy yard (go round either side), and a trough by the barn.
+  - **Cellar:**
+    - Down into the entry vault, then three ways north: the zig-zag storeroom (racks across it), the pillared cheese hall with the wheel in the middle, or the long east racks.
+  - **Servants' Passages:**
+    - Rooms of different sizes.
+    - A short cut through the laundry, whose wash tubs drown mice.
+  - **Kitchen:**
+    - A spit hearth burning in the middle of the main kitchen.
+    - A shorter table and a side table.
+    - Larder shelves and bread racks.
+    - Wash tubs in the scullery that drown mice.
+  - **Clutter:** every map has piles of stores in its corners and along its walls (crates, barrels, kegs, sacks, trunks, crates of vegetables, a log pile), one tile each, 60 cm to 1.3 m tall. Mice go round them, cats climb them, nothing builds on them.
+  - More torches, moved to the new walls.
+- **Ceiling traps hang low.** Under a high ceiling a ceiling trap hangs on an iron rod down to 1.05 m (3.5 units), just over the mice, instead of sitting up in the rafters. What it drops falls from there.
+- **Cats move like animals:**
+  - The body turns with a little lag behind your aim, and the head leads into the turn.
+  - The body leans into turns and strafes, and pitches forward as you speed up.
+  - Legs have knees and trot in diagonal pairs, lifting the paws as they swing. Strides lengthen with speed, legs swing sideways when you strafe, and the body bobs with each step.
+  - Take-off stretches the body; landing squashes it, harder from higher. In the air the front legs reach and the back legs trail; nose up while rising, down while falling.
+  - Standing still, the cat breathes and glances about.
+  - The tail is a chain: the tip lags behind the base, so it ripples and follows through on turns. It's carried low and curled to one side at rest, so it's no longer a stick in the middle of your view.
+- Big rats and bosses shove a barrel out of their way (it rolls off and can flatten mice) instead of getting stuck against it.
+- Fixed: the market stalls' collapse lost track of its models once the kit drew some furniture.
+- `assets/kaykit/` the models used (with each pack's LICENSE.txt, and CREDITS.md 1–6); `src/render/kit.js` loading the kit (1–113); `src/render/dress.js` building each map from it (1–225); `src/render/scene.js` shadows and tone mapping (39–42, 51–57), kit floors and the second bridge (104–109, 140–144), kit-built furniture indexed by its place in the map (181–185, 352), shadow casting (230–232, 447, 492), ceiling traps on a rod (505–513), how the cats move (846–942), the sun's shadow box following you (in render); `src/render/models.js` legs with knees and a chained tail (59–81, 91), Scary Cat's tail tip (140–141), the spit hearth (861–870); `src/render/life.js` hand-placed extras and kit props (14–53, 221, 240); `src/sim/map.js` the six layouts, clutter piles, second bridge (60–298, 308–373, 428); `src/sim/sim.js` CEIL_HANG (159–162, 578), big mice shove barrels (1521–1523); `src/main.js` load the kit from the menu (21–23, 201–202); `index.html` three.js addons in the import map (9); `src/config.js` VERSION (8); `README.md` (code layout, credits); `ROADMAP.md` (12); `tests/sim-test.mjs` the new layouts (21–819).
+
+Tests: 264 checks, all passing. The balance bot (starter traps, Puddin, Normal) wins on Entrance, Market, Stables, Cellar and Passages, and loses the Kitchen on its last boss wave. In the browser all six maps load and run a wave with no errors, at about 75 draw calls and 150–200 thousand triangles a frame.
+
 ## 0.29.0 — 2026-11-08
 A lived-in castle at human size.
 - **Things at real size** on every map, so a cat feels cat-sized. They are scenery, so nothing bumps into them:

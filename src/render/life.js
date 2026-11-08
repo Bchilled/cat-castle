@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import { mat, part } from './models.js';
+import { kitObject } from './kit.js';
 
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 const cyl = (rt, rb, h, seg = 8) => new THREE.CylinderGeometry(rt, rb, h, seg);
@@ -18,36 +19,38 @@ const WOOD = 0x7a5a38, DARK = 0x4a3420, IRON = 0x2e2a26, CLOTHS = [0xb83a30, 0x2
 
 // What goes where, per map: [kind, x, y, z, facing (radians; 0 = facing +z), extra].
 // Wall things sit on the wall face and face out from it; strung things go from one point to another.
+// v0.30: banners, shields, shelves and pictures on the walls are placed automatically by the
+// map builder (dress.js); these are the hand-placed extras. 'kit:<name>' places a kit model.
 const DRESSING = {
   entrance: [
-    ['banner', 22, 13, 2.05, 0, 0xb83a30], ['banner', 74, 13, 2.05, 0, 0x2f5a9a],
-    ['banner', 36, 12, 57.95, Math.PI, 0x2f5a9a], ['banner', 60, 12, 57.95, Math.PI, 0xb83a30],
-    ['shield', 34, 5, 30.05, 0, 0xb83a30], ['shield', 40, 5, 30.05, 0, 0x2f5a9a], ['shield', 56, 5, 30.05, 0, 0xd8a838], ['shield', 62, 5, 30.05, 0, 0x3a7a3a],
     ['ladder', 16, 0, 30, 0], ['broom', 84, 0, 30, 0], ['boots', 80, 0, 31, 0.3], ['bucket', 82.5, 0, 31, 0],
-    ['lantern', 48, 9, 66, 0], ['lantern', 48, 9, 78, 0],
-    ['bunting', 6, 11, 53, 0, [90, 11, 53]], ['bunting', 74, 13, 30, 0, [66, 13, 30]],
+    ['lantern', 48, 7, 80, 0], ['kit:target', 14, 0, 34, 0.3], ['kit:target', 18, 0, 34.5, -0.2],
+    ['kit:wheelbarrow', 24, 0, 66, 0.5], ['kit:pallet', 28, 0, 72, 0.2],
+    ['bunting', 6, 11, 53, 0, [90, 11, 53]], ['bunting', 74, 13, 30, 0, [66, 13, 30]], ['bunting', 22, 12, 30, 0, [30, 12, 30]],
   ],
   market: [
-    ...[28, 56, 78].map(z => ['bunting', 2, 12, z, 0, [12, 12, z + 2]]),
-    ...[30, 54, 74].map(z => ['bunting', 40, 13, z, 0, [48, 13, z + 1]]),
-    ...[32, 50, 80].map(z => ['bunting', 76, 12, z, 0, [86, 12, z - 2]]),
-    ['laundry', 40, 15, 36, 0, [48, 15, 36]], ['laundry', 40, 16, 60, 0, [48, 16, 60]], ['laundry', 2, 16, 64, 0, [12, 16, 64]],
-    ['sign', 11.95, 8, 30, -Math.PI / 2, 0], ['sign', 11.95, 8, 54, -Math.PI / 2, 1], ['sign', 76.05, 8, 28, Math.PI / 2, 2], ['sign', 76.05, 8, 56, Math.PI / 2, 3],
-    ['broom', 2, 0, 46, Math.PI / 2], ['boots', 84.5, 0, 66, -1.2], ['chair', 53, 0, 9.5, 0.4], ['chair', 69, 0, 9.5, -0.4],
+    ...[80, 92].map(z => ['bunting', 18, 12, z, 0, [26, 12, z + 2]]), ...[78, 90].map(z => ['bunting', 62, 12, z, 0, [70, 12, z - 2]]),
+    ['bunting', 2, 12, 46, 0, [6, 12, 48]], ['bunting', 58, 12, 28, 0, [64, 12, 30]], ['bunting', 58, 12, 36, 0, [64, 12, 34]],
+    ['bunting', 14, 15, 44, 0, [74, 15, 48]], ['bunting', 14, 15, 66, 0, [74, 15, 62]],
+    ['laundry', 18, 16, 86, 0, [26, 16, 86]], ['laundry', 62, 16, 96, 0, [70, 16, 96]], ['laundry', 2, 16, 32, 0, [6, 16, 32]],
+    ['sign', 14.05, 8, 46, Math.PI / 2, 0], ['sign', 73.95, 8, 58, -Math.PI / 2, 1], ['sign', 48, 8, 40.05, 0, 2], ['sign', 40, 8, 73.95, Math.PI, 3],
+    ['broom', 2, 0, 66, Math.PI / 2], ['boots', 84.5, 0, 14, -1.2], ['chair', 53, 0, 9.5, 0.4], ['chair', 69, 0, 9.5, -0.4],
+    ['kit:tent', 44, 0, 46, 0], ['kit:wheelbarrow', 34, 0, 12, -0.6],
   ],
   stables: [
     ['saddle', 27.95, 3.6, 20, -Math.PI / 2], ['saddle', 27.95, 3.6, 44, -Math.PI / 2], ['saddle', 27.95, 3.6, 64, -Math.PI / 2],
     ['pitchfork', 30, 0, 46, Math.PI / 2], ['broom', 30, 0, 66, Math.PI / 2], ['bucket', 15, 0, 33, 0], ['bucket', 15, 0, 57, 0],
-    ['lantern', 23, 5.5, 30, 0], ['lantern', 23, 5.5, 66, 0], ['boots', 33, 0, 4, 0.4],
+    ['lantern', 23, 5.5, 30, 0], ['lantern', 23, 5.5, 66, 0], ['boots', 33, 0, 4, 0.4], ['kit:wheelbarrow', 47, 0, 62, 0.3], ['kit:pallet', 80, 0, 48, 0.1],
   ],
   cellar: [
     ['ham', 36, 8, 30, 0], ['ham', 38, 8, 31, 1], ['ham', 46, 8, 74, 2], ['ham', 48, 8, 75, 0],
     ['cobweb', 2, 7, 2, 0], ['cobweb', 82, 7, 2, -Math.PI / 2], ['cobweb', 2, 7, 98, Math.PI / 2], ['cobweb', 82, 7, 98, Math.PI],
-    ['candle', 74, 3, 6, 0], ['candle', 79, 3, 9, 0], ['candle', 5, 3, 91, 0], ['lantern', 42, 8, 50, 0],
+    ['candle', 74, 3, 6, 0], ['candle', 79, 3, 9, 0], ['candle', 5, 3, 91, 0], ['lantern', 42, 8, 60, 0], ['lantern', 12, 8, 78, 0],
   ],
   passages: [
     ['painting', 34.05, 4.5, 44, Math.PI / 2, 0x6a8aa0], ['painting', 39.95, 4.5, 54, -Math.PI / 2, 0xa0805a], ['painting', 14, 4.5, 30.05, 0, 0x7a9a6a],
     ['coat', 7.95, 4.6, 18, -Math.PI / 2, 0x6a3a2a], ['coat', 7.95, 4.6, 21, -Math.PI / 2, 0x2a3a5a], ['broom', 78, 0, 94, -Math.PI / 2], ['bucket', 76.5, 0, 92, 0],
+    ['laundry', 43, 5.4, 84, 0, [69, 5.4, 84]], ['laundry', 43, 5.4, 72, 0, [69, 5.4, 72]],
   ],
   kitchen: [
     ['pans', 13, 6, 2.05, 0], ['herbs', 29, 7.5, 2.4, 0], ['herbs', 31.5, 7.5, 2.4, 1], ['herbs', 56, 7.5, 2.4, 2],
@@ -215,7 +218,7 @@ export class Life {
     // Dressing.
     for (const [kind, x, y, z, rot, extra] of DRESSING[map.id] || []) {
       if (kind === 'bunting' || kind === 'laundry') { const l = makeLine(kind, [x, y, z], extra); this.root.add(l); this.swayers.push(...l.userData.sway.map((h, k) => ({ o: h, k: k + x, amp: kind === 'laundry' ? 0.12 : 0.25 }))); continue; }
-      const g = makeDecor(kind, extra); g.position.set(x, y, z); g.rotation.y = rot; this.root.add(g);
+      const g = kind.startsWith('kit:') ? kitObject(kind.slice(4)) : makeDecor(kind, extra); g.position.set(x, y, z); g.rotation.y = rot; this.root.add(g);
       if (g.userData.sway) this.swayers.push({ o: g.userData.sway, k: x + z, amp: 0.05, axis: 'x' });
       if (g.userData.swing) this.swingers.push({ o: g.userData.swing, k: x * 0.7 + z });
       if (g.userData.flicker) this.flickers.push(g.userData.flicker);
@@ -234,7 +237,7 @@ export class Life {
     for (const [x, y, z, f] of spots) for (let k = 0; k < 5; k++) { const m = new THREE.Mesh(flyGeo, flyMat); this.root.add(m); this.flies.push({ m, x, y, z, f, a: Math.random() * 6.3, r: 0.4 + Math.random() * 0.9, w: 3 + Math.random() * 4, h: Math.random() * 0.8 }); }
     // Smoke from the oven chimney and the hearth (kitchen), drifting up and spreading.
     this.smoke = []; this.smokeAt = [];
-    for (const f of map.furniture) if (f.look === 'oven') this.smokeAt.push([(f.rect[0] + f.rect[2]) / 2, f.h, (f.rect[1] + f.rect[3]) / 2]);
+    for (const f of map.furniture) if (f.look === 'oven' || f.look === 'hearth') this.smokeAt.push([(f.rect[0] + f.rect[2]) / 2, f.h, (f.rect[1] + f.rect[3]) / 2]);
     if (this.smokeAt.length) {
       const sm = new THREE.SpriteMaterial({ map: dot, color: 0x8a8278, transparent: true, opacity: 0.35, depthWrite: false });
       for (let k = 0; k < 24; k++) { const s = new THREE.Sprite(sm.clone()); s.visible = false; this.root.add(s); this.smoke.push({ s, life: 0 }); }

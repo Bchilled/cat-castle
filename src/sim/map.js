@@ -57,24 +57,36 @@ const roof = (name, rect, bot, top, look) => ({ name, kind: 'roof', rect, bot, t
 const stair = (name, rect, axis, from, to, look = 'stairs') => ({ name, kind: 'solid', rect, h: Math.max(from, to), look, stairs: { axis, from, to } });
 
 export const MAPS = {
-  // 1. Castle Entrance — the original map (moat, gate, courtyard, three lanes north).
+  // 1. Castle Entrance (v0.30 layout). Two stumps in the forest. From the west one the road
+  // runs straight to the moat, over a fallen log and in through a breach in the curtain wall
+  // (the woodyard), or round by the clearing to the main bridge; the east one comes by the
+  // clearing. The gate is a short arch between two towers, a board jammed in it. The
+  // courtyard has the well, a bench, a trestle table and walkways up to two watchtowers;
+  // three lanes go north (the colonnade, the guard passage with its crates, and the east lane
+  // past a parked cart) to the forecourt and the great hall door.
   entrance: {
     id: 'entrance', name: 'Castle Entrance', order: 1, w: 96, h: 120, floor: 'cobbles', birds: true,
-    blurb: 'Hold the road, the bridge and the gate. Three lanes run north from the courtyard.',
+    blurb: 'Two ways over the moat: the main gate, or the breach into the woodyard. Three lanes north from the courtyard.',
     twist: 'A board jams the gate until the mice chew through it. Flingers by the moat drown them.',
     furniture: [
       // Heights are human scale (1 unit = 30 cm): the castle walls are ~8.5 m, a door is ~2.1 m.
-      { name: 'West wall', kind: 'solid', rect: [0, 0, 2, 84],   h: 28, look: 'stone' },
-      { name: 'East wall', kind: 'solid', rect: [94, 0, 96, 84], h: 28, look: 'stone' },
-      { name: 'Hall wall', kind: 'solid', rect: [2, 0, 94, 2],   h: 32, look: 'hallwall' },
-      // The gate passage is 4 tiles wide (2.4 m), like the guard passage and the two side lanes.
-      { name: 'Curtain wall W', kind: 'solid', rect: [0, 76, 44, 84],  h: 28, look: 'stone' },
-      { name: 'Curtain wall E', kind: 'solid', rect: [52, 76, 96, 84], h: 28, look: 'stone' },
-      { name: 'Gatehouse W', kind: 'solid', rect: [28, 58, 44, 76], h: 34, look: 'stone' },
-      { name: 'Gatehouse E', kind: 'solid', rect: [52, 58, 68, 76], h: 34, look: 'stone' },
-      { name: 'Gatehouse roof', kind: 'roof', rect: [44, 58, 52, 84], bot: 9, top: 34, look: 'tunnelroof' },
-      { name: 'Yard wall SW', kind: 'solid', rect: [2, 56, 28, 58], h: 6, look: 'stone' },
-      { name: 'Yard wall SE', kind: 'solid', rect: [68, 56, 94, 58], h: 6, look: 'stone' },
+      { name: 'West wall', kind: 'solid', rect: [0, 0, 2, 76], h: 28, look: 'stone' },
+      { name: 'East wall', kind: 'solid', rect: [94, 0, 96, 76], h: 28, look: 'stone' },
+      { name: 'Hall wall', kind: 'solid', rect: [2, 0, 94, 2], h: 32, look: 'hallwall' },
+      // The curtain wall: broken through in the west (the breach), the gate in the middle between two towers.
+      { name: 'Curtain wall', kind: 'solid', rect: [0, 76, 16, 84], h: 28, look: 'stone' },
+      { name: 'Curtain wall', kind: 'solid', rect: [24, 76, 34, 84], h: 28, look: 'stone' },
+      { name: 'Gate tower W', kind: 'solid', rect: [34, 70, 44, 84], h: 34, look: 'stone' },
+      { name: 'Gate tower E', kind: 'solid', rect: [52, 70, 62, 84], h: 34, look: 'stone' },
+      { name: 'Curtain wall', kind: 'solid', rect: [62, 76, 96, 84], h: 28, look: 'stone' },
+      roof('Gate arch', [44, 76, 52, 84], 7, 28, 'tunnelroof'),
+      // The woodyard (west ward), between the breach and the courtyard; the smithy fills the east ward.
+      { name: 'Yard wall', kind: 'solid', rect: [10, 56, 18, 58], h: 6, look: 'stone' },
+      { name: 'Yard wall', kind: 'solid', rect: [26, 56, 34, 58], h: 6, look: 'stone' },
+      { name: 'Ward wall', kind: 'solid', rect: [32, 58, 34, 70], h: 6, look: 'stone' },
+      { name: 'Smithy', kind: 'solid', rect: [62, 58, 94, 76], h: 14, look: 'guardhouse' },
+      { name: 'Log pile', kind: 'solid', rect: [2, 64, 8, 74], h: 3, look: 'pile', pile: 'logs' },
+      // The courtyard.
       { name: 'Well', kind: 'solid', rect: [44, 38, 52, 46], h: 3.2, look: 'well' },
       { name: 'West walkway', kind: 'solid', rect: [2, 30, 8, 56], h: 3, look: 'walkway' },
       { name: 'East walkway', kind: 'solid', rect: [88, 30, 94, 56], h: 3, look: 'walkway' },
@@ -85,68 +97,83 @@ export const MAPS = {
       { name: 'West tower', kind: 'solid', rect: [2, 48, 10, 58], h: 8, look: 'tower' },
       { name: 'East tower', kind: 'solid', rect: [86, 48, 94, 58], h: 8, look: 'tower' },
       { name: 'Crate', kind: 'solid', rect: [52, 44, 54, 46], h: 1.4, look: 'crate' },
-      { name: 'Guardhouse W', kind: 'solid', rect: [30, 10, 44, 30], h: 16, look: 'guardhouse' },
-      { name: 'Guardhouse E', kind: 'solid', rect: [52, 10, 66, 30], h: 16, look: 'guardhouse' },
-      { name: 'Guard passage', kind: 'roof', rect: [44, 10, 52, 30], bot: 7, top: 16, look: 'tunnelroof' },
-      // Three lanes north, 4 tiles each: the colonnade (west, roofed), the guard passage
-      // (roofed, crates across it) and the east lane (open sky), between the buildings.
-      { name: 'Armoury', kind: 'solid', rect: [2, 10, 22, 30], h: 16, look: 'guardhouse' },
-      { name: 'Colonnade roof', kind: 'over', rect: [22, 10, 30, 30], bot: 9, top: 9.8, look: 'colonnade' },
-      { name: 'Barracks', kind: 'solid', rect: [74, 10, 94, 30], h: 16, look: 'guardhouse' },
-      { name: 'Hay bales', kind: 'solid', rect: [86, 2, 94, 6], h: 2.6, look: 'bales' },
-      { name: 'Barrels', kind: 'solid', rect: [2, 2, 8, 6], h: 3.0, look: 'barrels' },
       over('Bench', [16, 40, 30, 43], 1.5, 1.9, 'bench'),
       over('Trestle table', [62, 36, 74, 44], 2.5, 2.9, 'table'),
       { name: 'Bucket', kind: 'solid', rect: [54, 38, 55, 39], h: 1.2, look: 'bucket' },        // a real bucket: 30 cm across
-      { name: 'Helmet', kind: 'solid', rect: [32, 94, 33, 95], h: 0.8, look: 'helmet' },        // a guard's helmet, dropped by the road
       { name: 'Spear rack', kind: 'solid', rect: [10, 52, 22, 53], h: 6, look: 'rack' },
+      // North: three lanes between the buildings, 4 tiles each.
+      { name: 'Armoury', kind: 'solid', rect: [2, 10, 22, 30], h: 16, look: 'guardhouse' },
+      { name: 'Colonnade roof', kind: 'over', rect: [22, 10, 30, 30], bot: 7, top: 7.8, look: 'colonnade' },
+      { name: 'Guardhouse W', kind: 'solid', rect: [30, 10, 44, 30], h: 16, look: 'guardhouse' },
+      { name: 'Guardhouse E', kind: 'solid', rect: [52, 10, 66, 30], h: 16, look: 'guardhouse' },
+      { name: 'Guard passage', kind: 'roof', rect: [44, 10, 52, 30], bot: 7, top: 16, look: 'tunnelroof' },
+      { name: 'Cart', kind: 'solid', rect: [66, 14, 70, 22], h: 3.6, look: 'cart' },           // narrows the east lane to 2 tiles
+      { name: 'Barracks', kind: 'solid', rect: [74, 10, 94, 30], h: 16, look: 'guardhouse' },
+      { name: 'Hay bales', kind: 'solid', rect: [86, 2, 94, 6], h: 2.6, look: 'bales' },
+      { name: 'Barrels', kind: 'solid', rect: [2, 2, 8, 6], h: 3.0, look: 'barrels' },
+      // Outside.
+      { name: 'Helmet', kind: 'solid', rect: [32, 94, 33, 95], h: 0.8, look: 'helmet' },        // a guard's helmet, dropped by the road
       { name: 'Hollow log', kind: 'roof', rect: [16, 104, 24, 110], bot: 4, top: 5, look: 'log' },
       { name: 'Hollow log', kind: 'roof', rect: [72, 104, 80, 110], bot: 4, top: 5, look: 'log' },
     ],
+    // Clutter: stores piled up in the corners, a tile each (cats can climb them).
+    clutter: [[2, 58, 10, 64], [26, 58, 32, 64], [10, 66, 16, 76], [54, 58, 62, 62], [76, 30, 86, 32], [56, 30, 66, 32], [10, 2, 16, 6], [78, 2, 86, 6], [34, 30, 42, 32]],
     drain: { x0: 0, x1: 96, z0: 84, z1: 92 }, bridge: { x0: 44, x1: 52, z0: 83.5, z1: 92.5 }, gate: { x0: 44, x1: 52, z0: 83, z1: 84 },
+    bridges: [{ x0: 16, x1: 24, z0: 83.5, z1: 92.5 }],                                          // the fallen log to the breach
     hole: { x0: 46, x1: 50, z0: 2, z1: 2.5 }, clearing: { x0: 28, x1: 68, z0: 92, z1: 102 },
-    // Forest roads 4 tiles wide, straight along the grid: north from each stump, then in to the clearing.
-    roads: [[[20, 120], [20, 98], [30, 98]], [[76, 120], [76, 98], [66, 98]]],
+    // Forest roads 4 tiles wide: the west one straight on to the moat (and a branch to the clearing).
+    roads: [[[20, 120], [20, 92]], [[20, 98], [30, 98]], [[76, 120], [76, 98], [66, 98]]],
     spawns: [{ x: 20, z: 118.8 }, { x: 76, z: 118.8 }], catSpawn: { x: 48, z: 8 },
     vias: [{ name: 'Colonnade', x: 26, z: 20, weight: 1 }, { name: 'Guard passage', x: 48, z: 20, weight: 1 }, { name: 'East lane', x: 70, z: 20, weight: 1 }],
-    torches: [[2, 34, 1, 0], [94, 34, -1, 0], [44, 66, 1, 0], [52, 66, -1, 0], [42, 2, 0, 1], [54, 2, 0, 1], [30, 20, -1, 0], [66, 20, 1, 0]],
+    torches: [[2, 34, 1, 0], [94, 34, -1, 0], [44, 74, 1, 0], [52, 74, -1, 0], [42, 2, 0, 1], [54, 2, 0, 1], [30, 20, -1, 0], [66, 20, 1, 0]],
     // Knock-over props near the edges of the table, bench and walkways (x, surface height, z).
     props: [['pot', 63, 2.9, 40], ['jug', 70, 2.9, 37], ['basket', 20, 1.9, 42.5], ['pot', 26, 1.9, 40.5], ['jug', 7, 3, 34], ['basket', 89, 3, 34]],
   },
-  // 2. Market Back Alleys — behind the stalls. Three alleys, crossings under the stall
-  // counters (ceilings for zappers, pots to knock off onto them). Twist: food piles.
-  // Mice stop to gorge and come out tougher, until the pile is gone.
+  // 2. Market Back Alleys (v0.30 layout). Two alleys come up from the holes into the market
+  // square: four stall counters (mice run under them; break a leg and they come down), a
+  // fountain-well, food piles. Three ways on north: through the tavern arch (crates stacked
+  // across it), up the alley by the north houses, or out of the square's west side and up
+  // the narrow back alley behind the west houses. Then the north yard and the back door.
   market: {
     id: 'market', name: 'Market Back Alleys', order: 2, w: 88, h: 104, floor: 'cobbles', birds: true,
-    blurb: 'Three alleys behind the market stalls, crossing under the counters.',
+    blurb: 'Up the alleys into the market square, then through the tavern arch, the north alley or the narrow back alley.',
     twist: 'Food piles: mice stop to gorge and come out tougher. Knock pots off the counters onto them, or break a stall\'s legs and bring the whole counter down.',
     furniture: [
       ...shell(88, 104, 24, 'house', [22, 66]),
-      // Alleys on the grid: west 5 tiles, centre 4, east 5; crossings under the counters 3.
-      blk('Stall block', [12, 22, 40, 40], 20, 'house'), blk('Stall block', [12, 46, 40, 62], 20, 'house'), blk('Stall block', [12, 68, 40, 84], 20, 'house'),
-      blk('Stall block', [48, 22, 76, 40], 20, 'house'), blk('Stall block', [48, 46, 76, 62], 20, 'house'), blk('Stall block', [48, 68, 76, 84], 20, 'house'),
-      // The Fish and Cheese counters reach a tile out over the side alleys, with steps up to them.
-      over('Fish stall', [10, 40, 40, 46], 2.6, 3.0, 'stall'), over('Veg stall', [12, 62, 40, 68], 2.6, 3.0, 'stall'),
-      over('Bread stall', [48, 40, 76, 46], 2.6, 3.0, 'stall'), over('Cheese stall', [48, 62, 78, 68], 2.6, 3.0, 'stall'),
-      stair('Counter steps', [10, 46, 12, 52], 'z', 3, 0), stair('Counter steps', [76, 68, 78, 74], 'z', 3, 0),
-      blk('Crates', [8, 88, 12, 92], 1.6, 'crate'), blk('Barrels', [74, 88, 82, 92], 3, 'barrels'), blk('Cart', [40, 90, 46, 98], 3.6, 'cart'),
-      blk('Crates', [10, 8, 16, 12], 1.6, 'crate'), blk('Crates', [72, 6, 78, 10], 1.6, 'crate'),
-      blk('Apple sacks', [2, 52, 5, 56], 0.8, 'sacks'), blk('Bread sacks', [83, 30, 86, 34], 0.8, 'sacks'), blk('Cabbages', [40, 72, 43, 75], 0.8, 'sacks'),
+      // North row of houses: the tavern arch (covered, 4 tiles) and the north alley (3 tiles).
+      blk('Houses', [6, 22, 30, 40], 20, 'house'), roof('Tavern arch', [30, 22, 38, 40], 7, 20, 'tunnelroof'),
+      blk('Tavern', [38, 22, 58, 40], 20, 'house'), blk('Houses', [64, 22, 86, 40], 20, 'house'),
+      // West houses with the back alley (2 tiles) behind them; a gap from the square into it.
+      blk('Houses', [6, 40, 14, 58], 20, 'house'), blk('Houses', [6, 62, 14, 70], 20, 'house'),
+      blk('Houses', [74, 40, 86, 70], 20, 'house'),
+      // South: the two alleys up from the holes (4 tiles each).
+      blk('Houses', [2, 70, 18, 102], 20, 'house'), blk('Houses', [26, 74, 62, 102], 20, 'house'), blk('Houses', [70, 70, 86, 102], 20, 'house'),
+      // The square.
+      over('Fish stall', [18, 44, 30, 48], 2.6, 3.0, 'stall'), over('Veg stall', [18, 60, 30, 64], 2.6, 3.0, 'stall'),
+      over('Bread stall', [58, 44, 70, 48], 2.6, 3.0, 'stall'), over('Cheese stall', [58, 60, 70, 64], 2.6, 3.0, 'stall'),
+      stair('Counter steps', [30, 44, 36, 46], 'x', 3, 0), stair('Counter steps', [52, 62, 58, 64], 'x', 0, 3),
+      blk('Well', [40, 52, 48, 58], 3.2, 'well'),
+      blk('Apple sacks', [14, 52, 16, 56], 0.8, 'sacks'), blk('Bread sacks', [72, 52, 74, 56], 0.8, 'sacks'), blk('Cabbages', [42, 66, 46, 68], 0.8, 'sacks'),
+      blk('Barrels', [50, 70, 56, 74], 3, 'barrels'),
+      // The north yard by the back door.
+      blk('Crates', [10, 8, 16, 12], 1.6, 'crate'), blk('Crates', [72, 6, 78, 10], 1.6, 'crate'), blk('Cart', [20, 12, 26, 20], 3.6, 'cart'),
       over('Awning bench', [56, 8, 66, 11], 1.5, 1.9, 'bench'),
     ],
+    clutter: [[2, 2, 10, 8], [78, 2, 86, 8], [14, 40, 18, 44], [70, 40, 74, 44], [14, 66, 18, 70], [70, 66, 74, 70], [26, 70, 32, 74], [58, 18, 64, 22]],
     hole: { x0: 42, x1: 46, z0: 2, z1: 2.5 }, spawns: [{ x: 22, z: 102.8 }, { x: 66, z: 102.8 }], catSpawn: { x: 44, z: 8 },
-    vias: [{ name: 'West alley', x: 7, z: 30, weight: 1 }, { name: 'Centre alley', x: 44, z: 30, weight: 1 }, { name: 'East alley', x: 81, z: 30, weight: 1 }],
-    foods: [{ name: 'Apples', x: 5.5, z: 54, r: 3.5, amount: 25 }, { name: 'Bread', x: 82.5, z: 32, r: 3.5, amount: 25 }, { name: 'Cabbages', x: 41.5, z: 76, r: 3.5, amount: 25 }],
-    torches: [[2, 30, 1, 0], [86, 60, -1, 0], [40, 30, 1, 0], [48, 76, -1, 0], [44, 2, 0, 1]],
-    props: [['pot', 22, 3, 41], ['basket', 28, 3, 45], ['jug', 34, 3, 41], ['pot', 22, 3, 67], ['basket', 34, 3, 63], ['jug', 54, 3, 45], ['pot', 62, 3, 41],
-            ['basket', 66, 3, 45], ['pot', 54, 3, 63], ['jug', 66, 3, 67], ['basket', 76, 3, 89], ['pot', 13, 1.6, 9]],
+    vias: [{ name: 'Back alley', x: 4, z: 40, weight: 1 }, { name: 'Tavern arch', x: 34, z: 31, weight: 1 }, { name: 'North alley', x: 61, z: 31, weight: 1 }],
+    foods: [{ name: 'Apples', x: 17.5, z: 54, r: 3.5, amount: 25 }, { name: 'Bread', x: 70.5, z: 54, r: 3.5, amount: 25 }, { name: 'Cabbages', x: 44, z: 69.5, r: 3.5, amount: 25 }],
+    torches: [[14, 50, 1, 0], [74, 50, -1, 0], [38, 31, -1, 0], [44, 2, 0, 1], [26, 86, -1, 0], [62, 86, 1, 0]],
+    props: [['pot', 20, 3, 44.5], ['basket', 26, 3, 47.5], ['jug', 29, 3, 44.5], ['pot', 20, 3, 63.5], ['basket', 28, 3, 60.5], ['jug', 60, 3, 44.5], ['pot', 66, 3, 47.5],
+            ['basket', 69, 3, 44.5], ['pot', 60, 3, 63.5], ['jug', 68, 3, 60.5], ['pot', 13, 1.6, 9]],
   },
 
-  // 3. Stables and Yard — a covered aisle under the hay loft with horse pens off it,
-  // and an open yard. Twist: mud slows everyone (cats too), water troughs drown mice.
+  // 3. Stables and Yard — a covered aisle under the hay loft with horse pens off it, and a
+  // muddy yard split by a paddock wall, with the barn in the middle of it (go round either
+  // side). Twist: mud slows everyone (cats too), water troughs drown mice.
   stables: {
     id: 'stables', name: 'Stables and Yard', order: 3, w: 100, h: 96, floor: 'dirt', birds: true,
-    blurb: 'A long stable aisle under the hay loft, and a muddy yard full of troughs.',
+    blurb: 'A long stable aisle under the hay loft, and a muddy yard round the barn, full of troughs.',
     twist: 'Mud slows everything. Troughs drown mice: fling them in.',
     furniture: [
       ...shell(100, 96, 22, 'house', [23, 74]),
@@ -159,92 +186,116 @@ export const MAPS = {
       blk('Stable wall', [28, 56, 30, 72], 10, 'house'), blk('Stable wall', [28, 78, 30, 86], 10, 'house'),
       blk('Horse', [4, 29, 14, 31], 5, 'horse', { tint: 0x8a5a32 }), blk('Horse', [4, 53, 14, 55], 5, 'horse', { tint: 0xb8b0a4 }),   // in two of the pens: real size
       blk('Paddock wall', [30, 40, 40, 42], 4, 'stone'), blk('Paddock wall', [48, 40, 76, 42], 4, 'stone'), blk('Paddock wall', [84, 40, 98, 42], 4, 'stone'),
+      blk('Barn', [50, 50, 78, 66], 18, 'guardhouse'),
       blk('Fence', [32, 72, 60, 73], 1.2, 'fence'), blk('Fence', [68, 30, 98, 31], 1.2, 'fence'),
       blk('Cart', [76, 8, 82, 16], 3.6, 'cart'), blk('Hay bales', [86, 4, 98, 14], 2.6, 'bales'),
       blk('Oat sacks', [36, 2, 40, 5], 0.8, 'sacks'), blk('Water barrel', [92, 80, 96, 84], 3, 'barrels'),
     ],
-    waters: [{ x0: 50, x1: 62, z0: 46, z1: 50 }, { x0: 70, x1: 84, z0: 52, z1: 56 }, { x0: 40, x1: 54, z0: 76, z1: 79 }],
+    clutter: [[88, 20, 98, 28], [32, 86, 44, 94], [80, 86, 90, 94], [80, 66, 90, 70], [32, 14, 38, 20], [42, 66, 50, 70]],
+    waters: [{ x0: 50, x1: 62, z0: 46, z1: 50 }, { x0: 82, x1: 96, z0: 56, z1: 60 }, { x0: 40, x1: 54, z0: 76, z1: 79 }],
     muds: [{ x0: 34, x1: 92, z0: 24, z1: 70 }],
     hole: { x0: 48, x1: 52, z0: 2, z1: 2.5 }, spawns: [{ x: 23, z: 94.8 }, { x: 74, z: 94.8 }], catSpawn: { x: 50, z: 8 },
     vias: [{ name: 'Stable aisle', x: 23, z: 50, weight: 1 }, { name: 'Yard', x: 44, z: 41, weight: 1 }],
     foods: [{ name: 'Oats', x: 38, z: 6.5, r: 3.5, amount: 25 }],
-    torches: [[2, 50, 1, 0], [28, 40, -1, 0], [98, 50, -1, 0], [50, 2, 0, 1]],
+    torches: [[2, 50, 1, 0], [28, 40, -1, 0], [98, 50, -1, 0], [50, 2, 0, 1], [50, 58, -1, 0], [78, 58, 1, 0]],
     props: [['bucket', 20, 6.2, 30], ['basket', 26, 6.2, 60], ['pot', 92, 2.6, 8], ['jug', 79, 3.6, 12], ['bucket', 20, 6.2, 76]],
   },
 
-  // 4. Cellar and Storerooms — under a stone vault (ceilings everywhere), long wine racks
-  // making corridors, a giant cheese wheel. Twist: it's dark (sniff with F), and the
-  // cheese wheel makes every mouse stop to gorge.
+  // 4. Cellar and Storerooms (v0.30 layout). Down the steps into the entry vault, then three
+  // ways north: the west storeroom (racks across it, so it zig-zags), the pillared cheese
+  // hall (the giant wheel in the middle), or the east racks (two long corridors). They meet
+  // under the north vault by the stairs up. Twist: it's dark (sniff with F), and the cheese
+  // wheel makes every mouse stop to gorge.
   cellar: {
     id: 'cellar', name: 'Cellar and Storerooms', order: 4, w: 84, h: 100, floor: 'stone', birds: false, dark: true,
-    blurb: 'Long wine-rack corridors under a stone vault, round a giant cheese wheel.',
+    blurb: 'The zig-zag storeroom, the pillared cheese hall or the long east racks, under a stone vault.',
     twist: "It's dark down here: hold F to sniff them out. Ceiling traps work anywhere.",
     furniture: [
       ...shell(84, 100, 14, 'stone', [24, 60]),
       roof('Vault', [2, 2, 82, 98], 8, 9, 'vault'),
-      // Rack stacks between 4-tile corridors (west, west-middle, east-middle, east) and the
-      // 10-tile cheese hall in the middle; one 3-tile cross aisle halfway up.
-      ...[[10, 18], [26, 32], [52, 58], [66, 74]].flatMap(([x0, x1]) => [blk('Wine rack', [x0, 18, x1, 46], 7, 'winerack'), blk('Wine rack', [x0, 52, x1, 84], 7, 'winerack')]),
-      blk('Cheese wheel', [38, 60, 46, 68], 3, 'cheesewheel'),
+      // The entry vault's north wall, with a 4-tile doorway into each of the three ways.
+      blk('Cellar wall', [2, 82, 8, 84], 14, 'stone'), blk('Cellar wall', [16, 82, 38, 84], 14, 'stone'), blk('Cellar wall', [46, 82, 66, 84], 14, 'stone'), blk('Cellar wall', [74, 82, 82, 84], 14, 'stone'),
+      blk('Cellar wall', [22, 14, 24, 82], 14, 'stone'), blk('Cellar wall', [58, 14, 60, 82], 14, 'stone'),
+      // West storeroom: racks across it, gaps on alternate sides.
+      ...[[2, 22, 16, 24], [8, 32, 22, 34], [2, 42, 16, 44], [8, 52, 22, 54], [2, 62, 16, 64], [8, 72, 22, 74]].map(r => blk('Wine rack', r, 7, 'winerack')),
+      // The cheese hall: vault pillars and the wheel.
+      ...[[28, 22], [52, 22], [28, 38], [52, 38], [28, 56], [52, 56], [28, 70], [52, 70]].map(([x, z]) => blk('Pillar', [x, z, x + 2, z + 2], 8, 'pillar')),
+      blk('Cheese wheel', [38, 44, 46, 52], 3, 'cheesewheel'),
+      // East racks: two long racks, three corridors (the far one only open at the top).
+      blk('Wine rack', [66, 20, 70, 76], 7, 'winerack'), blk('Wine rack', [74, 26, 78, 82], 7, 'winerack'),
       blk('Barrels', [72, 4, 82, 12], 3, 'barrels'), blk('Barrels', [2, 88, 10, 96], 3, 'barrels'), blk('Crates', [4, 4, 10, 8], 1.6, 'crate'),
     ],
+    clutter: [[16, 84, 22, 90], [62, 84, 72, 90], [24, 74, 28, 82], [54, 74, 58, 82], [24, 14, 28, 18], [54, 14, 58, 18], [12, 2, 20, 6], [60, 2, 70, 6], [78, 14, 82, 24]],
     hole: { x0: 40, x1: 44, z0: 2, z1: 2.5 }, spawns: [{ x: 24, z: 98.8 }, { x: 60, z: 98.8 }], catSpawn: { x: 42, z: 8 },
-    vias: [{ name: 'West racks', x: 22, z: 50, weight: 1 }, { name: 'Cheese aisle', x: 42, z: 50, weight: 1 }, { name: 'East racks', x: 62, z: 50, weight: 1 }],
-    foods: [{ name: 'Cheese wheel', x: 42, z: 64, r: 5.5, amount: 60 }],
-    torches: [[2, 30, 1, 0], [82, 70, -1, 0], [42, 2, 0, 1]],
+    vias: [{ name: 'West storeroom', x: 12, z: 48, weight: 1 }, { name: 'Cheese hall', x: 42, z: 60, weight: 1 }, { name: 'East racks', x: 63, z: 50, weight: 1 }],
+    foods: [{ name: 'Cheese wheel', x: 42, z: 48, r: 5.5, amount: 60 }],
+    torches: [[2, 30, 1, 0], [82, 70, -1, 0], [42, 2, 0, 1], [24, 48, 1, 0], [58, 48, -1, 0], [30, 84, 0, 1]],
     props: [['jug', 75, 3, 8], ['pot', 79, 3, 6], ['jug', 6, 3, 92], ['basket', 7, 1.6, 6]],
   },
 
-  // 5. Servants' Passages — narrow corridors inside the walls, a grid of loops, roofed
-  // all over. Twist: servants open and shut doors on a timer, rerouting the mice mid-wave.
+  // 5. Servants' Passages — narrow corridors inside the walls, roofed all over, round rooms of
+  // different sizes. One way runs through the laundry (wash tubs: they drown mice). Twist:
+  // servants open and shut doors on a timer, rerouting the mice mid-wave.
   passages: {
     id: 'passages', name: "Servants' Passages", order: 5, w: 80, h: 100, floor: 'planks', birds: false,
-    blurb: 'A maze of narrow passages inside the walls. Ceilings everywhere.',
+    blurb: 'Narrow passages inside the walls, a short cut through the laundry, ceilings everywhere.',
     twist: 'Servants open and shut the doors on a timer. Mice queue at a shut door, or take another way if it is shorter. Hit a tall shelf until it topples across the corridor.',
     furniture: [
       ...shell(80, 100, 14, 'plaster', [5, 75]),
       roof('Ceiling', [2, 2, 78, 98], 6, 7, 'beams'),
-      ...[[8, 34], [40, 72]].flatMap(([x0, x1]) => [[8, 30], [36, 62], [68, 90]].map(([z0, z1]) => blk('Room', [x0, z0, x1, z1], 14, 'plaster'))),
+      blk('Room', [8, 8, 34, 30], 14, 'plaster'), blk('Room', [40, 8, 56, 30], 14, 'plaster'), blk('Room', [62, 14, 72, 30], 14, 'plaster'),
+      blk('Room', [8, 36, 20, 62], 14, 'plaster'), blk('Room', [26, 36, 34, 62], 14, 'plaster'), blk('Room', [40, 36, 72, 62], 14, 'plaster'),
+      blk('Room', [8, 68, 34, 90], 14, 'plaster'),
+      // The laundry: a room you can walk through (doors in its north and west walls), two wash tubs inside.
+      blk('Laundry wall', [40, 68, 54, 70], 14, 'plaster'), blk('Laundry wall', [58, 68, 72, 70], 14, 'plaster'),
+      blk('Laundry wall', [40, 70, 42, 76], 14, 'plaster'), blk('Laundry wall', [40, 80, 42, 90], 14, 'plaster'),
+      blk('Laundry wall', [42, 88, 72, 90], 14, 'plaster'), blk('Laundry wall', [70, 70, 72, 88], 14, 'plaster'),
       blk('Linen basket', [3, 40, 7, 43], 1.4, 'basket'), blk('Coal scuttle', [73, 20, 77, 23], 1.4, 'bucket'),
     ],
+    waters: [{ x0: 48, x1: 54, z0: 78, z1: 82 }, { x0: 60, x1: 66, z0: 74, z1: 78 }],
+    clutter: [[42, 82, 48, 88], [64, 82, 70, 88], [58, 8, 72, 12], [36, 92, 46, 98]],
     doors: [
       { rect: [34, 48, 40, 49], period: 16, offset: 0 }, { rect: [20, 30, 21, 36], period: 18, offset: 6 },
       { rect: [56, 62, 57, 68], period: 14, offset: 3 }, { rect: [2, 76, 8, 77], period: 20, offset: 10 },
     ],
     hole: { x0: 36, x1: 40, z0: 2, z1: 2.5 }, spawns: [{ x: 5, z: 98.8 }, { x: 75, z: 98.8 }], catSpawn: { x: 37, z: 5 },   // hole on the tile grid (2 tiles)
-    vias: [{ name: 'West passage', x: 5, z: 50, weight: 1 }, { name: 'Middle passage', x: 37, z: 33, weight: 1 }, { name: 'East passage', x: 75, z: 50, weight: 1 }],
-    torches: [[2, 20, 1, 0], [78, 80, -1, 0], [34, 50, -1, 0], [40, 20, 1, 0]],
+    vias: [{ name: 'West passage', x: 5, z: 50, weight: 1 }, { name: 'Middle passage', x: 37, z: 33, weight: 1 }, { name: 'Laundry', x: 56, z: 79, weight: 1 }],
+    torches: [[2, 20, 1, 0], [78, 80, -1, 0], [34, 50, -1, 0], [40, 20, 1, 0], [20, 50, 1, 0], [42, 78, 1, 0]],
     props: [['basket', 5, 1.4, 41.5], ['pot', 76, 1.4, 21]],
   },
 
-  // 6. The Kitchen — under the counters and the island, past the ovens, to the pantry.
-  // Twist: three entrances, and the ovens and hearth burn anything that gets close.
+  // 6. The Kitchen — three back rooms (the scullery with its wash tubs, the larder, the
+  // bakehouse), each with a doorway into the main kitchen: worktops down both walls, the
+  // long table, the spit hearth burning in the middle, the oven, and the pantry door.
+  // Twist: three ways in, and fire everywhere: oven, hearth and spit burn mice and cats alike.
   kitchen: {
     id: 'kitchen', name: 'The Kitchen', order: 6, w: 96, h: 100, floor: 'stone', birds: true,
-    blurb: 'The last stand: under the counters and the island, past the ovens, to the pantry.',
-    twist: 'Three ways in, through the scullery, the larder and the bakehouse. The oven and the hearth burn mice and cats alike.',
+    blurb: 'The last stand: in through the scullery, larder or bakehouse, round the spit hearth, to the pantry.',
+    twist: 'Three ways in, through the scullery, the larder and the bakehouse. The oven, the hearth and the spit burn mice and cats alike.',
     furniture: [
       ...shell(96, 100, 26, 'plaster', [16, 48, 80]),
-      // Three back rooms (scullery, larder, bakehouse), one per mouse hole, each opening into
-      // the main kitchen by a 4-tile doorway. Worktops (1.2 m deep) along both side walls,
-      // a long kitchen table in the middle: mice run underneath, ceiling traps hang there.
       blk('Kitchen wall', [2, 64, 12, 66], 12, 'plaster'), blk('Kitchen wall', [20, 64, 44, 66], 12, 'plaster'),
       blk('Kitchen wall', [52, 64, 76, 66], 12, 'plaster'), blk('Kitchen wall', [84, 64, 94, 66], 12, 'plaster'),
       blk('Scullery wall', [32, 66, 34, 98], 12, 'plaster'), blk('Bakehouse wall', [62, 66, 64, 98], 12, 'plaster'),
       over('West worktop', [2, 14, 6, 58], 3, 3.4, 'counter'), over('East worktop', [90, 14, 94, 58], 3, 3.4, 'counter'),
       stair('Steps', [6, 50, 8, 57], 'z', 3.4, 0), stair('Steps', [88, 50, 90, 57], 'z', 3.4, 0),   // up onto the worktops
-      over('Kitchen table', [36, 26, 60, 34], 3, 3.4, 'counter'), over('Butcher block', [64, 44, 70, 48], 2.8, 3.2, 'table'),
+      over('Kitchen table', [24, 26, 48, 32], 3, 3.4, 'counter'), over('Side table', [60, 24, 76, 30], 2.5, 2.9, 'table'),
+      over('Butcher block', [64, 44, 70, 48], 2.8, 3.2, 'table'),
+      blk('Spit hearth', [44, 40, 52, 46], 1.2, 'hearth'),
       blk('Oven', [36, 2, 52, 8], 9, 'oven'), blk('Hearth', [86, 86, 94, 96], 8, 'oven'),
       blk('Flour sacks', [18, 4, 26, 8], 2.6, 'sacks'), blk('Crates', [56, 90, 62, 96], 1.6, 'crate'),
-      blk('Sacks', [36, 90, 42, 96], 2.6, 'sacks'), blk('Wash tub', [4, 86, 10, 92], 2.4, 'barrels'),
+      blk('Sacks', [36, 90, 42, 96], 2.6, 'sacks'),
+      blk('Larder shelves', [34, 70, 36, 88], 7, 'winerack'), blk('Bread racks', [64, 70, 66, 84], 7, 'winerack'),
     ],
-    fires: [{ x: 44, z: 10.5, r: 3 }, { x: 84, z: 91, r: 2.5 }],
+    waters: [{ x0: 6, x1: 12, z0: 78, z1: 82 }, { x0: 20, x1: 26, z0: 84, z1: 88 }],     // the scullery's wash tubs
+    clutter: [[10, 2, 16, 6], [54, 2, 62, 6], [78, 2, 90, 6], [2, 66, 10, 72], [24, 90, 32, 98], [52, 90, 56, 96], [66, 66, 74, 70], [78, 18, 88, 22]],
+    fires: [{ x: 44, z: 10.5, r: 3 }, { x: 84, z: 91, r: 2.5 }, { x: 48, z: 43, r: 3.2 }],
     foods: [{ name: 'Dropped veg', x: 22, z: 54, r: 3.5, amount: 25 }],
     hole: { x0: 70, x1: 74, z0: 2, z1: 2.5 }, spawns: [{ x: 16, z: 98.8 }, { x: 48, z: 98.8 }, { x: 80, z: 98.8 }], catSpawn: { x: 72, z: 8 },
     vias: [{ name: 'Scullery door', x: 16, z: 65, weight: 1 }, { name: 'Larder door', x: 48, z: 65, weight: 1 }, { name: 'Bakehouse door', x: 80, z: 65, weight: 1 }],
-    torches: [[2, 10, 1, 0], [94, 10, -1, 0], [30, 2, 0, 1], [60, 2, 0, 1], [33, 80, 1, 0], [63, 80, -1, 0]],
+    torches: [[2, 10, 1, 0], [94, 10, -1, 0], [30, 2, 0, 1], [60, 2, 0, 1], [33, 80, 1, 0], [63, 80, -1, 0], [44, 64, 0, -1]],
     props: [['pot', 5.5, 3.4, 24], ['jug', 5.5, 3.4, 40], ['pot', 5.5, 3.4, 52], ['pot', 90.5, 3.4, 26], ['jug', 90.5, 3.4, 44],
-            ['pot', 38, 3.4, 33.5], ['jug', 48, 3.4, 26.5], ['pot', 58, 3.4, 33.5], ['basket', 66, 3.2, 47.5]],
+            ['pot', 26, 3.4, 31.5], ['jug', 36, 3.4, 26.5], ['pot', 46, 3.4, 31.5], ['basket', 66, 3.2, 47.5], ['jug', 62, 2.9, 29.5]],
   },
 };
 export const MAP_ORDER = ['entrance', 'market', 'stables', 'cellar', 'passages', 'kitchen'];
@@ -254,17 +305,17 @@ export const MAP_ORDER = ['entrance', 'market', 'stables', 'cellar', 'passages',
 // Floor traps can go on furniture tops too, so you can trap the feast.
 const TOPS = {
   entrance: [{ name: 'Meat pie', x: 68, z: 41.5, y: 2.9, r: 1.2, amount: 20, climb: [68, 45] }, { name: 'Cheese rind', x: 21, z: 41.5, y: 1.9, r: 1, amount: 15, climb: [21, 44] }],
-  market: [{ name: 'Fish', x: 28, z: 43, y: 3, r: 1.2, amount: 20, climb: [9, 43] }, { name: 'Cheese', x: 60, z: 65, y: 3, r: 1.2, amount: 20, climb: [79, 65] }],
+  market: [{ name: 'Fish', x: 25, z: 46, y: 3, r: 1.2, amount: 20, climb: [25, 50.5] }, { name: 'Cheese', x: 65, z: 62, y: 3, r: 1.2, amount: 20, climb: [65, 65.5] }],
   stables: [{ name: 'Oat bucket', x: 92, z: 9, y: 2.6, r: 1.2, amount: 20, climb: [84.5, 9] }],
-  cellar: [{ name: 'Cheese wheel top', x: 42, z: 64, y: 3, r: 1.5, amount: 30, climb: [42, 69] }],
+  cellar: [{ name: 'Cheese wheel top', x: 42, z: 48, y: 3, r: 1.5, amount: 30, climb: [42, 53] }],
   passages: [{ name: 'Crumbs', x: 74, z: 21.5, y: 1.4, r: 1, amount: 15, climb: [75, 24.5] }],
-  kitchen: [{ name: 'Roast chicken', x: 49, z: 30, y: 3.4, r: 1.5, amount: 30, climb: [49, 35.5] }, { name: 'Cake', x: 3, z: 37, y: 3.4, r: 1.2, amount: 20, climb: [7.5, 37] }, { name: 'Pie', x: 93, z: 33, y: 3.4, r: 1.2, amount: 20, climb: [88.5, 33] }],
+  kitchen: [{ name: 'Roast chicken', x: 37, z: 29, y: 3.4, r: 1.5, amount: 30, climb: [37, 34.5] }, { name: 'Cake', x: 3, z: 37, y: 3.4, r: 1.2, amount: 20, climb: [7.5, 37] }, { name: 'Pie', x: 93, z: 33, y: 3.4, r: 1.2, amount: 20, climb: [88.5, 33] }],
 };
 // Crate stacks across a corridor (v0.12): mice smash through them when it's worth it,
 // opening a shortcut for the rest of the wave. Servants stack them back between waves.
 const CRATES = {
   entrance: [[44, 18, 52, 20]],   // the guard passage
-  market: [[40, 76, 48, 78]],     // the centre alley
+  market: [[30, 30, 38, 32]],     // across the tavern arch
   passages: [[34, 20, 40, 22]],   // the last stretch of the main passage, before the hall
 };
 // Hand-made furniture routes (low things get them automatically; see buildMap).
@@ -273,11 +324,11 @@ const CRATES = {
 // the short way. Top traps (Knife Block, Kettle, Spice Jar, a Snapper up there...) catch
 // them up there; a Poison Box anywhere on the run closes it. ladder: draw ladders at the ends.
 const LINKS = {
-  cellar: [{ name: 'Cheese wheel', a: [42, 69.5], b: [42, 58.5], y: 3, path: [[42, 67.6], [42, 60.4]] },
-           { name: 'Cheese wheel', a: [36.5, 64], b: [47.5, 64], y: 3, path: [[38.4, 64], [45.6, 64]] }],
+  cellar: [{ name: 'Cheese wheel', a: [42, 53.5], b: [42, 42.5], y: 3, path: [[42, 51.6], [42, 44.4]] },
+           { name: 'Cheese wheel', a: [36.5, 48], b: [47.5, 48], y: 3, path: [[38.4, 48], [45.6, 48]] }],
   kitchen: [{ name: 'West worktop', a: [4, 60], b: [4, 12], y: 3.4, path: [[4, 57.6], [4, 14.4]] },
             { name: 'East worktop', a: [92, 60], b: [92, 12], y: 3.4, path: [[92, 57.6], [92, 14.4]] },
-            { name: 'Over the table', a: [45, 36], b: [45, 24], y: 3.4, path: [[45, 33.6], [45, 26.4]] }],
+            { name: 'Over the table', a: [37, 34], b: [37, 24], y: 3.4, path: [[37, 31.6], [37, 26.4]] }],
   stables: [{ name: 'Hay loft', a: [23, 88], b: [23, 12], y: 6.2, path: [[23, 85.6], [23, 14.4]], ladder: true }],
 };
 // Things that fall over (v0.17). Shelves stand against a wall; knock one over (hit it a few
@@ -288,13 +339,13 @@ const SHELVES = {
   passages: [{ name: 'Linen shelf', rect: [7, 46, 8, 51], fall: [2, 46, 8, 51], h: 7, dir: [-1, 0] },
              { name: 'Pantry shelf', rect: [72, 52, 73, 57], fall: [72, 52, 78, 57], h: 7, dir: [1, 0] },
              { name: 'Boot rack', rect: [34, 44, 35, 49], fall: [34, 44, 40, 49], h: 6, dir: [1, 0] }],
-  cellar: [{ name: 'Jar shelf', rect: [18, 24, 19, 30], fall: [18, 24, 26, 30], h: 7, dir: [1, 0] },
-           { name: 'Jar shelf', rect: [65, 60, 66, 66], fall: [58, 60, 66, 66], h: 7, dir: [-1, 0] }],
+  cellar: [{ name: 'Jar shelf', rect: [21, 36, 22, 42], fall: [14, 36, 22, 42], h: 7, dir: [-1, 0] },
+           { name: 'Jar shelf', rect: [65, 40, 66, 46], fall: [60, 40, 66, 46], h: 7, dir: [-1, 0] }],
 };
 // Big barrels: a cat brushing or hitting one sends it rolling the way the cat faces, flattening
 // mice in its path until it hits a wall. Rolled home between waves. [x, z]
 const BARRELS = {
-  entrance: [[30, 50], [66, 52]], market: [[7, 70], [78, 20]], stables: [[66, 60], [80, 46]], kitchen: [[26, 80], [76, 40]], cellar: [[42, 80]],
+  entrance: [[30, 50], [66, 52]], market: [[36, 68], [52, 18]], stables: [[44, 60], [80, 46]], kitchen: [[26, 74], [76, 40]], cellar: [[42, 30]],
 };
 // Humans (v0.16, scenery only). 'side': that outer wall is drawn as a low curb (its collider
 // stays full height) and the lit human space lies beyond it, with people walking about.
@@ -305,8 +356,21 @@ const HUMANS = {
   stables: { kind: 'stablehand', side: 'east', count: 3, floor: 'dirt' },
   kitchen: { kind: 'cook', side: 'east', count: 3, floor: 'stone' },
 };
+// Clutter (v0.30): each map's clutter zones are filled with piles of stores, one 2x2-unit tile
+// each, about two in three tiles, of mixed heights (60 cm to 1.3 m). Solid: mice go round,
+// cats climb them, nothing builds there. Seeded by the map, so every player gets the same piles.
+function clutterPiles(M) {
+  let a = [...M.id].reduce((h, c) => h * 31 + c.charCodeAt(0), 11) >>> 0;
+  const R = () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const out = [];
+  for (const [x0, z0, x1, z1] of M.clutter || []) for (let z = z0; z < z1; z += 2) for (let x = x0; x < x1; x += 2) {
+    if (R() > 0.68) continue;
+    out.push({ name: 'Stores', kind: 'solid', rect: [x, z, x + 2, z + 2], h: [2, 2.6, 3.4, 4.4][Math.floor(R() * 4)], look: 'pile' });
+  }
+  return out;
+}
 for (const k of MAP_ORDER) {
-  const M = MAPS[k]; M.tops = TOPS[k] || []; M.crates = CRATES[k] || []; M.links = LINKS[k] || []; M.humans = HUMANS[k] || null;
+  const M = MAPS[k]; M.furniture.push(...clutterPiles(M)); M.tops = TOPS[k] || []; M.crates = CRATES[k] || []; M.links = LINKS[k] || []; M.humans = HUMANS[k] || null;
   M.shelves = SHELVES[k] || []; M.barrels = BARRELS[k] || [];
   if (M.humans && M.humans.side === 'east') for (const f of M.furniture) if (f.name === 'East wall') f.visH = 1.4;
 }
@@ -361,7 +425,7 @@ export function buildMap() {
   }
   const waters = [...(DRAIN ? [DRAIN] : []), ...(MAP.waters || [])];
   for (const wr of waters) eachCell([wr.x0, wr.z0, wr.x1, wr.z1], i => { type[i] = T.WATER; solid[i] = 0; forest[i] = 0; });
-  if (BRIDGE) eachCell([BRIDGE.x0, BRIDGE.z0, BRIDGE.x1, BRIDGE.z1], i => { type[i] = T.BRIDGE; solid[i] = 0; forest[i] = 0; });
+  for (const br of [...(BRIDGE ? [BRIDGE] : []), ...(MAP.bridges || [])]) eachCell([br.x0, br.z0, br.x1, br.z1], i => { type[i] = T.BRIDGE; solid[i] = 0; forest[i] = 0; });   // the main bridge and any others
   for (const mr of MAP.muds || []) eachCell([mr.x0, mr.z0, mr.x1, mr.z1], i => { mud[i] = 1; });
 
   FURNITURE.forEach((f, fi) => {

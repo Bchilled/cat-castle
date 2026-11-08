@@ -8,8 +8,10 @@ import {
   W, H, CELL, T, FURNITURE, DRAIN, BRIDGE, GATE, HOLE, SPAWNS, cellOf, WORLD_W, WORLD_H, MAP,
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
-import { ROT_DIR } from '../sim/sim.js';
+import { ROT_DIR, CEIL_HANG } from '../sim/sim.js';
 import { Life } from './life.js';
+import { dressMap } from './dress.js';
+import { kitReady } from './kit.js';
 import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp, makeHuman, makeShelf, makeBarrel, makeKnife, makePan } from './models.js';
 import { tmat } from './textures.js';
 
@@ -34,6 +36,10 @@ export class Scene {
     this.sim = sim;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    // v0.30 lighting: real shadows from the sun (soft-edged), filmic tone mapping so bright
+    // torchlight rolls off instead of clipping, and less flat fill light so corners go dark.
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.15;
     this.scene = new THREE.Scene();
     // Lighting per map: daylight outside, dim indoors, near-black in the cellar
     // (the cat carries a little glow there so you can see your own paws).
@@ -42,8 +48,13 @@ export class Scene {
     this.scene.background = new THREE.Color(sky);
     this.scene.fog = new THREE.Fog(sky, dark ? 12 : indoor ? 35 : 50, dark ? 48 : indoor ? 120 : 170);
     this.camera = new THREE.PerspectiveCamera(65, 1, 0.05, 250);
-    this.scene.add(new THREE.HemisphereLight(0xdfe6ea, 0x4a4030, dark ? 0.25 : indoor ? 0.9 : 1.5));
-    const sun = new THREE.DirectionalLight(0xfff0d8, dark ? 0.1 : indoor ? 0.6 : 1.3); sun.position.set(-25, 45, 30); this.scene.add(sun);
+    this.scene.add(new THREE.HemisphereLight(0xc8d4e0, 0x3a2e22, dark ? 0.3 : indoor ? 0.75 : 1.0));
+    // The sun (outdoors) or the light through high windows (indoors): low and from one side, so
+    // walls, tables and cats throw long shadows. Its shadow box follows your cat (see render).
+    const sun = this.sun = new THREE.DirectionalLight(indoor ? 0xffe2b8 : 0xfff0d8, dark ? 0.25 : indoor ? 1.3 : 2.4);
+    sun.position.set(-30, 40, 22); sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 140 });
+    sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.04; this.scene.add(sun); this.scene.add(sun.target);
     if (dark) { this.lantern = new THREE.PointLight(0xffd8a0, 14, 22, 1.4); this.scene.add(this.lantern); }
     this.camDist = null;                                            // set per cat on first frame; wheel zooms
 
@@ -90,12 +101,12 @@ export class Scene {
     function i(x, z) { return z * W + x; }
     const isDirt = ([x, z, t]) => t === T.ROAD || !!map.forest[i(x, z)];
     const FLOORS = { cobbles: ['cobbles', 3, 0xc8c0b4], dirt: ['dirt', 4, 0xd8ccb8], stone: ['stone', 4, 0xb8b0a4], planks: ['planks', 2.5, 0xb89a78] };
-    const fl = FLOORS[MAP.floor] || FLOORS.cobbles;
+    const fl = FLOORS[MAP.floor] || FLOORS.cobbles, kitFloor = kitReady() && MAP.floor !== 'dirt';
     for (const [dirt, tex, scale, tint] of [[false, ...fl], [true, 'dirt', 4, 0xd8ccb8]]) {
       const list = ground.filter(g => isDirt(g) === dirt);
       const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.3, 1), tmat(tex, scale, tint), list.length);
       list.forEach(([x, z], k) => {
-        m4.makeTranslation((x + 1) * CELL, -0.15, (z + 1) * CELL); inst.setMatrixAt(k, m4);
+        m4.makeTranslation((x + 1) * CELL, kitFloor && !dirt ? -0.25 : -0.15, (z + 1) * CELL); inst.setMatrixAt(k, m4);   // under the kit flagstones when they're drawn
         const j = (((x * 73856093) ^ (z * 19349663)) >>> 0) % 100 / 100;
         c.setHex(0xffffff).offsetHSL(0, 0, (j - 0.5) * 0.06); inst.setColorAt(k, c);   // faint patchiness
       });
@@ -126,11 +137,11 @@ export class Scene {
       const mud = new THREE.Mesh(new THREE.PlaneGeometry(mr.x1 - mr.x0, mr.z1 - mr.z0), tmat('dirt', 3, 0x5a4028)); mud.material.transparent = true; mud.material.opacity = 0.85;
       mud.rotation.x = -Math.PI / 2; mud.position.set((mr.x0 + mr.x1) / 2, 0.015, (mr.z0 + mr.z1) / 2); s.add(mud);
     }
-    if (BRIDGE) {
-    // Fallen branch across the moat (the mouse-sized bridge).
-    const bw = BRIDGE.x1 - BRIDGE.x0, bd = BRIDGE.z1 - BRIDGE.z0;
+    for (const BR of [...(BRIDGE ? [BRIDGE] : []), ...(MAP.bridges || [])]) {
+    // Fallen tree across the moat (the main bridge, and the log to the breach).
+    const bw = BR.x1 - BR.x0, bd = BR.z1 - BR.z0;
     const branch = outline(new THREE.Mesh(new THREE.CylinderGeometry(bw / 2, bw / 2 * 0.85, bd, 12), tmat('bark', 3, 0xc0a890)), 1.01);
-    branch.rotation.x = Math.PI / 2; branch.scale.set(1, 1, 0.5); branch.position.set((BRIDGE.x0 + BRIDGE.x1) / 2, -bw / 4 + 0.02, (BRIDGE.z0 + BRIDGE.z1) / 2); s.add(branch);
+    branch.rotation.x = Math.PI / 2; branch.scale.set(1, 1, 0.5); branch.position.set((BR.x0 + BR.x1) / 2, -bw / 4 + 0.02, (BR.z0 + BR.z1) / 2); s.add(branch);
     }
 
     // Forest: a dense hedge of roots, rocks and bushes along the road (that's
@@ -167,9 +178,11 @@ export class Scene {
 
     // Furniture, walls, guardhouse, tunnel.
     this.roofs = []; this.furnMesh = [];
-    for (const f of FURNITURE) {
-      const fg = makeFurniture(f); s.add(fg); this.furnMesh.push(fg);
-      if (f.kind !== 'solid') this.roofs.push({ f, g: fg });
+    // v0.30: walls, stores and tables come from the model kit when it loaded (src/render/dress.js).
+    const dressed = kitReady() ? dressMap(s, this.sim) : null;
+    for (const [fi, f] of FURNITURE.entries()) {
+      // furnMesh is indexed like FURNITURE (stalls look theirs up by index), with gaps where the kit drew it.
+      if (!dressed || !dressed.handled.has(f)) { const fg = makeFurniture(f); s.add(fg); this.furnMesh[fi] = fg; if (f.kind !== 'solid') this.roofs.push({ f, g: fg }); }
       const [x0, z0, x1, z1] = f.rect;
       if (f.stairs) {   // one aim box per tread, so the crosshair lands on the step you look at
         const { axis, from, to } = f.stairs, run = axis === 'x' ? x1 - x0 : z1 - z0, n = Math.max(1, Math.round(run));
@@ -214,6 +227,9 @@ export class Scene {
     }
     this.life = new Life(s, this.sim, MAP);   // dressing at human size, dust, flies, smoke, swaying cloth (src/render/life.js)
     function part3(geo, color, x, y, z) { const m = new THREE.Mesh(geo, mat(color)); m.position.set(x, y, z); return m; }
+    // Everything solid in the world throws and catches shadows (not the black outline shells,
+    // see-through things or glowing bits).
+    s.traverse(o => { if (o.isMesh && o.material !== OUTLINE && !o.material.transparent && !o.material.isMeshBasicMaterial && !o.material.isShaderMaterial) { o.castShadow = true; o.receiveShadow = true; } });
     this.aimProxies.updateMatrixWorld(true);
   }
 
@@ -333,7 +349,7 @@ export class Scene {
       for (let y = 0.5; y < len; y += 0.7) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.1), wood); r.position.set(0, y, 0); lean.add(r); }
     }
     // Market stalls: the counter drops and tips onto its broken legs.
-    this.stallFx = this.sim.stalls.map(st => ({ st, g: this.furnMesh[st.fi], fallAt: null, wob: 0 }));
+    this.stallFx = this.sim.stalls.map(st => ({ st, g: this.furnMesh[st.fi], fallAt: null, wob: 0 })).filter(f => f.g);
     this.barrelFx = this.sim.barrels.map(b => {
       const outer = new THREE.Group(), rollG = new THREE.Group(), body = makeBarrel();
       outer.add(rollG); rollG.add(body); outer.position.set(b.x, 1.1, b.z); s.add(outer);
@@ -428,7 +444,7 @@ export class Scene {
 
   // Hundreds of mice drawn with a handful of instanced meshes.
   buildMiceInstancing() {
-    const mk = (geo, material, count = MAX_MICE) => { const m = new THREE.InstancedMesh(geo, material, count); m.count = 0; m.frustumCulled = false; this.scene.add(m); return m; };
+    const mk = (geo, material, count = MAX_MICE) => { const m = new THREE.InstancedMesh(geo, material, count); m.count = 0; m.frustumCulled = false; m.castShadow = material !== OUTLINE && !material.transparent; this.scene.add(m); return m; };
     const colored = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
     this.mi = {
       body: mk(new THREE.IcosahedronGeometry(0.5, 0), colored),
@@ -473,6 +489,7 @@ export class Scene {
   ensureCat(cat) {
     if (!this.cats.has(cat.id)) {
       const m = makeCat(cat.kind, cat.hat); this.scene.add(m);
+      m.traverse(o => { if (o.isMesh && o.material !== OUTLINE) o.castShadow = true; });   // cats throw shadows
       this.cats.set(cat.id, { mesh: m, walk: 0, atkT: 0, side: 0, kind: cat.kind, tailX: 0, tailZ: 0, tailSwish: 0 });
     }
     return this.cats.get(cat.id);
@@ -485,8 +502,15 @@ export class Scene {
     g.visible = true;
     const cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2 * CELL, cz = (Math.min(...zs) + Math.max(...zs) + 1) / 2 * CELL;
     const def = TRAPS[kind];
-    const y = def.surface === 'ceiling' ? this.sim.map.slabBot[good[0]] : top || 0;   // top: on a table/counter
+    const roof = def.surface === 'ceiling' ? this.sim.map.slabBot[good[0]] : 0;
+    const y = def.surface === 'ceiling' ? Math.min(roof, CEIL_HANG) : top || 0;   // top: on a table/counter
     g.position.set(cx, y, cz);
+    if (def.surface === 'ceiling') {
+      // Under a high ceiling the trap hangs on an iron rod down to CEIL_HANG (1.05 m up).
+      let rod = g.userData.rod; const gap = roof - y;
+      if (!rod) { rod = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 6), mat(0x2e2a26)); g.add(rod); g.userData.rod = rod; }
+      rod.visible = gap > 0.15; rod.scale.y = Math.max(0.01, gap); rod.position.y = gap / 2;
+    }
     g.rotation.y = def.surface === 'wall' ? (wallDir >= 0 ? YAW_FOR[OPP[wallDir]] : 0) : YAW_FOR[ROT_DIR[rot % 4]];
     // Models are made for one tile (cord and chandelier for their old sizes): stretch them
     // to the trap's footprint in tiles, so a two-tile Rolling Pin or Grater spans two tiles.
@@ -819,47 +843,103 @@ export class Scene {
       m.visible = cat.alive;
       if (Math.hypot(cat.x - m.position.x, cat.z - m.position.z) > 3) m.position.set(cat.x, cat.y, cat.z);
       m.position.x += (cat.x - m.position.x) * k; m.position.y += (cat.y - m.position.y) * k; m.position.z += (cat.z - m.position.z) * k;
-      m.rotation.order = 'YXZ'; m.rotation.y = cat.yaw;
+      // ----- How the cat moves (v0.30): turns with a little lag (the head leads), leans into
+      // turns, trots on bending legs with the body bobbing, stretches to jump and squashes on
+      // landing, breathes and looks about when idle, and the tail follows through. All drawn
+      // here only; the sim's cat is unchanged.
+      const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a)), sc = ud.scale;
+      if (c.yaw == null) { c.yaw = cat.yaw; c.aim = cat.yaw; c.turnV = 0; c.prevSpeed = 0; c.accel = 0; c.wasGround = true; c.squashT = 0; c.stretchT = 0; c.land = 0; c.tail2X = 0; c.tail2Z = 0; c.idleSeed = Math.random() * 100; }
+      const aimStep = wrap(cat.yaw - c.aim); c.aim = cat.yaw;
+      c.turnV += (aimStep / Math.max(dt, 1e-3) - c.turnV) * Math.min(1, dt * 10);            // how fast you're turning (rad/s), smoothed
+      c.yaw += wrap(cat.yaw - c.yaw) * Math.min(1, dt * 14);                                  // the body catches up with the aim
+      m.rotation.order = 'YXZ'; m.rotation.y = c.yaw;
       // Scary Cat's backflip: a full turn backwards over her local x axis.
       m.rotation.x = cat.flipT > 0 ? -(1 - cat.flipT / 0.5) * Math.PI * 2 : 0;
-      const speed = Math.hypot(cat.vx, cat.vz), moving = speed > 0.5 && cat.onGround;
-      c.walk += moving ? dt * speed * 1.6 : 0;
-      ud.legs.forEach((l, i) => { l.rotation.x = moving ? Math.sin(c.walk + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI / 2 : 0)) * 0.6 : 0; l.rotation.z = 0; });
+      const speed = Math.hypot(cat.vx, cat.vz), moving = speed > 0.5 && cat.onGround, run = Math.min(1, speed / cat.def.speed);
+      // Velocity in the cat's own frame: forward and sideways (for strafing legs and lean).
+      const fwd = cat.vx * Math.sin(c.yaw) + cat.vz * Math.cos(c.yaw), side = cat.vx * Math.cos(c.yaw) - cat.vz * Math.sin(c.yaw);
+      c.accel += ((speed - c.prevSpeed) / Math.max(dt, 1e-3) - c.accel) * Math.min(1, dt * 6); c.prevSpeed = speed;
+      // Take-off and landing.
+      if (c.wasGround && !cat.onGround && cat.vy > 1) c.stretchT = 0.2;
+      if (!c.wasGround && cat.onGround) { c.squashT = 0.18; c.land = Math.min(1, Math.abs(c.lastVy || 0) / 12); }
+      c.wasGround = cat.onGround; c.lastVy = cat.vy;
+      c.squashT = Math.max(0, c.squashT - dt); c.stretchT = Math.max(0, c.stretchT - dt);
+      // Gait: a trot (diagonal pairs together), faster steps the faster you go.
+      c.walk += moving ? dt * (5 + speed * 1.4) : 0;
+      const stride = moving ? 0.25 + run * 0.45 : 0, ph = c.walk, strafe = moving ? Math.max(-1, Math.min(1, side / Math.max(1, speed))) : 0;
+      const backwards = fwd < -0.3 ? -1 : 1;
+      ud.legs.forEach((l, i) => {
+        const front = i < 2, off = (i === 0 || i === 3) ? 0 : Math.PI, p = ph + off, knee = l.userData.knee;
+        if (cat.onGround) {
+          const lift = moving ? Math.max(0, Math.cos(p)) : 0;                                   // the paw comes up as the leg swings forward
+          l.rotation.x = Math.sin(p) * stride * backwards * (1 - Math.abs(strafe) * 0.6);
+          l.rotation.z = Math.sin(p) * stride * strafe * 0.8;
+          if (knee) knee.rotation.x = lift * (0.5 + run * 0.7) * (front ? 1 : 1.2) + (c.squashT > 0 ? 0.6 * c.land : 0);
+        } else {
+          // In the air: front legs reach forward, back legs trail, knees tucked.
+          const up = cat.vy > 0 ? 1 : 0.4;
+          l.rotation.x += ((front ? -0.7 : 0.8) * up - l.rotation.x) * Math.min(1, dt * 12); l.rotation.z = 0;
+          if (knee) knee.rotation.x += ((front ? 0.5 : 0.9) - knee.rotation.x) * Math.min(1, dt * 12);
+        }
+      });
       // Attack anims: Fred jerks his head forward to spit, Puddin lunges and bites.
       c.atkT = Math.max(0, c.atkT - dt);
-      ud.head.position.z = 0.55 * ud.scale + (c.atkT > 0 ? 0.15 : 0);
+      ud.head.position.z = 0.55 * sc + (c.atkT > 0 ? 0.15 : 0);
       ud.jaw.rotation.x = c.atkT > 0.07 ? 0.6 : 0;
-      ud.head.rotation.x = -camPitch * 0.3 + (c.atkT > 0 ? 0.2 : 0);
+      // Head: pitches with your aim, leads into turns, and glances about when you stand still.
+      const idle = !moving && cat.onGround && !cat.attacking && c.atkT <= 0;
+      const glance = idle ? Math.sin(now / 1700 + c.idleSeed) * 0.35 * Math.max(0, Math.sin(now / 4300 + c.idleSeed * 2)) : 0;
+      ud.head.rotation.order = 'YXZ';
+      ud.head.rotation.y = Math.max(-0.5, Math.min(0.5, c.turnV * 0.06)) + glance;
+      ud.head.rotation.x = -camPitch * 0.3 + (c.atkT > 0 ? 0.2 : 0) - (moving ? Math.cos(ph * 2) * 0.03 : 0);   // a little nod with each step
       ud.slash.children.forEach(st => { st.material.opacity = 0; });
       if (ud.reach) ud.reach.material.opacity = cat.attacking ? 0.4 : 0.18;
-      ud.body.rotation.x = cat.pouncing || cat.striking ? -0.35 : cat.charge > 0 ? 0.25 : 0;      // stretch mid-pounce, crouch when charging
-      ud.body.position.y = cat.charge > 0 ? -0.08 * cat.charge / 0.8 : cat.hurtT > 0 ? 0.05 : 0;
-      ud.body.scale.set(1, 1, 1); ud.body.rotation.y = 0; ud.tail.scale.setScalar(1);
+      // Body: pitch (stretch mid-pounce, crouch when charging, nose up rising / down falling,
+      // lean forward when speeding up), roll (lean into turns and strafes), bob with the steps.
+      const airPitch = cat.onGround ? 0 : Math.max(-0.35, Math.min(0.35, -cat.vy * 0.04));
+      const accelPitch = Math.max(-0.12, Math.min(0.12, c.accel * 0.012));
+      ud.body.rotation.order = 'YXZ';
+      ud.body.rotation.x = (cat.pouncing || cat.striking ? -0.35 : cat.charge > 0 ? 0.25 : 0) + airPitch + accelPitch;
+      ud.body.rotation.z = Math.max(-0.3, Math.min(0.3, -c.turnV * run * 0.05 - strafe * run * 0.12)) + (moving ? Math.sin(ph) * 0.04 * run : 0);
+      ud.body.rotation.y = 0;
+      const bob = moving ? -Math.abs(Math.cos(ph)) * 0.035 * sc * (0.5 + run) : 0;
+      ud.body.position.y = (cat.charge > 0 ? -0.08 * cat.charge / 0.8 : cat.hurtT > 0 ? 0.05 : 0) + bob - (c.squashT > 0 ? 0.06 * sc * c.land * (c.squashT / 0.18) : 0);
+      // Scale: breathing at rest, stretch on take-off, squash on landing.
+      const breathe = idle ? 1 + Math.sin(now / 650 + c.idleSeed) * 0.018 : 1;
+      let sx = 1, sy = breathe, sz = 1;
+      if (c.stretchT > 0) { const k2 = c.stretchT / 0.2; sx = sy = 1 - 0.08 * k2; sz = 1 + 0.14 * k2; }
+      if (c.squashT > 0) { const k2 = (c.squashT / 0.18) * (0.4 + c.land * 0.6); sx = 1 + 0.1 * k2; sy = 1 - 0.16 * k2; sz = 1 + 0.06 * k2; }
+      ud.body.scale.set(sx, sy, sz); ud.tail.scale.setScalar(1);
       // Scary Cat's hiss: back arched up high, fur on end, tail straight up and puffed.
-      if (cat.hissT > 0) { ud.body.position.y = 0.12 * ud.scale; ud.body.scale.set(1.1, 1.3, 0.9); ud.head.rotation.x = 0.35; ud.tail.scale.setScalar(1.5); }
+      if (cat.hissT > 0) { ud.body.position.y = 0.12 * sc; ud.body.scale.set(1.1, 1.3, 0.9); ud.head.rotation.x = 0.35; ud.tail.scale.setScalar(1.5); }
       // Casper's frenzy: furious side-to-side thrashing.
       if (cat.frenzyT > 0) ud.body.rotation.y = Math.sin(now / 40) * 0.6;
       // Casper's rage glows red under him.
       if (ud.rage) ud.rage.material.opacity = (cat.rage || 0) / 100 * (0.35 + Math.sin(now / 120) * 0.1);
       // Meow Meow napping: lies down, legs tucked, head down; little Zzz float up.
       if (cat.napping) {
-        ud.body.position.y = -0.22 * ud.scale; ud.head.rotation.x = 0.5; ud.legs.forEach(l => { l.rotation.x = 1.4; });
+        ud.body.position.y = -0.22 * sc; ud.body.rotation.z = 0; ud.head.rotation.x = 0.5; ud.head.rotation.y = 0.3;
+        ud.legs.forEach(l => { l.rotation.x = 1.4; l.rotation.z = 0; if (l.userData.knee) l.userData.knee.rotation.x = -1.6; });
         c.zzT = (c.zzT || 0) - dt; if (c.zzT <= 0) { c.zzT = 0.8; this.spawnParticles(cat.x, cat.y + 0.8, cat.z, 0xddeeff, 1, 0.6, 0.08); }
       }
       // Buffed by a purr or a yawn: soft golden shimmer.
       if (cat.buffT > 0 && Math.random() < dt * 6) this.spawnParticles(cat.x + (Math.random() - 0.5) * 0.6, cat.y + 0.3, cat.z + (Math.random() - 0.5) * 0.6, 0xffe080, 1, 1, 0.05);
-      // Tail: idle sway, lifts and swishes faster when running, flicks on turns, droops when hurt.
-      const run = Math.min(1, speed / cat.def.speed);
-      const targetX = (cat.hurtT > 0 ? 0.6 : 0) - run * 0.7 + (cat.onGround ? 0 : -0.4);
+      // Tail: idle sway, lifts and swishes faster when running, flicks on turns, droops when
+      // hurt. The mid and tip lag behind the base (follow-through), so it ripples.
+      // Carried low and back with the tip curled up (out of your view), drooping when hurt,
+      // streaming out straight when running, flipping up a bit in the air.
+      const targetX = (cat.hurtT > 0 ? -1.5 : -0.85) - run * 0.3 + (cat.onGround ? 0 : 0.35);
       c.tailSwish += dt * (2 + run * 8);
-      const turnFlick = Math.max(-1, Math.min(1, (cat.turn || 0) * 12));
-      const targetZ = Math.sin(c.tailSwish) * (0.25 + run * 0.25) - turnFlick * 0.6;
+      const turnFlick = Math.max(-1, Math.min(1, c.turnV * 0.12));
+      const targetZ = Math.sin(c.tailSwish) * (0.25 + run * 0.25) - turnFlick * 0.6 + (idle ? 0.3 : 0);   // curled round to one side at rest
       c.tailX += (targetX - c.tailX) * Math.min(1, dt * 8); c.tailZ += (targetZ - c.tailZ) * Math.min(1, dt * 10);
+      c.tail2X += (c.tailX - c.tail2X) * Math.min(1, dt * 4); c.tail2Z += (c.tailZ - c.tail2Z) * Math.min(1, dt * 4);
       ud.tail.rotation.x = c.tailX; ud.tail.rotation.z = c.tailZ;
+      if (ud.tailMid) { ud.tailMid.rotation.x = 1.0 + (c.tail2X - c.tailX) * 0.9; ud.tailMid.rotation.z = (c.tail2Z - c.tailZ) * 1.4 + Math.sin(c.tailSwish - 0.9) * 0.12; }
       // Tail whip: the tail cracks forward over her back like a scorpion's.
       c.whipT = Math.max(0, (c.whipT || 0) - dt);
-      if (c.whipT > 0) ud.tail.rotation.x = 2.3 * Math.sin(c.whipT / 0.25 * Math.PI);
-      if (cat.hissT > 0) { ud.tail.rotation.x = -0.1; ud.tail.rotation.z = 0; }
+      if (c.whipT > 0) { ud.tail.rotation.x = 2.3 * Math.sin(c.whipT / 0.25 * Math.PI); if (ud.tailMid) ud.tailMid.rotation.x = 1.0; }
+      if (cat.hissT > 0) { ud.tail.rotation.x = -0.1; ud.tail.rotation.z = 0; if (ud.tailMid) { ud.tailMid.rotation.x = 0.6; ud.tailMid.rotation.z = 0; } }
       // Claw swipe: a front leg slashes.
       if (c.clawT > 0) { c.clawT -= dt; ud.legs[c.side & 1].rotation.x = -1.6 * Math.sin((1 - c.clawT / 0.15) * Math.PI); }
     }
@@ -1049,6 +1129,7 @@ export class Scene {
       if (this.camDist == null) this.camDist = me.kind === 'puddin' ? 2.8 : 2.3;
       const p = me.mesh.position, catH = me.kind === 'puddin' ? 1.25 : 0.95;
       const target = new THREE.Vector3(p.x, p.y + catH * 1.25, p.z);
+      if (this.sun) { this.sun.target.position.set(p.x, 0, p.z); this.sun.position.set(p.x - 30, 40, p.z + 22); }   // the shadow box follows you
       const back = new THREE.Vector3(-Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), -Math.cos(camYaw) * Math.cos(camPitch));
       const right = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));
       const shoulder = 0;

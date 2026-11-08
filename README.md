@@ -78,6 +78,7 @@ Paw Points and lives are shared. Each player brings their own cat, traps, upgrad
 ## Code layout
 - `src/sim/` is the game rules with no graphics. It runs on a fixed 30 Hz tick with seeded randomness.
 - `src/render/` draws the game.
+- `src/render/kit.js` loads the 3D model kit; `src/render/dress.js` builds each map's walls, floors, stores and tables out of it.
 - `src/ui/` is the HUD, the shop and the menus.
 - `src/meta/profile.js` holds what's kept between runs.
 - `src/net/` is the transport. Every player action is a command object, so co-op only swaps the transport (`coop.js`: snapshots out, commands in) without touching the rules.
@@ -93,3 +94,6 @@ Runs the rules headless:
 - smarter mice and climbing
 - shelves and barrels
 - co-op snapshots
+
+## Credits
+The castle's 3D models (walls, floors, barrels, crates, tables, banners, torches, food, lanterns, trees) are from the KayKit packs by Kay Lousberg (www.kaylousberg.com), CC0: Dungeon Remastered, Restaurant Bits, Furniture Bits, Halloween Bits and the Medieval Hexagon Pack. See `assets/kaykit/CREDITS.md`.

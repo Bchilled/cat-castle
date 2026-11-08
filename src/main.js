@@ -18,6 +18,9 @@ import { openShop } from './ui/shop.js';
 import { openTraps } from './ui/traps.js';
 import { trapIcons } from './ui/icons.js';
 import { Coach } from './ui/coach.js';
+import { loadKit } from './render/kit.js';
+// The castle's 3D models load in the background from the menu (a game waits for them if needed).
+const kitLoad = loadKit();
 
 
 // Saved progress between runs: paw prints, yarn, unlocks, upgrades, hats (meta/profile.js).
@@ -195,7 +198,8 @@ document.getElementById('joinbtn').onclick = async () => {
 // guests (host: [{ link, hello, id }]), link + you (guest: the link to the host and your player id) }.
 // Calling start() again (next map in co-op) tears the running game down first.
 let game = null;
-function start(mode, co = null) {
+async function start(mode, co = null) {
+  await kitLoad;
   if (game) game.stop();
   document.getElementById('menu').classList.remove('show'); document.getElementById('end').classList.remove('show');
   sfx.unlock(); sfx.setMusic('build');

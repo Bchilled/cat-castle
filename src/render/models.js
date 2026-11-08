@@ -56,19 +56,29 @@ function catRig(look) {
     const brow = box(0x241208, k * 0.12 * s, 0.12 * s, 0.31 * s, 0.13 * s, 0.035 * s, 0.03 * s, false);
     brow.rotation.z = k * 0.45; head.add(brow);                                                    // mean brows
   }
+  // Legs (v0.30): upper leg from the shoulder/hip, a knee (wrist/hock) joint, lower leg, paw.
+  // The scene bends the knees to lift the paws as they swing, so the gait isn't stiff sticks.
   const legs = [];
   for (const [x, z] of [[-0.2, 0.32], [0.2, 0.32], [-0.2, -0.32], [0.2, -0.32]]) {
     const pivot = new THREE.Group(); pivot.position.set(x * s, 0.4 * s, z * s); body.add(pivot);
-    pivot.add(part(cyl(0.08 * s, 0.07 * s, 0.4 * s, 5), look.legs || look.base, 0, -0.2 * s, 0));
+    pivot.add(part(cyl(0.085 * s, 0.075 * s, 0.22 * s, 5), look.legs || look.base, 0, -0.11 * s, 0));
+    const knee = new THREE.Group(); knee.position.y = -0.21 * s; pivot.add(knee);
+    knee.add(part(cyl(0.075 * s, 0.065 * s, 0.21 * s, 5), look.legs || look.base, 0, -0.095 * s, 0));
+    pivot.userData.knee = knee;
     // Paw with claws (visible when swiping).
-    const paw = new THREE.Group(); paw.position.y = -0.4 * s; pivot.add(paw);
+    const paw = new THREE.Group(); paw.position.y = -0.19 * s; knee.add(paw); pivot.userData.paw = paw;
     paw.add(box(look.paw || look.base, 0, 0.02, 0.03, 0.15 * s, 0.07 * s, 0.17 * s, false));
     for (const c of [-1, 0, 1]) { const cl = part(new THREE.ConeGeometry(0.015 * s, 0.08 * s, 3), 0xf2eee4, c * 0.04 * s, 0.01, 0.13 * s, 1, 1, 1, false); cl.rotation.x = Math.PI / 2; paw.add(cl); }
     legs.push(pivot);
   }
+  // Tail (v0.30): a chain of segments, base -> mid -> tip, so the scene can let the end lag
+  // behind the base (follow-through) instead of swinging the whole tail as one stick.
   const tail = new THREE.Group(); tail.position.set(0, 0.6 * s, -0.55 * s); body.add(tail);
-  const t1 = part(cyl(0.06 * s * look.tailFluff, 0.08 * s * look.tailFluff, 0.5 * s, 5), look.tail || look.base, 0, 0.18 * s, -0.08 * s); t1.rotation.x = -0.6; tail.add(t1);
-  const t2 = part(cyl(0.05 * s * look.tailFluff, 0.06 * s * look.tailFluff, 0.38 * s, 5), look.tailTip || look.base, 0, 0.5 * s, -0.12 * s); t2.rotation.x = 0.4; tail.add(t2);
+  const seg1 = new THREE.Group(); seg1.rotation.x = -0.6; tail.add(seg1);
+  seg1.add(part(cyl(0.06 * s * look.tailFluff, 0.08 * s * look.tailFluff, 0.5 * s, 5), look.tail || look.base, 0, 0.25 * s, 0));
+  const seg2 = new THREE.Group(); seg2.position.y = 0.48 * s; seg2.rotation.x = 1.0; seg1.add(seg2);
+  seg2.add(part(cyl(0.05 * s * look.tailFluff, 0.06 * s * look.tailFluff, 0.38 * s, 5), look.tailTip || look.base, 0, 0.19 * s, 0));
+  const tailTip = new THREE.Group(); tailTip.position.y = 0.37 * s; seg2.add(tailTip);
   // Swipe trail: three claw scratch streaks in front of the face.
   const slash = new THREE.Group(); slash.position.set(0, 0.55 * s, 0.9 * s); g.add(slash);
   // (claw scratch streaks removed: Fred is ranged now)
@@ -78,7 +88,7 @@ function catRig(look) {
   const reach = new THREE.Mesh(new THREE.RingGeometry(0.85 * look.scale, look.reach || 0.3, 16, 1, -Math.PI / 2 - 0.9, 1.8),
     new THREE.MeshBasicMaterial({ color: 0xffd080, transparent: true, opacity: 0.18, depthWrite: false }));
   reach.rotation.x = -Math.PI / 2; reach.position.y = 0.03; reach.visible = !!look.reach; g.add(reach);
-  g.userData = { body, head, jaw, legs, tail, slash, reach, scale: s };
+  g.userData = { body, head, jaw, legs, tail, tailMid: seg2, tailTip, slash, reach, scale: s };
   return g;
 }
 
@@ -127,7 +137,8 @@ export function makeScary() {
   for (let k = 0; k < 5; k++) { const sp = part(new THREE.ConeGeometry(0.035, 0.14, 3), 0x1d1b1e, 0, 0.82 * s, (0.25 - k * 0.13) * s, 1, 1, 1, false); sp.rotation.x = -0.3; b.add(sp); }   // spiky spine fur
   const scar = box(0xb07a80, -0.12 * s, 0.07 * s, 0.32 * s, 0.025, 0.2 * s, 0.02, false); scar.rotation.z = 0.35; head.add(scar);
   // Her tail is long: add a third, thin segment with a kink.
-  const t3 = part(cyl(0.025, 0.035, 0.42 * s, 4), 0x1d1b1e, 0, 0.82 * s, -0.08 * s, 1, 1, 1, false); t3.rotation.x = -0.5; t3.rotation.z = 0.4; g.userData.tail.add(t3);
+  const t3p = new THREE.Group(); t3p.rotation.set(-1.3, 0, 0.4); g.userData.tailTip.add(t3p);
+  t3p.add(part(cyl(0.025, 0.035, 0.42 * s, 4), 0x1d1b1e, 0, 0.21 * s, 0, 1, 1, 1, false));
   // Whip reach: a long thin strip on the floor straight ahead.
   const strip = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 3.0), new THREE.MeshBasicMaterial({ color: 0xc8e030, transparent: true, opacity: 0.15, depthWrite: false }));
   strip.rotation.x = -Math.PI / 2; strip.position.set(0, 0.03, 0.6 + 1.5); g.add(strip); g.userData.reach = strip;
@@ -845,6 +856,16 @@ export function makeFurniture(f) {
         TB(wood ? 'planks' : 'stone', wood ? 2 : 4, wood ? 0xa07c58 : 0xc8beb0, px, top / 2, pz, sx, Math.max(0.05, top), sz, k === 0 || k === n - 1);
         B(0x3e3a34, px, top - 0.03, pz, axis === 'x' ? 0.08 : w, 0.06, axis === 'x' ? d : 0.08, false);   // tread edge
       }
+      break;
+    }
+    case 'hearth': {
+      // The spit hearth: a low ring of stones round a log fire (the flames are the fire effect),
+      // iron uprights and a spit across with something roasting on it.
+      for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2; B(0x8a8278, Math.cos(a) * (w / 2 - 0.5), 0.45, Math.sin(a) * (d / 2 - 0.5), 1.1, 0.9, 1.1); }
+      for (const r of [0.5, -0.6, 1.6]) { const l = B(0x4a3020, 0, 0.35, 0, w * 0.55, 0.4, 0.4); l.rotation.y = r; }
+      for (const sx of [-1, 1]) B(0x2a2826, sx * (w / 2 - 0.3), 2, 0, 0.2, 4, 0.2, false);
+      B(0x2a2826, 0, 3.8, 0, w - 0.4, 0.12, 0.12, false);
+      const roast = B(0xa0582a, 0, 3.5, 0, 1.6, 0.9, 0.9); roast.rotation.x = 0.3;
       break;
     }
     case 'horse': {
