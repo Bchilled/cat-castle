@@ -535,7 +535,7 @@ export class Sim {
     const xs = cells.map(i => i % W), zs = cells.map(i => (i / W) | 0);
     // p = this trap's working numbers with the placing cat's shop upgrades applied.
     const up = cat.upgrades ? cat.upgrades[kind] : null, P = trapParams(kind, up);
-    const tr = { id: this.nextId++, kind, cells, layer: top ? 'top' : def.surface, y: top ? this.topHeight(cells[0]) : 0, rot, wallDir, cd: 0, hp: P.hp || 0, maxHp: P.hp || 0, p: P, tier: (up && up.tier) || 1, special: (up && up.special) || null,
+    const tr = { id: this.nextId++, by: cat.id, kind, cells, layer: top ? 'top' : def.surface, y: top ? this.topHeight(cells[0]) : 0, rot, wallDir, cd: 0, hp: P.hp || 0, maxHp: P.hp || 0, p: P, tier: (up && up.tier) || 1, special: (up && up.special) || null,
       cost: def.cost, charges: P.charges || P.nibbles || 0, rechargeT: 0, cdMax: P.cooldown || P.recharge || 1, tickT: 0,
       ceil: def.surface === 'ceiling' ? this.map.slabBot[cells[0]] : 0,
       x0: Math.min(...xs) * CELL, x1: (Math.max(...xs) + 1) * CELL, z0: Math.min(...zs) * CELL, z1: (Math.max(...zs) + 1) * CELL };

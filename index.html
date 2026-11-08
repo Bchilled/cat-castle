@@ -75,6 +75,10 @@
   #controls b { color: var(--ink); } #controls.hidden { display: none; }
   #prompt { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); font-size: 15px; text-shadow: 0 1px 3px #000; white-space: nowrap; }
   #msg { position: fixed; top: 116px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: bold; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  /* First-run tips (src/ui/coach.js): one at a time, left of centre. */
+  #coach { position: fixed; left: 10px; top: 46%; transform: translateY(-50%); max-width: 290px; background: var(--bg); border: 2px solid #0e0b09; border-left: 4px solid var(--accent); border-radius: 6px; padding: 8px 12px; font-size: 15px; line-height: 1.4; opacity: 0; transition: opacity .4s; pointer-events: none; }
+  #coach.show { opacity: 1; pointer-events: auto; } #coach b { color: var(--accent); }
+  #coach small { display: block; color: var(--dim); font-size: 11.5px; margin-bottom: 3px; } #coach a { color: var(--dim); text-decoration: underline; cursor: pointer; }
   #sub { position: fixed; bottom: 180px; left: 50%; transform: translateX(-50%); max-width: 70vw; text-align: center; font-size: 18px; background: rgba(0,0,0,.55); padding: 4px 12px; border-radius: 4px; opacity: 0; transition: opacity .3s; }
   #sub b { color: var(--accent); }
   .show { opacity: 1 !important; }
@@ -162,6 +166,7 @@
   <b>M</b> sound on/off · <b>Esc</b> pause · <b>H</b> hide this
 </div>
 <div id="prompt"></div>
+<div id="coach"></div>
 <div id="msg"></div>
 <div id="sub"></div>
 <div id="hurt"></div>
@@ -195,6 +200,7 @@
   <label>Field of view <input type="range" id="look-fov" min="50" max="100" step="1"></label>
   <label>Invert up/down <input type="checkbox" id="look-invert"></label>
   <button id="mute">Mute</button>
+  <button id="tipsbtn">Replay tips</button>
   <div class="keys">
     <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom · <b>Left click</b> attack · <b>Right click</b> ability / place trap<br>
     <b>Space</b> jump · <b>1–8</b> traps (again to put away) · <b>R</b> rotate · <b>X</b> sell · <b>E</b> ability · <b>Q</b> item · <b>G</b> next wave · <b>F</b> sniff · <b>M</b> mute

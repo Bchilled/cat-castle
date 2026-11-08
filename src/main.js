@@ -16,6 +16,7 @@ import { makeCat } from './render/models.js';
 import { loadProfile, saveProfile, sandboxProfile, unlockedTraps, unlockedItems, upgradesFor, runReward, applyReward } from './meta/profile.js';
 import { openShop } from './ui/shop.js';
 import { trapIcons } from './ui/icons.js';
+import { Coach } from './ui/coach.js';
 
 
 // Saved progress between runs: paw prints, yarn, unlocks, upgrades, hats (meta/profile.js).
@@ -257,11 +258,16 @@ function start(mode, co = null) {
   let attackHeld = false, jumpQ = false, jumpHeld = false, secondaryQ = false, altQ = false;
   let selected = null, rot = 0, aim = null;
   canvas.addEventListener('click', () => { if (document.pointerLockElement !== canvas) canvas.requestPointerLock(); }, sig);
+  // First-run tips: cleared by doing what they ask; the pause screen can skip or replay them.
+  const coach = new Coach(document.getElementById('coach')), tipsBtn = document.getElementById('tipsbtn');
+  const coachSeen = { moved: 0, placed: 0, sniffed: false, at: null };
+  tipsBtn.onclick = () => { if (coach.active) coach.skip(); else { coach.replay(); Object.assign(coachSeen, { moved: 0, placed: 0, sniffed: false }); } tipsBtn.textContent = coach.active ? 'Skip tips' : 'Replay tips'; };
   // Pause: losing the mouse (Esc) pauses the game and shows volume + controls.
   let paused = false, hadLock = false;
   const pauseEl = document.getElementById('pause');
   const setPaused = (p) => {
     paused = p; pauseEl.classList.toggle('show', p);
+    tipsBtn.textContent = coach.active ? 'Skip tips' : 'Replay tips';
     sendAll({ t: 'pause', p });   // the host pausing pauses everyone
   };
   document.addEventListener('pointerlockchange', () => {
@@ -444,6 +450,7 @@ function start(mode, co = null) {
         if (e.t === 'msg') hud.message(e.text);
         if (e.t === 'bark') hud.bark(e.who, e.text, e.kind);
         if (e.t === 'catHurt' && e.id === LOCAL_ID) hud.flashHurt();
+        if (e.t === 'trapAdd' && e.trap.by === LOCAL_ID) coachSeen.placed++;
         if (e.t === 'end' && !ended) {
           ended = true;
           // Pay out: paw prints for waves cleared, the rating and a first-win bonus; yarn from bosses.
@@ -478,6 +485,11 @@ function start(mode, co = null) {
     const p = placement();
     scene.setGhost(selected, p ? p.cells : null, p ? p.ok : false, rot, p ? p.wallDir : -1, p ? p.y : 0);
     hud.update(dt, sim.hud(LOCAL_ID), selected, p ? p.ok : true);
+    // Tips: how far you've walked, what you've placed, whether you've sniffed yet.
+    if (me2 && !paused) { if (coachSeen.at) coachSeen.moved += Math.hypot(me2.x - coachSeen.at[0], me2.z - coachSeen.at[1]); coachSeen.at = [me2.x, me2.z]; }
+    if (scene.sniff) coachSeen.sniffed = true;
+    if (ended) document.getElementById('coach').classList.remove('show');
+    else if (!paused) coach.update(dt, { moved: coachSeen.moved, sel: selected, placed: coachSeen.placed, phase: sim.phase, kills: sim.stats.kills, sniffed: coachSeen.sniffed });
     scene.render(dt, yaw, pitch, LOCAL_ID);
     requestAnimationFrame(frame);
   }

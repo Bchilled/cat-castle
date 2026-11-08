@@ -655,4 +655,17 @@ for (const id of MAP_ORDER) {
   C.applySnapshot(mirror, JSON.parse(JSON.stringify(C.snapshot(host))));
   ok(mirror.shelves[0].state === 'down' && mirror.map.solid[mirror.shelves[0].cells[0]] === 0 && mirror.crates[mirror.shelves[0].crate.shelf + host.crates.length - host.shelves.length].up, 'co-op guests see the shelf fall');
 }
+// 40. First-run tips: each clears when you do what it asks, and ones already done are skipped.
+{
+  const { Coach, STEPS } = await import('../src/ui/coach.js');
+  const el = { classList: { add() {}, remove() {} }, innerHTML: '', offsetWidth: 0 };
+  const c = new Coach(el), st = { moved: 0, sel: null, placed: 0, phase: 'build', kills: 0, sniffed: false };
+  c.update(0.1, st); const first = c.step;
+  st.moved = 6; c.update(0.1, st); const afterMove = c.step;
+  st.phase = 'wave'; c.update(0.1, st);   // pressed G before building anything: building tips stay up
+  st.sel = 'barricade'; st.placed = 2; c.update(0.1, st); const afterBuild = c.step;
+  st.kills = 5; st.sniffed = true; c.update(0.1, st); for (let k = 0; k < 120; k++) c.update(0.1, st);
+  ok(first === 0 && afterMove === 1 && afterBuild === 5 && !c.active && el.innerHTML.includes('Tip'), `tips advance as you play and finish (${STEPS.length} tips)`);
+  c.replay(); c.update(0.1, { ...st, moved: 0 }); ok(c.active && c.step === 0, 'tips can be replayed');
+}
 process.exit(fails ? 1 : 0);

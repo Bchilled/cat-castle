@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.18.0 — 2026-11-07
+First-run tips
+- A new player gets one short tip at a time in a card on the left, and each clears when you do what it asks: move, press 1 for a Poison Box, place it, put a Snapper on the purple arrows, press G, attack (5 kills), sniff with F, then a last word on Paw Points and the shop. Tips you've already done are skipped (press G early and the build tips stay put until you've built).
+- Shown once per browser. "Skip tips" on the card, or on the pause screen, stops them; "Replay tips" on the pause screen starts them over.
+- Traps now remember which cat placed them (used to count your own placements in co-op).
+- `src/ui/coach.js` (new, 45 lines); `src/main.js` wiring (19, 261–264, 270, 453, 488–492); `index.html` #coach card and style (78–81, 169), pause button (203); `src/sim/sim.js` placeTrap `by` (538).
+
+Tests: 194 checks, all passing (tips advance, skip ahead, finish and replay).
+
 ## 0.17.0 — 2026-11-07
 Things that fall over
 - Tall shelves in the servants' passages (linen shelf, boot rack, pantry shelf) and the cellar (two jar shelves). Hit one four times and it topples:

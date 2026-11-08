@@ -86,6 +86,9 @@ Equippable actives with cooldowns, for example:
 ## G. Co-op
 In from v0.13.0: online co-op (room codes, peer-to-peer). In from v0.14.0: up to four cats, onward or retry together, instant movement for guests.
 
+## H. Getting started
+In from v0.18.0: first-run tips, one at a time, each cleared by doing it (skip or replay from the pause screen).
+
 ## Open questions for Brent
 1. Which of A–F comes first? Suggested order: A (climbing and infesting, because everything else sits on it), then C (shop and upgrades), with B, D and E filling in alongside.
 2. ~~Humans: hazards or scenery?~~ Decided: out of zone, scenery in the lit areas; we play in the shadows.
