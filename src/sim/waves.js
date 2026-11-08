@@ -19,6 +19,7 @@ export const INTRO_TEXT = {
   fatty: "huge, slow, and full of mice. Don't ask. Burns well.",
   scout: 'runs ahead of the pack. Where a scout dies, the pack remembers, and finds another way.',
   ghost: 'claws and poison pass right through it. Holy and psychic tear it apart.',
+  lobber: 'lobs rocks at your traps as it goes: Poison Boxes take damage, anything else jams for a few seconds. Get it before it gets in range.',
 };
 
 // Queue entries: { type, gap, pack, intro? } — gap = seconds until the next entry.
@@ -26,7 +27,7 @@ export const INTRO_TEXT = {
 // at the start (with a long gap so you can watch it), and stays out of that wave's mobs.
 // From the next wave on it mixes into the packs.
 const KINDS = [   // [type, weight once introduced]
-  ['scout', 0], ['runner', 0.5], ['splitter', 0.35], ['tank', 0.3], ['plague', 0.25], ['fatty', 0.12], ['ghost', 0.2],   // scouts lead packs instead (below)
+  ['scout', 0], ['runner', 0.5], ['splitter', 0.35], ['tank', 0.3], ['plague', 0.25], ['fatty', 0.12], ['ghost', 0.2], ['lobber', 0.1],   // scouts lead packs instead (below)
 ];
 export function buildWave(n, rng, gateUp, opts = {}) {
   const pool = [];

@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.22.0';
+export const VERSION = '0.23.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -299,7 +299,7 @@ export const MICE = {
   runner:  { name: 'Scamper', res: { ice: 1.5, physics: 1.25 },     points: 4, hp: 16,   speed: 4.6, size: 0.4,  tails: 1, tailChance: 1,   bite: 4,  gateDmg: 6,  color: 0x7a5a3a, aggro: 0, intro: 3 },
   splitter:{ name: 'Mama Mouse', res: { fire: 1.5 },  points: 6, hp: 40,   speed: 2.4, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x9a6a8a, aggro: 2.5, split: 'pup', splitN: 2, intro: 4 },
   tank:    { name: 'Sewer Rat', res: { physical: 0.75, poison: 0.75, electric: 1.5 },   points: 12, hp: 100,  speed: 1.8, size: 0.75, tails: 1, tailChance: 1,   bite: 10, gateDmg: 25, color: 0x4f4b48, aggro: 3.5, intro: 5 },
-  lobber:  { name: 'Siege Mouse', res: { psychic: 1.5 }, points: 10, hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45, aggro: 0, ranged: true },
+  lobber:  { name: 'Siege Mouse', res: { psychic: 1.5 }, points: 10, hp: 60,   speed: 2.2, size: 0.55, tails: 1, tailChance: 1,   bite: 6,  gateDmg: 10, color: 0x6b5d45, aggro: 0, ranged: true, intro: 13 },   // (also wave 6 at the castle gate if it's still standing)
   plague:  { name: 'Plague Rat', res: { poison: 0.25, holy: 2, fire: 1.5 },  points: 10, hp: 45,   speed: 2.2, size: 0.6,  tails: 1, tailChance: 1,   bite: 6,  gateDmg: 8,  color: 0x6f7a4a, aggro: 0, spit: { range: 7, dmg: 7, every: 2.2, speed: 11 }, intro: 7, ranged: true },
   fatty:   { name: 'Fat Rat', res: { physics: 0.6, fire: 1.5, poison: 1.25 },     points: 25, hp: 260,  speed: 1.3, size: 1.0,  tails: 2, tailChance: 1,   bite: 18, gateDmg: 40, color: 0x5a4a40, aggro: 3, split: 'mouse', splitN: 3, intro: 9 },
   // Scout: quick and flimsy, runs at the front of a pack. When one dies the pack remembers

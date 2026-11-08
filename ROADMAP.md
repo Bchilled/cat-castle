@@ -61,7 +61,7 @@ Equippable actives with cooldowns, for example:
 ## F. Smarter mice
 - In from v0.12.0: danger memory (they avoid where they keep dying), scouts, smashing crate shortcuts, avoiding fires, climbing furniture to eat.
 - Already in: they always take the cheapest route, adapt the moment barricades change, and never go over barricades.
-- Next: avoid tiles where many mice just died (they learn), send scouts, and break props to open shortcuts. Siege mice wreck things along a long route.
+- In from v0.23.0: siege mice lob rocks at traps along their route (Poison Boxes take damage, other traps jam).
 
 ## G. Co-op
 In from v0.13.0: online co-op (room codes, peer-to-peer). In from v0.14.0: up to four cats, onward or retry together, instant movement for guests.

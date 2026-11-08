@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.23.0 — 2026-11-08
+Siege mice wreck your traps, plus two stalls fixed
+- Siege Mice now turn up in ordinary waves from wave 13 (they used to appear only at the castle gate). Every 7 s one stops, aims at the nearest trap within 9 units and lobs a rock at it:
+  - a Poison Box loses 60 health (30 for a Steel Box)
+  - anything else jams for 5 s: it does nothing, and its lamp blinks orange
+  - they still lob at the castle gate on wave 6 if it's standing
+  - they come with an intro line, a first-time message and sounds (sling, thunk, clank)
+- Fixed: a mouse walking straight at a standing barrel could push into it forever and stall the wave (on the stables map). Barrels now count in the mice's pathing, so they route round them; a barrel that comes to rest somewhere new re-routes them, and the mice slide round the rim if they bump one.
+- Fixed: a Flinger could throw a tough mouse (a Fat Rat) back up the lane over and over and stall the wave. Thrown off the same plate twice in 10 s, a mouse braces and walks over it the third time (it still takes the hit).
+- The new-player bot (starter traps, Puddin, Normal) now wins 5 of 6 maps. The sixth stalls on a Fat Rat held in a field of Glue Traps the bot's cat never walks over to.
+- `src/sim/sim.js` siege constants (155–157), barrels in pathing (391–394), barrels home (669), barrel rest and slide (1495–1507), siege aiming in stepMouse (1911–1936), rock landing (2194–2202), jammed traps (2322), Flinger brace (2354–2361); `src/config.js` Siege Mouse intro (302); `src/sim/waves.js` intro line and wave weight (22, 30); `src/render/scene.js` rock hits and jam lamp (662–663, 867–869); `src/audio/sfx.js` lob, rockHit, jam (255–258).
+
+Tests: 238 checks, all passing (a Snapper jammed and back to work, a Poison Box battered, mice getting round a barrel, the Flinger brace).
+
 ## 0.22.0 — 2026-11-08
 Long runs along the furniture
 - The kitchen's west and east counter tops and the island top, and the stables hay loft (up a ladder at each end), are now routes the mice can take. Climbing up and down costs them, so with the floor open they stay underneath; wall the floor off or maze it and they take to the tops instead and walk right past your floor traps.

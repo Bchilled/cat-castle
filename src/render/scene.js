@@ -659,6 +659,8 @@ export class Scene {
       case 'splat': this.spawnParticles(e.x, e.y + 0.1, e.z, 0x7a1810, e.big ? 20 : 10, e.big ? 6 : 4); this.decal(e.x, e.z, 0x5a1410, e.big ? 0.7 : 0.45, Math.max(0.02, e.y + 0.02)); break;
       case 'splash': this.spawnParticles(e.x, -0.4, e.z, 0xbfe0ea, 14, 4); break;
       case 'boom': this.spawnParticles(e.x, 2, e.z, 0x8a8478, 24, 6); break;
+      case 'rockHit': this.spawnParticles(e.x, 0.6, e.z, 0x8a8478, 10, 3, 0.08); break;
+      case 'jam': { const g = trap(e.id); if (g) g.userData.jamUntil = performance.now() + e.secs * 1000; break; }   // (renderer clock: guests never step the sim)
       case 'gateBreak': {
         this.scene.remove(this.gateMesh); this.aimProxies.remove(this.gateProxy);
         this.spawnParticles((GATE.x0 + GATE.x1) / 2, 2, (GATE.z0 + GATE.z1) / 2, 0x7a5a38, 40, 6, 0.15);
@@ -862,8 +864,9 @@ export class Scene {
       const f = tr.cdMax > 0 ? Math.min(1, tr.cd / tr.cdMax) : 0;
       if (ud.lamp) {
         const busy = tr.kind === 'gluepad' || tr.kind === 'bait' ? tr.charges <= 0 : tr.kind === 'grinder' ? false : tr.kind === 'tacks' ? false : f > 0;
-        ud.lamp.material.color.setHex(busy ? 0xe0402a : 0x5ee06a);
-        ud.lamp.scale.setScalar(busy ? 1 : 1 + Math.sin(now / 200) * 0.15);
+        const jammed = ud.jamUntil > performance.now();   // jammed by a siege rock: the lamp blinks orange
+        ud.lamp.material.color.setHex(jammed ? (Math.floor(now / 150) % 2 ? 0xff9a20 : 0x3a2a10) : busy ? 0xe0402a : 0x5ee06a);
+        ud.lamp.scale.setScalar(jammed ? 1.4 : busy ? 1 : 1 + Math.sin(now / 200) * 0.15);
       }
       if (ud.kind === 'mousetrap') ud.bar.rotation.x = f > 0 ? -0.15 - (2.75 * Math.max(0, (1 - f - 0.15) / 0.85)) : -2.9;   // slams, then cranks back
       if (ud.kind === 'flipper') ud.hinge.rotation.x = -Math.max(ud.anim, f > 0.8 ? 1 : f / 0.8) * 1.2;   // flips up, eases down

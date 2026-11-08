@@ -815,4 +815,43 @@ let findSpot, setup;
   ks.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(45) - 1, az: q(46), rot: 0, top: true }); ks.updateFlow();
   ok(!ks.links.includes(L) && !climbs(ks), 'a Poison Box on the island top closes the run');
 }
+// 44b. Regression (0.23): a mouse heading straight at a standing barrel goes round it (one
+// used to push into it forever and stall the wave).
+{
+  const st = new Sim({ map: 'stables', seed: 5 }); st.addPlayer('p1'); st.step();
+  const b = st.barrels[0], m = st.spawnAt('mouse', b.x, b.z + 3, 500);
+  run(st, 6);
+  ok(m.dead || Math.hypot(m.x - b.x, m.z - b.z) > 4, `a mouse walking at a barrel gets round it (${m.x.toFixed(1)}, ${m.z.toFixed(1)})`);
+}
+// 44c. Regression (0.23): a tough mouse a Flinger keeps throwing back braces on the third go,
+// instead of looping forever (a Fat Rat did that and stalled a wave).
+{
+  const fs = new Sim({ seed: 1450 }); fs.addPlayer('p1'); fs.sardines = 1e5; fs.step();
+  fs.command({ type: 'place', id: 'p1', trap: 'flipper', ax: q(60), az: q(50), rot: 0 });
+  const fl = [...fs.traps.values()][0], cx = (fl.x0 + fl.x1) / 2, cz = (fl.z0 + fl.z1) / 2, fat = fs.spawnAt('fatty', cx, cz, 1e5);
+  let throws = 0, wasAir = false;
+  run(fs, 9, () => { const air = fat.state === 'air'; if (air && !wasAir) throws++; wasAir = air; if (!air) { fat.x = cx; fat.z = cz; } });
+  ok(throws === 2 && fat.hp < 1e5, `a Flinger throws the same Fat Rat twice, then it braces and takes the hit (${throws} throws)`);
+}
+// 45. Siege mice (0.23) lob rocks at traps along their way: a Poison Box takes damage,
+// anything else jams (stops working) for a few seconds.
+{
+  const ss = new Sim({ map: 'market', seed: 1400 }); ss.addPlayer('p1'); ss.sardines = 1e5; ss.step();
+  ss.command({ type: 'place', id: 'p1', trap: 'mousetrap', ax: q(44), az: q(60), rot: 0 });
+  const snap = [...ss.traps.values()][0];
+  const lob = ss.spawnAt('lobber', 44, 66, 9999);
+  const ev = run(ss, 4.6, () => { lob.x = 44; lob.z = 66; });   // 2 s before the first look, 1 s aiming, 1.2 s in the air
+  ok(ev.some(e => e.t === 'lob') && ev.some(e => e.t === 'jam' && e.id === snap.id) && snap.jamT > 0, `a Siege Mouse lobs a rock at a Snapper and jams it (${snap.jamT.toFixed(1)} s left)`);
+  const victim = ss.spawnAt('mouse', (snap.x0 + snap.x1) / 2, (snap.z0 + snap.z1) / 2, 100); ss.mice = ss.mice.filter(m => m !== lob);
+  run(ss, 0.5, () => { victim.x = (snap.x0 + snap.x1) / 2; victim.z = (snap.z0 + snap.z1) / 2; });
+  const jammedOk = victim.hp === 100;
+  run(ss, 5, () => { if (!victim.dead) { victim.x = (snap.x0 + snap.x1) / 2; victim.z = (snap.z0 + snap.z1) / 2; } });
+  ok(jammedOk && (victim.dead || victim.hp < 100), 'a jammed trap does nothing until it clears, then works again');
+  const bz = [70, 80, 86, 90, 50, 30].find(z => ss.canPlace('barricade', q(46), q(z)) === true);
+  ss.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(46), az: q(bz), rot: 0 });
+  const box = [...ss.traps.values()].find(t => t.kind === 'barricade'), hp0 = box.hp;
+  ss.removeTrap(snap);   // (only the box in range now)
+  const lob2 = ss.spawnAt('lobber', 46, bz + 6, 9999); run(ss, 4.6, () => { lob2.x = 46; lob2.z = bz + 6; });
+  ok(box.hp <= hp0 - 60 || !ss.traps.has(box.id), `a siege rock knocks ${hp0 - box.hp} health off a Poison Box`);
+}
 process.exit(fails ? 1 : 0);

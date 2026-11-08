@@ -252,6 +252,10 @@ const SOUNDS = {
   chandelier: (a, o, R) => { a.tone(o, { f: 80, f2: 35, dur: 0.5, vol: 0.7 }); a.tone(o, { type: 'square', f: 420, f2: 380, dur: 0.6, vol: 0.06, vib: 7 }); for (let k = 0; k < 4; k++) a.noise(o, { t: 0.03 + k * 0.06 + R() * 0.03, dur: 0.06, vol: 0.2, type: 'highpass', f: 4500 }); },
   kettle: (a, o) => { a.tone(o, { type: 'sine', f: 1900, f2: 2100, dur: 0.7, vol: 0.07, vib: 14 }); a.noise(o, { dur: 0.8, vol: 0.25, type: 'highpass', f: 2500, att: 0.1 }); },
   spicejar: (a, o, R) => { a.noise(o, { dur: 0.25, vol: 0.2, type: 'bandpass', f: 3000 }); a.noise(o, { t: 0.35 + R() * 0.1, dur: 0.18, vol: 0.4, type: 'bandpass', f: 1400, f2: 700 }); },
+  // Siege mice (0.23): a sling whoosh, a rock thunk, a jammed clank.
+  lob: (a, o) => { a.noise(o, { dur: 0.3, vol: 0.2, type: 'bandpass', f: 600, f2: 1400 }); },
+  rockHit: (a, o) => { a.tone(o, { f: 110, f2: 50, dur: 0.18, vol: 0.5 }); a.noise(o, { dur: 0.12, vol: 0.3, type: 'lowpass', f: 900 }); },
+  jam: (a, o) => { a.tone(o, { type: 'square', f: 260, f2: 180, dur: 0.12, vol: 0.08 }); a.tone(o, { type: 'square', f: 200, f2: 140, t: 0.1, dur: 0.12, vol: 0.08 }); },
   // Things that fall over (0.17): a wooden knock and creak, a big crash with breaking jars, a rolling rumble.
   shelfHit: (a, o, R) => { a.tone(o, { f: 160 + R() * 30, f2: 90, dur: 0.12, vol: 0.4 }); a.tone(o, { type: 'sawtooth', f: 90, f2: 70, t: 0.05, dur: 0.35, vol: 0.06, vib: 9 }); },
   shelfFall: (a, o, R) => { a.tone(o, { f: 90, f2: 35, dur: 0.6, vol: 0.8 }); a.noise(o, { dur: 0.7, vol: 0.6, type: 'lowpass', f: 1200, f2: 150 }); for (let k = 0; k < 5; k++) a.noise(o, { t: 0.04 + k * 0.05 + R() * 0.04, dur: 0.07, vol: 0.25, type: 'highpass', f: 3500 + R() * 2000 }); },

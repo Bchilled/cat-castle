@@ -152,6 +152,9 @@ const CLIMB_SECS = 0.9;
 const SHELF_HITS = 4, SHELF_FALL_SECS = 0.6, SHELF_CRUSH = 120, SHELF_HP = 150;   // hits to knock over; crush damage; chew health once down
 const BARREL_R = 1.0, BARREL_SPEED = 8, BARREL_FRICTION = 2.2;                     // rolling barrels
 // Market stalls (v0.20): break the legs and the counter comes down across the crossing.
+// Siege mice (v0.23) lob rocks at traps along their route: Poison Boxes take damage,
+// anything else jams for a while.
+const SIEGE_RANGE = 9, SIEGE_EVERY = 7, SIEGE_AIM = 1.0, SIEGE_DMG = 60, SIEGE_JAM = 5;
 const STALL_HITS = 6, STALL_FALL_SECS = 0.45, STALL_CRUSH = 150, STALL_HP = 260, STALL_PILE_H = 0.9;
 // A shut door: mice wait at it rather than turning round, unless the way round is shorter
 // than this wait (per cell; doors are 2 cells thick). Without it, slow mice flip-flopped
@@ -385,6 +388,10 @@ export class Sim {
     for (const c of this.crates) if (c.up) for (const i of c.cells) { extra[i] += CRATE_COST; blk[i] = 1; }
     if (this.doors.length) for (let i = 0; i < N; i++) if (this.doorShut(i)) { extra[i] += DOOR_WAIT_COST; blk[i] = 1; }
     for (let i = 0; i < N; i++) if (this.fireCost[i]) extra[i] += this.fireCost[i];
+    // A barrel standing (or lying) still is in the way: route round it rather than into it.
+    for (const b of this.barrels || []) for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+      const c = cellOf(b.x + dx * CELL, b.z + dz * CELL); if (c >= 0 && Math.hypot(dx, dz) * CELL <= BARREL_R + 0.25) extra[c] += 20;
+    }
     const extraS = extra;   // (danger used to go in here; now it only weighs lane choice, see chooseVia)
     this.blk = blk; this.extraArr = extraS; this.extraBig = extra;
     // Furniture routes that are open (a Poison Box on top closes one). Small mice only.
@@ -659,7 +666,7 @@ export class Sim {
         for (const c of this.crates) if (!c.up && !c.fallen) { c.up = true; c.hp = c.maxHp; this.flowDirty = true; this.layoutVer++; this.emit({ t: 'crateUp', id: c.id }); }   // servants restack the crates
         for (const sh of this.shelves) if (sh.state !== 'up') this.standShelf(sh);                            // ...and stand the shelves back up
         for (const st of this.stalls) if (st.state !== 'up') this.rebuildStall(st);                           // ...and prop the stalls back up
-        for (const b of this.barrels) { [b.x, b.z] = b.home; b.vx = b.vz = 0; b.lying = false; }              // ...and roll the barrels home
+        for (const b of this.barrels) { if (b.x !== b.home[0] || b.z !== b.home[1]) this.flowDirty = true; [b.x, b.z] = b.home; b.vx = b.vz = 0; b.lying = false; }   // ...and roll the barrels home
         for (let i = 0; i < this.danger.length; i++) this.danger[i] *= 0.5;                                     // they half-forget between waves
         for (const p of this.props) { [p.x, p.y, p.z] = p.home; p.state = 'up'; p.vx = p.vy = p.vz = 0; p.tilt = 0; }   // pots back on the shelves
         this.bark(this.wave % 6 === 0 ? 'boss' : 'wave', this.anyCatName(), true);
@@ -1485,12 +1492,19 @@ export class Sim {
         if (!m.dead && !MICE[m.type].boss && MICE[m.type].size < 0.9) { const sx = -b.vz / sp, sz = b.vx / sp, side = (m.x - b.x) * sx + (m.z - b.z) * sz >= 0 ? 1 : -1; this.launch(m, sx * side * 5 + b.vx * 0.4, 3.5, sz * side * 5 + b.vz * 0.4); }
       }
       const f = Math.max(0, sp - BARREL_FRICTION * DT) / sp; b.vx *= f; b.vz *= f;
+      if (sp * f < 0.3) { b.vx = b.vz = 0; this.flowDirty = true; }   // came to rest somewhere new: mice route round it
     }
     // Mice don't walk through a standing barrel: push them round it.
     for (const b of this.barrels) for (const m of this.nearMice(b.x, b.z, BARREL_R + 0.6)) {
       if (m.dead || m.state !== 'walk' || m.y > 1) continue;
       const dx = m.x - b.x, dz = m.z - b.z, d = Math.hypot(dx, dz) || 0.01, min = BARREL_R + MICE[m.type].size * 0.35;
-      if (d < min) { const nx = b.x + dx / d * min, nz = b.z + dz / d * min, c = cellOf(nx, nz); if (c >= 0 && this.passSmall(c)) { m.x = nx; m.z = nz; } }
+      if (d < min) {
+        // Out to the rim, plus a step along it the way the mouse is heading, so it slides round
+        // the barrel (pushing straight out left a mouse walking at the centre stuck there forever).
+        const ox = dx / d, oz = dz / d, f = -Math.sin(m.yaw) * oz + Math.cos(m.yaw) * ox, side = Math.abs(f) < 0.2 ? (m.id % 2 ? 1 : -1) : Math.sign(f);
+        const nx = b.x + ox * min - oz * side * 0.15, nz = b.z + oz * min + ox * side * 0.15, c = cellOf(nx, nz);
+        if (c >= 0 && this.passSmall(c)) { m.x = nx; m.z = nz; }
+      }
     }
   }
 
@@ -1894,6 +1908,32 @@ export class Sim {
       }
     }
 
+    // Siege mice wreck what's along their way: every few seconds one stops, aims at the
+    // nearest trap in range and lobs a rock at it (one that's already jammed isn't worth it).
+    if (m.type === 'lobber' && m.state === 'walk' && !m.climb) {
+      if (m.aimT > 0) {
+        m.aimT -= DT;
+        if (m.aimT <= 0) {
+          const tr = this.traps.get(m.aimAt);
+          if (tr) {
+            const tx = (tr.x0 + tr.x1) / 2, tz = (tr.z0 + tr.z1) / 2, ty = tr.layer === 'ceiling' ? tr.ceil - 0.3 : tr.layer === 'wall' ? 1 : (tr.y || 0) + 0.3, tf = 1.2;
+            this.shots.push({ id: this.nextId++, x: m.x, y: 0.5, z: m.z, vx: (tx - m.x) / tf, vz: (tz - m.z) / tf, vy: (ty - 0.5 + 0.5 * GRAVITY * tf * tf) / tf, t: tf, trap: tr.id });
+            this.emit({ t: 'lob', x: m.x, z: m.z });
+            if (!this.siegeTold) { this.siegeTold = true; this.emit({ t: 'msg', text: 'Siege mice lob rocks at your traps: Poison Boxes take a beating, anything else jams for a few seconds.' }); }
+          }
+          m.siegeCd = SIEGE_EVERY;
+        }
+        return;   // standing still to aim
+      }
+      m.siegeCd = (m.siegeCd ?? 2) - DT;
+      if (m.siegeCd <= 0) {
+        let best = null, bd = SIEGE_RANGE;
+        for (const tr of this.traps.values()) { const dd = Math.hypot((tr.x0 + tr.x1) / 2 - m.x, (tr.z0 + tr.z1) / 2 - m.z); if (dd < bd && !(tr.jamT > 0)) { bd = dd; best = tr; } }
+        if (best) { m.aimT = SIEGE_AIM; m.aimAt = best.id; m.yaw = Math.atan2((best.x0 + best.x1) / 2 - m.x, (best.z0 + best.z1) / 2 - m.z); return; }
+        m.siegeCd = 1;   // nothing in range: look again in a second
+      }
+    }
+
     // Nearest cat on (roughly) our level — what we fight.
     // Cats with taunt (Casper) count as closer, so mice pick them first and chase from further.
     let foe = null, foeD = Infinity, best = Infinity;
@@ -2151,7 +2191,15 @@ export class Sim {
   stepShots() {
     for (const s of this.shots) {
       s.vy -= GRAVITY * DT; s.x += s.vx * DT; s.y += s.vy * DT; s.z += s.vz * DT; s.t -= DT;
-      if (s.t <= 0) { this.breakGate(); this.emit({ t: 'boom', x: s.x, z: s.z }); s.done = true; }
+      if (s.t > 0) continue;
+      s.done = true;
+      if (!s.trap) { this.breakGate(); this.emit({ t: 'boom', x: s.x, z: s.z }); continue; }
+      // A siege rock landing on a trap (if it's still there).
+      const tr = this.traps.get(s.trap);
+      this.emit({ t: 'rockHit', x: s.x, z: s.z });
+      if (!tr) continue;
+      if (tr.kind === 'barricade') { tr.hp -= SIEGE_DMG * (tr.p.tough ? 0.5 : 1); this.emit({ t: 'barricadeHit', id: tr.id }); if (tr.hp <= 0) this.removeTrap(tr); }
+      else { tr.jamT = SIEGE_JAM; this.emit({ t: 'jam', id: tr.id, secs: SIEGE_JAM, x: s.x, z: s.z }); }
     }
     if (this.shots.some(s => s.done)) this.shots = this.shots.filter(s => !s.done);
   }
@@ -2271,6 +2319,7 @@ export class Sim {
     const bleed = (m, n, max) => { for (let k = 0; k < n; k++) { if (m.bleed.length < max) m.bleed.push(CAT.bleedSeconds); else m.bleed[0] = CAT.bleedSeconds; } };
     for (const tr of this.traps.values()) {
       tr.cd = Math.max(0, tr.cd - DT);
+      if (tr.jamT > 0) { tr.jamT -= DT; tr.active = false; continue; }   // jammed by a siege rock
       // Nebbie's Tinker overclocks a trap for a while.
       if (tr.boostT > 0) tr.boostT -= DT;
       const mods = tr.boostT > 0 ? { ...baseMods, trapDmg: baseMods.trapDmg * ABILITY2.tinker.buff } : baseMods;
@@ -2302,8 +2351,14 @@ export class Sim {
           if (!victims.length && !cats.length) break;
           reset(tr, P.cooldown); this.emit({ t: 'flip', id: tr.id });
           for (const m of victims) {
-            const s = MICE[m.type].size, mul = Math.min(1, (P.big ? 0.9 : 0.5) / (s * s));   // bosses barely budge (Big Spring lifts more)
-            this.launch(m, dx * P.launchH * mul + (this.rng() - 0.5) * 2, P.launchV * mul * (0.85 + this.rng() * 0.3), dz * P.launchH * mul + (this.rng() - 0.5) * 2);
+            // Thrown off the same plate twice in 10 s, a mouse braces and walks over it the third
+            // time (a tough one flung back up the lane could otherwise loop forever and stall the wave).
+            const fl = m.flungBy && m.flungBy.id === tr.id && this.time - m.flungBy.t < 10 ? m.flungBy : (m.flungBy = { id: tr.id, n: 0, t: 0 });
+            fl.n++; fl.t = this.time;
+            if (fl.n <= 2) {
+              const s = MICE[m.type].size, mul = Math.min(1, (P.big ? 0.9 : 0.5) / (s * s));   // bosses barely budge (Big Spring lifts more)
+              this.launch(m, dx * P.launchH * mul + (this.rng() - 0.5) * 2, P.launchV * mul * (0.85 + this.rng() * 0.3), dz * P.launchH * mul + (this.rng() - 0.5) * 2);
+            }
             this.damageMouse(m, P.launchDamage * mods.trapDmg, 'trap', false, el);
           }
           for (const c of cats) { c.vx = dx * P.launchH; c.vz = dz * P.launchH; c.vy = P.launchV; c.onGround = false; }
