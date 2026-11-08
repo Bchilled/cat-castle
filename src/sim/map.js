@@ -174,7 +174,7 @@ export const MAPS = {
   passages: {
     id: 'passages', name: "Servants' Passages", order: 5, w: 80, h: 100, floor: 'planks', birds: false,
     blurb: 'A maze of narrow passages inside the walls. Ceilings everywhere.',
-    twist: 'Servants open and shut the doors on a timer. Every swing reroutes the mice.',
+    twist: 'Servants open and shut the doors on a timer. Mice queue at a shut door, or take another way if it is shorter.',
     furniture: [
       ...shell(80, 100, 14, 'plaster', [5, 75]),
       roof('Ceiling', [2, 2, 78, 98], 6, 7, 'beams'),

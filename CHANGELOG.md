@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.13.2 — 2026-11-07
+- Servants' Passages description on the map picker updated for the door change in 0.13.1: mice queue at a shut door, or take another way if it's shorter. `src/sim/map.js` (passages twist).
+
 ## 0.13.1 — 2026-11-07
 Fixed: found by soak runs (every map, all 24 waves, with traps and a fighting cat, headless)
 - A freeze of up to 30 seconds. When path costs got big (Poison Box mazes plus danger memory), one route search could re-check "equal" paths millions of times, because of a rounding mismatch. Worst sim step on every map is now under 40 ms. `src/sim/path.js` computeFlow (lines 75–78).
