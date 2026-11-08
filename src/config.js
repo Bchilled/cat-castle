@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.20.0';
+export const VERSION = '0.21.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -351,12 +351,17 @@ export const TRAPS = {
   magnifier: { el: 'fire', name: 'Magnifying Glass', desc: 'Focuses a sunbeam on one mouse in the lane. The longer it holds on, the hotter it gets, until the mouse goes up in flames.', cost: 85, surface: 'wall', size: [4, 1], reach: 7, dps: 6, maxDps: 40, rampSecs: 3, hot: 0.5, pathCost: 0 },
   knifeblock:{ el: 'physical', name: 'Knife Block', desc: 'Table and counter tops only. Throws kitchen knives at the nearest mouse in range, down on the floor or up on the furniture.', cost: 95, surface: 'floor', topOnly: true, size: [4, 4], damage: 26, cooldown: 1.5, radius: 8, bleed: 1, pathCost: 0 },
   honey:     { el: null, name: 'Honey Drip', desc: 'A dripping honeycomb. Leaves sticky puddles that slow every mouse wading through.', cost: 45, surface: 'ceiling', size: [4, 4], radius: 2, cooldown: 6, puddleSecs: 6, pathCost: 0 },
+  // ---- new in 0.21 ----
+  cuckoo:    { el: 'physics', name: 'Cuckoo Clock', desc: "A cuckoo clock on the wall. It strikes on the beat whether there are mice or not: the hammer comes down on the lane in front.", cost: 55, surface: 'wall', size: [4, 1], damage: 60, cooldown: 3, reach: 3, pathCost: 0 },
+  chandelier:{ el: 'physics', name: 'Chandelier', desc: 'Waits for a crowd (three mice, or one big one) to gather underneath, then drops on them. Slow to hoist back up.', cost: 120, surface: 'ceiling', size: [6, 6], damage: 110, radius: 3, cooldown: 14, crowd: 3, pathCost: 0 },
+  kettle:    { el: 'water', name: 'Kettle', desc: 'Table and counter tops only. Boils, whistles and blows scalding steam down over the edge, soaking every mouse nearby.', cost: 70, surface: 'floor', topOnly: true, size: [4, 4], damage: 14, radius: 3.5, cooldown: 3, pathCost: 0 },
+  spicejar:  { el: 'earth', name: 'Spice Jar', desc: 'Table and counter tops only. Tips a cloud of pepper on mice passing nearby: they stop to sneeze, covered in pepper (the next physics hit knocks them flat).', cost: 50, surface: 'floor', topOnly: true, size: [4, 4], damage: 4, radius: 3, cooldown: 5, stun: 1.2, pathCost: 0 },
   glove:     { el: 'physics', name: 'Boxing Glove', desc: "Spring-loaded wall punch. Knocks small mice across the lane, dazes the big ones.",  cost: 70,  surface: 'wall',    size: [4, 1], cooldown: 3, reach: 4, push: 10, damage: 15, bigStun: 1.2, pathCost: 0 },   // OMD push trap
 };
 // Trap bar order = keys 1..8.
 export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove', 'bait',
   'hotplate', 'icetray', 'oilslick', 'rollingpin', 'skull', 'forkdarts', 'bellows', 'candle', 'hypno', 'flowerpot', 'bucket', 'salt', 'flypaper',
-  'trapdoor', 'magnifier', 'knifeblock', 'honey'];
+  'trapdoor', 'magnifier', 'knifeblock', 'honey', 'cuckoo', 'chandelier', 'kettle', 'spicejar'];
 
 // Trap upgrades, bought in the shop with paw prints (kept between runs).
 // Tier 2: more power (damage/effect x1.25). Tier 3: resets 20% faster. Then pick one of two
@@ -391,6 +396,10 @@ export const SPECIALS = {
   magnifier:  { a: { name: 'Burning Glass', desc: 'Heats up twice as fast.', mul: { rampSecs: 0.5 } }, b: { name: 'Prism', desc: 'Splits the beam across three mice.', set: { split: 3 } } },
   knifeblock: { a: { name: 'Cleaver', desc: '+80% damage, and it knocks small mice flat.', mul: { damage: 1.8 }, set: { flatten: true } }, b: { name: 'Steak Knives', desc: 'Throws three knives at once, at different mice.', set: { volley: 3 } } },
   honey:      { a: { name: 'Royal Jelly', desc: 'Puddles are 30% wider and last twice as long.', mul: { radius: 1.3, puddleSecs: 2 } }, b: { name: 'Beehive', desc: 'Bees guard the puddles and sting mice in them (poison).', set: { bees: true } } },
+  cuckoo:     { a: { name: 'Alarm Clock', desc: 'Strikes twice as often, a bit lighter.', mul: { cooldown: 0.5, damage: 0.65 } }, b: { name: 'Grandfather Clock', desc: 'A heavier hammer: survivors are stunned for 2 s.', set: { stun: 2 } } },
+  chandelier: { a: { name: 'Iron Chandelier', desc: '+60% damage, and it knocks survivors flat.', mul: { damage: 1.6 }, set: { flatten: true } }, b: { name: 'Hot Wax', desc: 'The candles set mice burning and leave burning wax where it lands.', set: { hot: true } } },
+  kettle:     { a: { name: 'Boiling', desc: 'Twice the damage.', mul: { damage: 2 } }, b: { name: 'Whistling', desc: 'The shriek scares mice into running back the way they came.', set: { scare: true } } },
+  spicejar:   { a: { name: 'Chilli Flakes', desc: 'Hot pepper: sneezing mice catch fire too.', set: { hot: true } }, b: { name: 'Big Jar', desc: '50% wider cloud, and they sneeze longer.', mul: { radius: 1.5, stun: 1.5 } } },
   flypaper:   { a: { name: 'Extra Sticky', desc: 'Holds birds twice as long and catches bigger mice.', mul: { hold: 2, stickSecs: 2 } }, b: { name: 'Wide Strips', desc: '50% wider and twice the charges.', mul: { radius: 1.5, charges: 2 } } },
 };
 // A trap's working numbers for a given upgrade state ({ tier, special }): base numbers,

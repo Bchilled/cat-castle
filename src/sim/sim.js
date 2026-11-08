@@ -2394,6 +2394,52 @@ export class Sim {
           this.emit({ t: 'honeyDrip', id: tr.id, x: cx, z: cz });
           break;
         }
+        // ---- new in 0.21 ----
+        case 'cuckoo': {
+          // A clock: strikes every `cooldown` seconds whatever is (or isn't) in front of it.
+          if (tr.cd > 0) break;
+          reset(tr, P.cooldown);
+          const hit = this.mice.filter(m => live(m) && inRect(m, lane(tr, P.reach), 0));
+          for (const m of hit) { this.damageMouse(m, dmg, 'trap', false, el); if (P.stun && !m.dead && !MICE[m.type].boss) m.stunT = m.stunMax = Math.max(m.stunT, P.stun); }
+          this.emit({ t: 'cuckoo', id: tr.id, x: (tr.x0 + tr.x1) / 2, z: (tr.z0 + tr.z1) / 2, hits: hit.length });
+          break;
+        }
+        case 'chandelier': {
+          // Waits for a crowd (or one big mouse) underneath, then drops on the lot.
+          if (tr.cd > 0) break;
+          const vs = below(tr, P.radius);
+          if (vs.length < P.crowd && !vs.some(m => MICE[m.type].size >= 0.9)) break;
+          reset(tr, P.cooldown); const [cx, cz] = centre(tr);
+          for (const m of vs) {
+            this.damageMouse(m, dmg, 'trap', false, el);
+            if (m.dead) continue;
+            if (P.flatten && !MICE[m.type].boss) { m.dirtyT = Math.max(m.dirtyT || 0, 0.1); this.damageMouse(m, 1, 'trap', false, 'physics'); }
+            if (P.hot) this.damageMouse(m, 2, 'trap', false, 'fire');
+          }
+          if (P.hot) this.zones.push({ id: this.nextId++, kind: 'fire', x: cx, z: cz, r: P.radius * 0.7, t: 5, dps: 8 });
+          this.emit({ t: 'chandelier', id: tr.id, x: cx, z: cz, hits: vs.length });
+          if (vs.length >= 4) this.bark('trap', null);
+          break;
+        }
+        case 'kettle': case 'spicejar': {
+          // On a table top: hits floor mice around the table below it.
+          if (tr.cd > 0) break;
+          const [cx, cz] = centre(tr);
+          const vs = this.nearMice(cx, cz, P.radius + 0.5).filter(m => !m.dead && m.y < tr.y - 0.3 && Math.hypot(m.x - cx, m.z - cz) < P.radius);
+          if (!vs.length) break;
+          reset(tr, P.cooldown);
+          for (const m of vs) {
+            this.damageMouse(m, dmg, 'trap', false, el);
+            if (m.dead) continue;
+            if (tr.kind === 'kettle' && P.scare) this.damageMouse(m, 1, 'trap', false, 'psychic');                      // Whistling: they turn tail
+            if (tr.kind === 'spicejar') {
+              if (!MICE[m.type].boss) m.stunT = m.stunMax = Math.max(m.stunT, P.stun);                                 // achoo
+              if (P.hot && !m.dead) this.damageMouse(m, 1, 'trap', false, 'fire');
+            }
+          }
+          this.emit({ t: tr.kind, id: tr.id, x: cx, y: tr.y, z: cz, hits: vs.length });
+          break;
+        }
         case 'gluepad': case 'flypaper': {
           if (tr.kind === 'flypaper') {
             // Birds swooping under the roof near the strips get stuck.

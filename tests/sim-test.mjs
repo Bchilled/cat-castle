@@ -461,6 +461,7 @@ for (const id of MAP_ORDER) {
     const tr = [...t.traps.values()][0];
     if (kind === 'barricade') { ok(tr && tr.hp === trapParams('barricade').hp, 'barricade placed'); continue; }
     const m = t.spawnAt('mouse', spot.cx, spot.cz, 100);
+    for (let k = 1; k < (def.crowd || 1); k++) t.spawnAt('mouse', spot.cx + k * 0.2, spot.cz, 100);   // the Chandelier waits for a crowd
     const ev = run(t, 4, () => { if (kind !== 'bait' && !m.dead && m.state !== 'air') { m.x = spot.cx; m.z = spot.cz; } });
     const hit = m.dead || m.hp < m.maxHp || m.oilT > 0 || ev.some(e => e.t === 'glue') || m.confuseT > 0 || m.wetT > 0 || (m.eatT > 0) || m.state === 'air' || m.slowT > 0;
     ok(tr && hit, `${kind} (${def.surface}) affects a mouse in reach (hp ${Math.max(0, m.hp).toFixed(0)}/${m.maxHp}${m.oilT > 0 ? ', oily' : ''}${m.wetT > 0 ? ', wet' : ''}${m.confuseT > 0 ? ', confused' : ''}${m.eatT > 0 ? ', eating' : ''})`);
@@ -670,11 +671,12 @@ for (const id of MAP_ORDER) {
   c.replay(); c.update(0.1, { ...st, moved: 0 }); ok(c.active && c.step === 0, 'tips can be replayed');
 }
 // 41. New traps (0.19): Trapdoor, Magnifying Glass, Knife Block, Honey Drip.
+const { DIRS4 } = await import('../src/sim/map.js');
+let findSpot, setup;
 {
   const { trapParams } = await import('../src/config.js');
-  const { DIRS4 } = await import('../src/sim/map.js');
   // Somewhere legal for a trap, plus a floor spot in its reach.
-  const findSpot = (t, kind) => {
+  findSpot = (t, kind) => {
     const def = TRAPS[kind];
     for (let z = 20; z < 200; z += 2) for (let x = 4; x < 188; x += 2) for (const wd of def.surface === 'wall' ? [0, 1, 2, 3] : [-1]) {
       if (t.canPlace(kind, x, z, 0, wd, !!def.topOnly) !== true) continue;
@@ -685,7 +687,7 @@ for (const id of MAP_ORDER) {
       return { x, z, wd, cx, cz };
     }
   };
-  const setup = (kind, up) => {
+  setup = (kind, up) => {
     const t = new Sim({ seed: 1100 }); t.addPlayer('p1', 'fred', up ? { upgrades: { [kind]: up } } : {}); t.sardines = 1e6; t.gate.up = false; t.flowDirty = true; t.step();
     const sp = findSpot(t, kind); t.command({ type: 'place', id: 'p1', trap: kind, ax: sp.x, az: sp.z, rot: 0, wallDir: sp.wd, top: !!TRAPS[kind].topOnly });
     return { t, sp, tr: [...t.traps.values()][0] };
@@ -758,5 +760,42 @@ for (const id of MAP_ORDER) {
   for (let k = 0; k < 6; k++) host.hitWorld(x0 + 0.5, z0 + 0.5, 1); run(host, 1);
   C.applySnapshot(mirror, JSON.parse(JSON.stringify(C.snapshot(host))));
   ok(mirror.stalls[0].state === 'down' && mirror.map.slabTop[mid] === 0, 'co-op guests see the stall come down');
+}
+// 43. More new traps (0.21): Cuckoo Clock, Chandelier, Kettle, Spice Jar.
+{
+  const { trapParams } = await import('../src/config.js');
+  // Cuckoo Clock: strikes on the beat, mice or no mice; Grandfather Clock stuns.
+  {
+    const { t } = setup('cuckoo'); const ev = run(t, 7);
+    ok(ev.filter(e => e.t === 'cuckoo').length >= 2, `the Cuckoo Clock strikes on the beat with nobody there (${ev.filter(e => e.t === 'cuckoo').length} in 7 s)`);
+    const g = setup('cuckoo', { tier: 3, special: 'b' }), m = g.t.spawnAt('tank', g.sp.cx, g.sp.cz, 900);
+    run(g.t, 3.5, () => { if (!(m.stunT > 0)) { m.x = g.sp.cx; m.z = g.sp.cz; } });
+    ok(m.hp < 900 && m.stunT > 0, 'Grandfather Clock stuns what it hits');
+    ok(trapParams('cuckoo', { tier: 3, special: 'a' }).cooldown < 1.3, 'Alarm Clock strikes far more often');
+  }
+  // Chandelier: two mice aren't worth it; three are; one Fat Rat is.
+  {
+    const a = setup('chandelier'), two = [0, 1].map(k => a.t.spawnAt('mouse', a.sp.cx + k * 0.3, a.sp.cz, 200));
+    run(a.t, 0.5, () => two.forEach(m => { m.x = a.sp.cx; m.z = a.sp.cz; })); const untouched = two.every(m => m.hp === 200);
+    const three = a.t.spawnAt('mouse', a.sp.cx, a.sp.cz, 200); const ev = run(a.t, 0.3, () => [...two, three].forEach(m => { m.x = a.sp.cx; m.z = a.sp.cz; }));
+    ok(untouched && ev.some(e => e.t === 'chandelier' && e.hits === 3), 'the Chandelier waits for a crowd of three, then drops');
+    const f = setup('chandelier'), fat = f.t.spawnAt('fatty', f.sp.cx, f.sp.cz, 900); run(f.t, 0.3, () => { fat.x = f.sp.cx; fat.z = f.sp.cz; });
+    ok(fat.hp < 900, 'one Fat Rat is crowd enough');
+    const h = setup('chandelier', { tier: 3, special: 'b' }), hm = [0, 1, 2].map(() => h.t.spawnAt('tank', h.sp.cx, h.sp.cz, 900)); run(h.t, 0.3, () => hm.forEach(m => { m.x = h.sp.cx; m.z = h.sp.cz; }));
+    ok(hm.some(m => m.burnT > 0) && h.t.zones.some(z => z.kind === 'fire'), 'Hot Wax sets them burning and leaves burning wax');
+  }
+  // Kettle: soaks the mice round the table (good for Zapper chains); Whistling scares them.
+  {
+    const { t, sp } = setup('kettle', { tier: 3, special: 'b' }); const m = t.spawnAt('mouse', sp.cx, sp.cz, 200);
+    run(t, 0.5, () => { m.x = sp.cx; m.z = sp.cz; });
+    ok(m.wetT > 0 && m.hp < 200 && m.confuseT > 0, 'the Kettle soaks and scalds mice below the table; Whistling sends them back');
+  }
+  // Spice Jar: they stop to sneeze, covered in pepper (a physics hit then knocks them flat).
+  {
+    const { t, sp } = setup('spicejar'); const m = t.spawnAt('mouse', sp.cx, sp.cz, 200);
+    run(t, 0.3, () => { m.x = sp.cx; m.z = sp.cz; });
+    const sneeze = m.stunT > 0, dirty = m.dirtyT > 0; t.damageMouse(m, 1, 'trap', false, 'physics');
+    ok(sneeze && dirty && m.stunT >= 1.2, 'the Spice Jar makes mice sneeze, and peppered mice get knocked flat');
+  }
 }
 process.exit(fails ? 1 : 0);

@@ -502,6 +502,49 @@ export function makeTrap(kind, ghost = false) {
     for (let k = 0; k < 4; k++) { const d = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 6), mat(0xe8a820)); d.rotation.x = Math.PI; d.position.set(Math.cos(k * 1.6) * 0.28, -0.38, Math.sin(k * 1.6) * 0.28); comb.add(d); drips.push(d); }
     g.userData.drips = drips;
     lamp(0.45, -0.15, 0);
+  } else if (kind === 'cuckoo') {
+    // A carved cuckoo clock: a little wooden house with a dial, pine-cone weights on chains,
+    // a door the bird pops out of, and a mallet arm that slams down on the lane.
+    B(0x6a4426, 0, 1.25, -0.12, 0.9, 1.0, 0.3);
+    for (const sd of [-1, 1]) { const r = B(0x4a2e18, sd * 0.26, 1.88, -0.1, 0.62, 0.08, 0.42); r.rotation.z = -sd * 0.6; }
+    const dial = P(cyl(0.26, 0.26, 0.03, 16), 0xf0e8d0, 0, 1.12, 0.05); dial.rotation.x = Math.PI / 2;
+    B(0x1a1a1a, 0, 1.18, 0.07, 0.03, 0.15, 0.01); B(0x1a1a1a, 0.05, 1.12, 0.07, 0.11, 0.025, 0.01);
+    B(0x3a2414, 0, 1.6, 0.04, 0.2, 0.2, 0.02);
+    g.userData.bird = B(0xe0c040, 0, 1.6, 0.0, 0.12, 0.1, 0.16);
+    for (const x of [-0.2, 0.2]) { B(0x2a2a2a, x, 0.55, -0.05, 0.015, 0.4, 0.015); P(cyl(0.06, 0.09, 0.25, 6), 0x5a3a1a, x, 0.25, -0.05); }
+    // The mallet hangs beside the house (so it doesn't hide the dial) and swings down onto the lane.
+    const ham = new THREE.Group(); ham.position.set(0.6, 0.95, 0.1); ham.rotation.x = -0.9; add(ham); g.userData.hammer = ham;
+    ham.add(part(BOX, 0x8a6a48, 0, 0, 0.65, 0.1, 0.1, 1.3, !ghost));
+    ham.add(part(BOX, 0x5a3a20, 0, -0.08, 1.3, 0.5, 0.36, 0.36, !ghost));
+    lamp(h - 0.15, 1.95, -0.12);
+  } else if (kind === 'chandelier') {
+    // An iron ring of candles hung on a chain; the ring (body) drops when it falls.
+    const chain = B(0x2a2826, 0, -0.65, 0, 0.04, 1.3, 0.04); g.userData.chain = chain;
+    const body = new THREE.Group(); body.position.y = -1.3; add(body); g.userData.body = body;
+    const ring = part(new THREE.TorusGeometry(1.1, 0.07, 6, 24), 0x3a3632, 0, 0, 0, 1, 1, 1, !ghost); ring.rotation.x = Math.PI / 2; body.add(ring);
+    for (const r of [0, Math.PI / 2]) { const sp = part(BOX, 0x3a3632, 0, 0, 0, 2.2, 0.05, 0.05, false); sp.rotation.y = r; body.add(sp); }
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4, x = Math.cos(a) * 1.1, z = Math.sin(a) * 1.1;
+      body.add(part(cyl(0.06, 0.06, 0.28, 6), 0xf0e8d8, x, 0.17, z, 1, 1, 1, false));
+      if (!ghost) { const fl = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.12, 5), new THREE.MeshBasicMaterial({ color: 0xffb040 })); fl.position.set(x, 0.38, z); body.add(fl); }
+    }
+    lamp(0.6, -0.15, 0);
+  } else if (kind === 'kettle') {
+    // A dented enamel kettle on the table top: steams out of the spout when it boils.
+    P(new THREE.SphereGeometry(0.45, 12, 8), 0x3a6a9a, 0, 0.38, 0, 1, 0.8, 1);
+    const lid = new THREE.Group(); lid.position.y = 0.72; add(lid); g.userData.lid = lid;
+    lid.add(part(cyl(0.2, 0.24, 0.07, 10), 0x3a6a9a, 0, 0, 0, 1, 1, 1, !ghost)); lid.add(part(new THREE.SphereGeometry(0.06, 6, 5), 0x1a1a1a, 0, 0.07, 0, 1, 1, 1, false));
+    const sp = P(cyl(0.04, 0.08, 0.5, 8), 0x3a6a9a, 0.46, 0.45, 0); sp.rotation.z = -0.9;
+    const hd = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 5, 12, Math.PI), mat(0x1a1a1a)); hd.position.y = 0.72; add(hd);
+    lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'spicejar') {
+    // A glass pepper jar with a perforated cap; it tips over to shake out a cloud.
+    const jar = new THREE.Group(); add(jar); g.userData.jar = jar;
+    jar.add(part(cyl(0.21, 0.21, 0.42, 10), 0x8a2a14, 0, 0.23, 0, 1, 1, 1, false));
+    jar.add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.6, 12), new THREE.MeshLambertMaterial({ color: 0xd8e8f0, transparent: true, opacity: 0.4, depthWrite: false }))); jar.children[1].position.y = 0.31;
+    jar.add(part(cyl(0.26, 0.26, 0.1, 12), 0x2a2a2a, 0, 0.66, 0, 1, 1, 1, !ghost));
+    jar.add(part(BOX, 0xf0e4c8, 0, 0.32, 0.25, 0.3, 0.18, 0.01, false));
+    lamp(h - 0.15, 0.35, -h + 0.15);
   }
   if (ghost) g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.5; o.material.depthWrite = false; } });
   return g;

@@ -423,6 +423,7 @@ function start(mode, co = null) {
       case 'bossRoar': sfx.play('bossRoar', undefined, undefined, { vol: 0.9 }); break;
       case 'crateHit': sfx.play('barricadeHit', x, z); break;
       case 'beam': if (e.targets.length) sfx.play('beam', x, z); break;   // only when it catches a mouse, not when it lets go
+      case 'cuckoo': if (e.hits) sfx.play('cuckoo', x, z); break;   // the clock strikes silently when nobody's there
       // Stalls share the shelf sounds, plus a sharp crack when the legs go.
       case 'stallHit': sfx.play('shelfHit', x, z); break;
       case 'stallFalling': sfx.play('legCrack', x, z); break;

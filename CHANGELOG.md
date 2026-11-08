@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.21.0 — 2026-11-08
+Four more traps (30 in all). Unlock them in the shop.
+- **Cuckoo Clock** (wall, 55 Paw Points, 7 paw prints). It strikes on the beat, every 3 s, whether there are mice or not: a mallet slams the lane in front for 60 damage. The cuckoo calls when it hits something.
+  - Specials: Alarm Clock (strikes twice as often, 65% damage), Grandfather Clock (stuns survivors for 2 s).
+- **Chandelier** (ceiling, 120, 14). Waits until three mice, or one Fat Rat or boss, are underneath, then drops for 110 damage on everything below. It takes 14 s to hoist back up.
+  - Specials: Iron Chandelier (+60% damage, knocks survivors flat), Hot Wax (sets them burning and leaves burning wax).
+- **Kettle** (table and counter tops only, 70, 10). Boils every 3 s and blows steam down over the edge. Every floor mouse within 3.5 takes 14 damage and gets soaked (set them up for a Bug Zapper's chain shock).
+  - Specials: Boiling (twice the damage), Whistling (the shriek sends them back the way they came).
+- **Spice Jar** (table and counter tops only, 50, 8). Tips a pepper cloud on mice passing nearby. They stop to sneeze for 1.2 s, covered in pepper (earth), so the next physics hit knocks them flat.
+  - Specials: Chilli Flakes (sets them burning too), Big Jar (50% wider cloud, longer sneezes).
+- Fixed in testing: a code comment swallowed the Cuckoo Clock's mallet setup and crashed the game when one was placed. Caught before release.
+- `src/config.js` TRAPS (354–358), TRAP_ORDER (364), SPECIALS (399–402); `src/meta/profile.js` unlock prices (15); `src/sim/sim.js` stepTraps cuckoo, chandelier, kettle, spicejar (2397–2442); `src/render/models.js` models (505–547); `src/render/scene.js` events (623–627), animations (888–897); `src/audio/sfx.js` sounds (250–254) and limits (142); `src/main.js` cuckoo sound only on a hit (426).
+
+Tests: 229 checks, all passing (every trap affects a mouse; the clock striking with nobody there, the Grandfather stun, the chandelier waiting for a crowd, Hot Wax, the kettle soaking and Whistling, the spice jar sneeze and knockdown).
+
 ## 0.20.0 — 2026-11-08
 Market stalls come down
 - The four stall counters in the Market Back Alleys have legs you can break. Claw, bite, whip or pounce near a leg (the counter's corners); six hits and the counter comes down:
