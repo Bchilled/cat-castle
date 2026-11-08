@@ -56,6 +56,7 @@ const TIPS = [
   'Co-op: up to four cats. The host picks the map; when you win, the host takes everyone onward.',
   'Hit a tall shelf a few times and it topples across the corridor, flattening mice and blocking the way.',
   'Run into a barrel (or pounce near it) to send it rolling through a pack of mice.',
+  'In the market, claw at a stall leg: break enough and the whole counter comes down on the mice under it.',
 ];
 { let k = Math.floor(Math.random() * TIPS.length); const show = () => { const el = document.getElementById('tip'); if (el) el.textContent = 'Tip: ' + TIPS[k++ % TIPS.length]; }; show(); setInterval(show, 6000); }
 const showWallet = () => { document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn${SANDBOX ? ' · sandbox (nothing saved)' : ''}`; };
@@ -422,6 +423,12 @@ function start(mode, co = null) {
       case 'bossRoar': sfx.play('bossRoar', undefined, undefined, { vol: 0.9 }); break;
       case 'crateHit': sfx.play('barricadeHit', x, z); break;
       case 'beam': if (e.targets.length) sfx.play('beam', x, z); break;   // only when it catches a mouse, not when it lets go
+      // Stalls share the shelf sounds, plus a sharp crack when the legs go.
+      case 'stallHit': sfx.play('shelfHit', x, z); break;
+      case 'stallFalling': sfx.play('legCrack', x, z); break;
+      case 'stallFall': sfx.play('shelfFall', x, z); break;
+      case 'stallBreak': sfx.play('shelfBreak', x, z); break;
+      case 'stallUp': sfx.play('shelfUp', x, z); break;
       case 'combo': sfx.play('combo_' + e.kind, x, z); break;
       default: sfx.play(e.t, x, z, e);   // names that match a sound directly (snap, flip, zap, splat, ...)
     }

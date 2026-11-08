@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.20.0 — 2026-11-08
+Market stalls come down
+- The four stall counters in the Market Back Alleys have legs you can break. Claw, bite, whip or pounce near a leg (the counter's corners); six hits and the counter comes down:
+  - mice under it are flattened (150 damage, half for bosses), and a survivor is shoved out the nearest side; a cat under it takes a knock and is shoved out too
+  - the pots and jugs on top go flying (they smash and spill on whatever they land on)
+  - a Bug Zapper or other ceiling trap hung under it, and any trap on top of it, is crushed and refunded in full
+  - it leaves a low pile of planks across the crossing, which the mice must chew through (260 health) or go round; nothing can be built on the pile, and there's no counter left to stand on or hang traps under
+  - servants prop it back up at the start of the next wave
+- Sounds (a crack as the legs give, then the crash), dust, a camera shake, a first-time message, a new menu tip and a line in the market's description. Co-op guests see it too.
+- Fallen-shelf and stall piles now share one rule: traps can go in the area while nothing lies there. Crate piles can each have their own height (a stall pile is lower than a crate stack).
+- `src/sim/sim.js` constants (154–155), stalls in the constructor (207–222), noBuild (318), pile height (341), wave reset (659–661), stall legs in hitWorld (1364–1371), collapseStall, rebuildStall, stepFallers (1394–1435), breakCrate (2139); `src/sim/map.js` market twist (106); `src/render/models.js` stall counter group and legs (752–760); `src/render/scene.js` furnMesh (163–165), crate meshes (296), stallFx (315–316), drawFallers (344–358), events (682–684); `src/audio/sfx.js` legCrack (253); `src/main.js` tip (59), stall sounds (426–431); `src/net/coop.js` snapshot and mirrorStall (141, 185, 196–201).
+
+Tests: 217 checks, all passing (a leg broken by bites, crushing, shoving, traps refunded, pots knocked, the pile blocking, chewing through, rebuilding, the co-op mirror).
+
 ## 0.19.0 — 2026-11-07
 Four new traps (26 in all). Unlock them in the shop.
 - **Trapdoor** (floor, 110 Paw Points, 14 paw prints). A hatch that drops open when a mouse steps on it and swallows up to 4 mice down a chute. They're gone for good: they still pay, but drop no trinket and splitters don't split. Fat Rats, Ghost Mice and bosses don't fall in. Resets in 10 s. Not on furniture tops.

@@ -749,10 +749,15 @@ export function makeFurniture(f) {
     case 'stall': {
       // Market stall counter seen from behind/below: thick plank top on four legs, with a
       // striped cloth valance (inside the counter's own thickness).
+      // The counter (top + valance) is its own group and the legs are kept, so the scene
+      // can bring the whole thing down when the cats break the legs (v0.20).
+      const counter = new THREE.Group(); g.add(counter); const n0 = g.children.length;
       TB('planks', 2.5, 0xb89068, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) TB('planks', 2, 0x8a6a48, sx * (w / 2 - 0.5), f.bot / 2, sz * (d / 2 - 0.5), 1, f.bot, 1);
       for (let k = 0; k < Math.floor(w / 1.5); k++) for (const zz of [-d / 2 - 0.01, d / 2 + 0.01])
         B(k % 2 ? 0xc83a2a : 0xf0e4c8, -w / 2 + 0.75 + k * 1.5, (f.bot + f.top) / 2, zz, 1.5, f.top - f.bot, 0.02, false);
+      for (const m of g.children.slice(n0)) counter.add(m);   // (TB/B add to g; move them into the counter)
+      g.userData.counter = counter;
+      g.userData.legs = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz]) => TB('planks', 2, 0x8a6a48, sx * (w / 2 - 0.5), f.bot / 2, sz * (d / 2 - 0.5), 1, f.bot, 1));
       break;
     }
     case 'sacks': {

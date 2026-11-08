@@ -103,7 +103,7 @@ export const MAPS = {
   market: {
     id: 'market', name: 'Market Back Alleys', order: 2, w: 88, h: 104, floor: 'cobbles', birds: true,
     blurb: 'Three alleys behind the market stalls, crossing under the counters.',
-    twist: 'Food piles: mice stop to gorge and come out tougher. Knock pots off the counters onto them.',
+    twist: 'Food piles: mice stop to gorge and come out tougher. Knock pots off the counters onto them, or break a stall\'s legs and bring the whole counter down.',
     furniture: [
       ...shell(88, 104, 24, 'house', [22, 66]),
       blk('Stall block', [18, 22, 38, 40], 20, 'house'), blk('Stall block', [18, 46, 38, 62], 20, 'house'), blk('Stall block', [18, 68, 38, 84], 20, 'house'),

@@ -727,4 +727,36 @@ for (const id of MAP_ORDER) {
     ok(z && m.slowT > 0 && m.hp < 100, `Honey Drip leaves a sticky puddle (${z ? z.t.toFixed(1) : 0} s left); Beehive bees sting`);
   }
 }
+// 42. Market stalls (0.20): break the legs and the counter comes down on the crossing.
+{
+  const ms = new Sim({ map: 'market', seed: 1200 }); ms.addPlayer('p1', 'puddin'); ms.sardines = 1e5; ms.step();
+  const st = ms.stalls[0], [x0, z0, x1, z1] = st.rect, mid = cellOf((x0 + x1) / 2, (z0 + z1) / 2);
+  ok(ms.stalls.length === 4 && st.state === 'up' && ms.topHeight(mid) === st.top, `the market has 4 stall counters (${st.name} first)`);
+  // A Bug Zapper under it and a Snapper on top: both get crushed (and refunded) when it comes down.
+  ms.command({ type: 'place', id: 'p1', trap: 'zapper', ax: q(28), az: q(42), rot: 0 });
+  ms.command({ type: 'place', id: 'p1', trap: 'mousetrap', ax: q(32), az: q(42), rot: 0, top: true });
+  const placed = ms.traps.size, pts = ms.sardines;
+  const prop = ms.props.find(p => p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1);
+  const under = [24, 28, 32].map(x => { const m = ms.spawnAt('mouse', x, 43, 100); m.stunT = 9; return m; }), tank = ms.spawnAt('tank', 26, 44, 600); tank.stunT = 9;
+  const cat = ms.cats.get('p1'); cat.x = 17.4; cat.z = 41.3; cat.y = 0;
+  const ev = run(ms, 7, () => inp(ms, 'p1', { yaw: Math.PI / 2, primary: true }));
+  ok(st.state === 'down' && ev.some(e => e.t === 'stallFall'), `biting a stall leg brings the counter down (${ev.filter(e => e.t === 'stallHit').length} hits)`);
+  ok(under.every(m => m.dead) && !tank.dead && !(tank.z > z0 && tank.z < z1 && tank.x > x0 && tank.x < x1), 'it flattens the mice under it; a survivor is shoved out');
+  ok(placed === 2 && ms.traps.size === 0 && ms.sardines >= pts + TRAPS.zapper.cost + TRAPS.mousetrap.cost, 'traps under and on it are crushed and refunded');
+  ok(prop && prop.state !== 'up', 'the pots on the counter go flying');
+  ms.updateFlow();
+  ok(ms.isBlocker(mid) && ms.map.slabTop[mid] === 0 && !ms.map.covered[mid] && Math.abs(ms.colH(mid, true) - 0.9) < 0.01, 'the pile blocks the crossing (a low heap, no counter to stand on or hang traps under)');
+  ok(!ms.canPlace('mousetrap', q(28), q(42)) && !ms.canPlace('zapper', q(28), q(42)), 'nothing builds on the pile');
+  ms.breakCrate(st.crate); ms.updateFlow();
+  ok(st.state === 'broken' && !ms.isBlocker(mid) && ms.canPlace('mousetrap', q(28), q(42)) === true, 'mice chew through it and the crossing opens');
+  ms.phase = 'build'; ms.phaseTimer = 0; ms.mice = []; ms.step();
+  ok(st.state === 'up' && ms.map.slabTop[mid] === st.top && ms.map.covered[mid] === 1 && !st.crate.up, 'servants prop it back up next wave');
+  // Co-op: the guest's mirror loses the counter too.
+  const C = await import('../src/net/coop.js');
+  const host = new Sim({ map: 'market', seed: 1201 }); host.addPlayer('p1'); host.step();
+  const mirror = new Sim({ map: 'market', seed: 1201 }); mirror.addPlayer('p1');
+  for (let k = 0; k < 6; k++) host.hitWorld(x0 + 0.5, z0 + 0.5, 1); run(host, 1);
+  C.applySnapshot(mirror, JSON.parse(JSON.stringify(C.snapshot(host))));
+  ok(mirror.stalls[0].state === 'down' && mirror.map.slabTop[mid] === 0, 'co-op guests see the stall come down');
+}
 process.exit(fails ? 1 : 0);

@@ -250,6 +250,7 @@ const SOUNDS = {
   // Things that fall over (0.17): a wooden knock and creak, a big crash with breaking jars, a rolling rumble.
   shelfHit: (a, o, R) => { a.tone(o, { f: 160 + R() * 30, f2: 90, dur: 0.12, vol: 0.4 }); a.tone(o, { type: 'sawtooth', f: 90, f2: 70, t: 0.05, dur: 0.35, vol: 0.06, vib: 9 }); },
   shelfFall: (a, o, R) => { a.tone(o, { f: 90, f2: 35, dur: 0.6, vol: 0.8 }); a.noise(o, { dur: 0.7, vol: 0.6, type: 'lowpass', f: 1200, f2: 150 }); for (let k = 0; k < 5; k++) a.noise(o, { t: 0.04 + k * 0.05 + R() * 0.04, dur: 0.07, vol: 0.25, type: 'highpass', f: 3500 + R() * 2000 }); },
+  legCrack: (a, o, R) => { a.noise(o, { dur: 0.08, vol: 0.6, type: 'highpass', f: 2200 }); a.tone(o, { type: 'sawtooth', f: 180, f2: 60, t: 0.02, dur: 0.2, vol: 0.12 }); a.noise(o, { t: 0.1 + R() * 0.05, dur: 0.06, vol: 0.4, type: 'highpass', f: 1800 }); },
   shelfUp: (a, o) => { a.tone(o, { type: 'triangle', f: 150, f2: 110, dur: 0.15, vol: 0.2 }); },
   shelfBreak: (a, o) => { a.noise(o, { dur: 0.15, vol: 0.7, type: 'highpass', f: 1400 }); a.tone(o, { f: 100, f2: 40, t: 0.03, dur: 0.45, vol: 0.6 }); },
   barrelRoll: (a, o) => { a.noise(o, { dur: 1.2, vol: 0.35, type: 'lowpass', f: 220, f2: 140, att: 0.05 }); a.tone(o, { f: 55, f2: 45, dur: 1.2, vol: 0.3, vib: 6 }); },

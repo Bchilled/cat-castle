@@ -47,7 +47,7 @@ Mice pour out of the holes and take the cheapest route to the exit. You can see 
 - **Packs:** they split between lanes. They remember where they keep dying and avoid it, and scouts run ahead.
 - **Shortcuts:** they smash through crate stacks when it's worth it, and climb over fences, crates and the cellar cheese wheel when that beats going round. A Poison Box on top closes a route.
 - **Food:** they stop to eat food piles, and climb furniture to eat what's on top. Eating makes them tougher.
-- **Things that fall over:** hit a tall shelf a few times and it topples across the corridor, flattening mice and blocking the way until they chew through. Run into a barrel to roll it through a pack. Both reset each wave.
+- **Things that fall over:** hit a tall shelf a few times and it topples across the corridor, flattening mice and blocking the way until they chew through. Break a market stall's legs and the counter comes down on the mice under it. Run into a barrel to roll it through a pack. They all reset each wave.
 - **Bosses:** a mini boss every 6th wave and a big boss every 12th. Clear wave 24 to win the map and move onward.
 
 Kills pay Paw Points, which buy traps in the game. Every attack and trap has an element:

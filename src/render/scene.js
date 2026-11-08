@@ -160,9 +160,9 @@ export class Scene {
     }
 
     // Furniture, walls, guardhouse, tunnel.
-    this.roofs = [];
+    this.roofs = []; this.furnMesh = [];
     for (const f of FURNITURE) {
-      const fg = makeFurniture(f); s.add(fg);
+      const fg = makeFurniture(f); s.add(fg); this.furnMesh.push(fg);
       if (f.kind !== 'solid') this.roofs.push({ f, g: fg });
       const [x0, z0, x1, z1] = f.rect;
       if (f.kind === 'solid') this.proxy(x0, 0, z0, x1, f.h, z1);
@@ -293,7 +293,7 @@ export class Scene {
     // Crate stacks mice smash through (servants restack them each wave).
     this.crateMeshes = this.sim.crates.map(c => {
       const [x0, z0, x1, z1] = c.rect, g = new THREE.Group(); s.add(g);
-      if (c.shelf !== undefined) return g;   // a fallen shelf: the shelf model itself shows it
+      if (c.fallen) return g;   // a fallen shelf or stall: its own model shows it
       const w = x1 - x0, d = z1 - z0, n = Math.max(1, Math.round(Math.max(w, d) / 1.6));
       for (let k = 0; k < n; k++) {
         const along = w >= d, bw = along ? w / n : w, bd = along ? d : d / n;
@@ -312,6 +312,8 @@ export class Scene {
       const [fx0, fz0, fx1, fz1] = sh.fall, L = (dx ? fx1 - fx0 : fz1 - fz0) - thick;
       s.add(g); return { g, sh, theta: L < sh.h - 0.3 ? Math.asin(L / sh.h) : Math.PI / 2, fallAt: null, wob: 0 };
     });
+    // Market stalls: the counter drops and tips onto its broken legs.
+    this.stallFx = this.sim.stalls.map(st => ({ st, g: this.furnMesh[st.fi], fallAt: null, wob: 0 }));
     this.barrelFx = this.sim.barrels.map(b => {
       const outer = new THREE.Group(), rollG = new THREE.Group(), body = makeBarrel();
       outer.add(rollG); rollG.add(body); outer.position.set(b.x, 1.1, b.z); s.add(outer);
@@ -339,6 +341,21 @@ export class Scene {
   // Shelves: wobble when hit, fall with gravity (accelerating), vanish once chewed away.
   // Barrels: follow the sim, tip on their side when knocked, roll by how far they moved.
   drawFallers(dt, now) {
+    for (const f of this.stallFx) {
+      const { st, g } = f, { counter, legs } = g.userData;
+      if (!counter) continue;
+      let k = 0;
+      if (st.state === 'up') f.fallAt = null;
+      else { if (f.fallAt === null) f.fallAt = st.state === 'falling' ? now : now - 1000; k = Math.min(1, ((now - f.fallAt) / 450) ** 2); }
+      f.wob = Math.max(0, f.wob - dt * 2.5);
+      const drop = (st.bot - 0.5) * k;                                // counter ends up resting on the pile, tipped forward
+      counter.position.y = -drop; counter.rotation.x = 0.12 * k + (st.state === 'up' ? Math.sin(now / 30) * 0.02 * f.wob : 0);
+      counter.visible = st.state !== 'broken';
+      legs.forEach((l, j) => {   // legs snap: lying in the pile once it's down
+        l.rotation.z = k >= 1 ? (j % 2 ? 1.4 : -1.4) : 0; l.position.y = k >= 1 ? 0.5 : st.bot / 2; l.scale.y = k >= 1 ? 0.6 : 1;
+        l.visible = st.state !== 'broken' || j % 2 === 0;
+      });
+    }
     for (const f of this.shelfFx) {
       const { sh, g } = f, tilt = g.userData.tilt;
       g.visible = sh.state !== 'broken';
@@ -662,6 +679,9 @@ export class Scene {
       case 'smash': this.spawnParticles(e.x, e.y + 0.3, e.z, 0xb86a3a, 16, 4, 0.08); this.shake = Math.max(this.shake, 0.15); break;
       case 'crateBreak': this.spawnParticles(e.x, 1, e.z, 0xb89068, 40, 6, 0.14); this.shake = Math.max(this.shake, 0.25); break;
       case 'crateHit': if (Math.random() < 0.3) this.spawnParticles(e.x, 0.6, e.z, 0xb89068, 2, 2, 0.06); break;
+      case 'stallHit': { const f = this.stallFx && this.stallFx.find(o => o.st.id === e.id); if (f) f.wob = 1; this.spawnParticles(e.x, 1, e.z, 0x8a6a48, 4, 2, 0.06); break; }
+      case 'stallFall': this.spawnParticles(e.x, 0.5, e.z, 0xc8b8a0, 70, 9, 0.18); this.spawnParticles(e.x, 0.8, e.z, 0xb89068, 24, 6, 0.12); this.shake = Math.max(this.shake, 0.7); break;
+      case 'stallBreak': this.spawnParticles(e.x, 0.8, e.z, 0xb89068, 60, 7, 0.14); this.shake = Math.max(this.shake, 0.3); break;
       case 'shelfHit': { const f = this.shelfFx && this.shelfFx.find(o => o.sh.id === e.id); if (f) f.wob = 1; this.spawnParticles(e.x, 3, e.z, 0xc8b8a0, 4, 1.5, 0.05); break; }
       case 'shelfFall': this.spawnParticles(e.x, 0.4, e.z, 0xc8b8a0, 50, 7, 0.16); this.spawnParticles(e.x, 0.6, e.z, 0x8a5a34, 16, 5, 0.1); this.shake = Math.max(this.shake, 0.6); break;
       case 'shelfBreak': this.spawnParticles(e.x, 1, e.z, 0x8a5a34, 50, 6, 0.14); this.shake = Math.max(this.shake, 0.3); break;

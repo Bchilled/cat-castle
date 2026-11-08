@@ -151,6 +151,8 @@ const CLIMB_SECS = 0.9;
 // Things that fall over (v0.17).
 const SHELF_HITS = 4, SHELF_FALL_SECS = 0.6, SHELF_CRUSH = 120, SHELF_HP = 150;   // hits to knock over; crush damage; chew health once down
 const BARREL_R = 1.0, BARREL_SPEED = 8, BARREL_FRICTION = 2.2;                     // rolling barrels
+// Market stalls (v0.20): break the legs and the counter comes down across the crossing.
+const STALL_HITS = 6, STALL_FALL_SECS = 0.45, STALL_CRUSH = 150, STALL_HP = 260, STALL_PILE_H = 0.9;
 // A shut door: mice wait at it rather than turning round, unless the way round is shorter
 // than this wait (per cell; doors are 2 cells thick). Without it, slow mice flip-flopped
 // between routes every time a door swung and could get stuck between two doors forever.
@@ -202,13 +204,22 @@ export class Sim {
     const cellsOf = ([x0, z0, x1, z1]) => { const out = []; for (let z = Math.floor(z0 / CELL); z < Math.ceil(z1 / CELL); z++) for (let x = Math.floor(x0 / CELL); x < Math.ceil(x1 / CELL); x++) out.push(idx(x, z)); return out; };
     this.shelfAt = new Int8Array(N);   // standing-shelf cells: never a trap spot or a wall to hang one on (it falls over)
     this.shelves = (this.mapDef.shelves || []).map((sh, k) => {
-      const crate = { id: 800500 + k, rect: sh.fall, cells: cellsOf(sh.fall), hp: SHELF_HP, maxHp: SHELF_HP, up: false, shelf: k };
+      const crate = { id: 800500 + k, rect: sh.fall, cells: cellsOf(sh.fall), hp: SHELF_HP, maxHp: SHELF_HP, up: false, fallen: 'shelf', shelf: k };
       this.crates.push(crate); for (const i of crate.cells) this.crateAt[i] = this.crates.length;
       const o = { ...sh, id: 700000 + k, state: 'up', hp: SHELF_HITS, t: 0, cells: cellsOf(sh.rect), crate };
       for (const i of o.cells) { this.map.type[i] = T.SOLID; this.map.solid[i] = sh.h; this.shelfAt[i] = k + 1; }
       return o;
     });
     this.barrels = (this.mapDef.barrels || []).map(([x, z], k) => ({ id: 710000 + k, x, z, home: [x, z], vx: 0, vz: 0, lying: false, hit: new Set() }));
+    // Market stall counters: each keeps a copy of its slab cells so it can come down and go back up.
+    this.stalls = [];
+    this.mapDef.furniture.forEach((f, fi) => {
+      if (f.kind !== 'over' || f.look !== 'stall') return;
+      const k = this.stalls.length, cells = cellsOf(f.rect);
+      const crate = { id: 800600 + k, rect: f.rect, cells, hp: STALL_HP, maxHp: STALL_HP, up: false, fallen: 'stall', stall: k, h: STALL_PILE_H };
+      this.crates.push(crate); for (const i of cells) this.crateAt[i] = this.crates.length;
+      this.stalls.push({ id: 720000 + k, fi, name: f.name, rect: f.rect, bot: f.bot, top: f.top, cells, crate, state: 'up', hp: STALL_HITS, t: 0 });
+    });
     this.danger = new Float32Array(this.dbw * this.dbh); this.dangerT = 1; this.dangerDelta = 0; this.dangerSpots = [];
     // Constant path cost near fires (kitchen): mice route round the ovens when they can.
     this.fireCost = new Float32Array(N);
@@ -304,7 +315,7 @@ export class Sim {
   crateUp(i) { const k = i >= 0 ? this.crateAt[i] : 0; return k && this.crates[k - 1].up ? this.crates[k - 1] : null; }
   // No traps in crate stacks or on shelf spots. A shelf's fall area is fine while nothing lies there
   // (a trap it lands on is just covered until the mice chew the shelf away).
-  noBuild(i) { const k = this.crateAt[i]; return this.shelfAt[i] > 0 || (k > 0 && (this.crates[k - 1].shelf === undefined || this.crates[k - 1].up)); }
+  noBuild(i) { const k = this.crateAt[i]; return this.shelfAt[i] > 0 || (k > 0 && (!this.crates[k - 1].fallen || this.crates[k - 1].up)); }
   // Height of a furniture top a floor trap could sit on (0 = not a top): a low solid block
   // (crates, the well, sacks) or a table/counter/bench surface.
   topHeight(i) {
@@ -327,7 +338,7 @@ export class Sim {
     } else if (t === T.GATE) h = 0;
     const bar = this.isBarricade(i);
     if (bar) h = Math.max(h, TRAPS.barricade.height * (0.55 + 0.45 * bar.hp / bar.maxHp));   // same height as the model
-    if (this.crateUp(i)) h = Math.max(h, CRATE_H);
+    const cr = this.crateUp(i); if (cr) h = Math.max(h, cr.h || CRATE_H);   // a collapsed stall is a lower pile
     return h;
   }
   blocks(i, y, h, step, forCat) {
@@ -645,8 +656,9 @@ export class Sim {
         this.emit({ t: 'waveStart', wave: this.wave, boss: this.wave % 6 === 0 });
         for (const f of this.foods) f.left = f.amount;                                                       // food restocked
         for (const f of this.tops) f.left = f.amount;
-        for (const c of this.crates) if (!c.up && c.shelf === undefined) { c.up = true; c.hp = c.maxHp; this.flowDirty = true; this.layoutVer++; this.emit({ t: 'crateUp', id: c.id }); }   // servants restack the crates
+        for (const c of this.crates) if (!c.up && !c.fallen) { c.up = true; c.hp = c.maxHp; this.flowDirty = true; this.layoutVer++; this.emit({ t: 'crateUp', id: c.id }); }   // servants restack the crates
         for (const sh of this.shelves) if (sh.state !== 'up') this.standShelf(sh);                            // ...and stand the shelves back up
+        for (const st of this.stalls) if (st.state !== 'up') this.rebuildStall(st);                           // ...and prop the stalls back up
         for (const b of this.barrels) { [b.x, b.z] = b.home; b.vx = b.vz = 0; b.lying = false; }              // ...and roll the barrels home
         for (let i = 0; i < this.danger.length; i++) this.danger[i] *= 0.5;                                     // they half-forget between waves
         for (const p of this.props) { [p.x, p.y, p.z] = p.home; p.state = 'up'; p.vx = p.vy = p.vz = 0; p.tilt = 0; }   // pots back on the shelves
@@ -1349,6 +1361,14 @@ export class Sim {
       sh.hp -= power; this.emit({ t: 'shelfHit', id: sh.id, x: (x0 + x1) / 2, z: (z0 + z1) / 2 });
       if (sh.hp <= 0) { sh.state = 'falling'; sh.t = 0; }
     }
+    // Stall legs stand at the counter's corners: hit near one and it starts to give.
+    for (const st of this.stalls) {
+      if (st.state !== 'up') continue;
+      const [x0, z0, x1, z1] = st.rect;
+      if (![[x0 + 0.5, z0 + 0.5], [x1 - 0.5, z0 + 0.5], [x0 + 0.5, z1 - 0.5], [x1 - 0.5, z1 - 0.5]].some(([lx, lz]) => Math.hypot(lx - x, lz - z) < 1.6)) continue;
+      st.hp -= power; this.emit({ t: 'stallHit', id: st.id, x, z });
+      if (st.hp <= 0) { st.state = 'falling'; st.t = 0; this.emit({ t: 'stallFalling', id: st.id }); }
+    }
     for (const b of this.barrels) {
       if (Math.hypot(b.x - x, b.z - z) > BARREL_R + 0.8 || Math.hypot(b.vx, b.vz) > 1) continue;
       let dx = dirX, dz = dirZ; if (!dx && !dz) { dx = b.x - x; dz = b.z - z; }
@@ -1371,7 +1391,48 @@ export class Sim {
     this.flowDirty = true; this.layoutVer++;
     this.emit({ t: 'shelfUp', id: sh.id });
   }
+  // A stall counter coming down: crushes everything under it, sends the pots on top
+  // flying, crushes any trap mounted under or on it (full refund), and leaves a pile of
+  // planks and produce across the crossing that the mice have to chew through.
+  collapseStall(st) {
+    st.state = 'down';
+    const [x0, z0, x1, z1] = st.rect, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, under = (b, pad = 0) => b.x > x0 - pad && b.x < x1 + pad && b.z > z0 - pad && b.z < z1 + pad;
+    for (const i of st.cells) { this.map.slabBot[i] = 0; this.map.slabTop[i] = 0; this.map.covered[i] = 0; }
+    st.crate.up = true; st.crate.hp = st.crate.maxHp;
+    // Out from under it: the nearest open long side (or end).
+    const shove = (b) => {
+      const out = [[b.x, z0 - 0.6], [b.x, z1 + 0.6], [x0 - 0.6, b.z], [x1 + 0.6, b.z]].filter(([x, z]) => { const h = this.colH(cellOf(x, z), true); return h >= 0 && h < 0.5; });
+      out.sort((a, c) => Math.hypot(a[0] - b.x, a[1] - b.z) - Math.hypot(c[0] - b.x, c[1] - b.z));
+      if (out.length) [b.x, b.z] = out[0]; else b.y = STALL_PILE_H + 0.05;
+    };
+    let n = 0;
+    for (const m of this.mice) if (!m.dead && m.y < st.bot && under(m, 0.2)) {
+      this.damageMouse(m, STALL_CRUSH * (MICE[m.type].boss ? 0.5 : 1), 'splat'); n++;
+      if (!m.dead) shove(m);
+    }
+    for (const c of this.cats.values()) if (c.alive && c.y < st.bot && under(c)) { this.hurtCat(c, 15); shove(c); }
+    for (const p of this.props) if (p.state === 'up' && under(p) && Math.abs(p.y - st.top) < 0.5) {
+      const side = p.z < cz ? -1 : 1; p.vx = (p.x - cx) * 0.2 + (this.rng() - 0.5) * 2; p.vz = side * (2.5 + this.rng() * 2); p.vy = 1; p.state = 'fall'; p.fallFrom = p.y;
+    }
+    for (const tr of [...this.traps.values()]) if ((tr.layer === 'ceiling' || tr.layer === 'top') && tr.cells.some(i => st.cells.includes(i))) {
+      this.removeTrap(tr); this.sardines += tr.cost;
+      this.emit({ t: 'msg', text: `${TRAPS[tr.kind].name} crushed when the stall came down: refunded ${tr.cost} Paw Points` });
+    }
+    this.flowDirty = true; this.routeCache = null; this.layoutVer++;
+    this.emit({ t: 'stallFall', id: st.id, x: cx, z: cz, hits: n });
+    if (!this.stallTold) { this.stallTold = true; this.emit({ t: 'msg', text: 'Stall down! The pile blocks the crossing until the mice chew through. It goes back up next wave.' }); }
+    if (n >= 2) this.bark('trap', null);
+  }
+  rebuildStall(st) {
+    const f = this.mapDef.furniture[st.fi];
+    for (const i of st.cells) { this.map.slabBot[i] = f.bot; this.map.slabTop[i] = f.top; this.map.covered[i] = 1; }
+    for (const c of this.cats.values()) if (c.x > st.rect[0] && c.x < st.rect[2] && c.z > st.rect[1] && c.z < st.rect[3] && c.y > st.bot - 0.6 && c.y < st.top) c.y = st.top;   // not stuck inside the counter
+    st.state = 'up'; st.hp = STALL_HITS; st.t = 0; st.crate.up = false; st.crate.hp = st.crate.maxHp;
+    this.flowDirty = true; this.routeCache = null; this.layoutVer++;
+    this.emit({ t: 'stallUp', id: st.id });
+  }
   stepFallers() {
+    for (const st of this.stalls) if (st.state === 'falling' && (st.t += DT) >= STALL_FALL_SECS) this.collapseStall(st);
     for (const sh of this.shelves) {
       if (sh.state !== 'falling') continue;
       sh.t += DT;
@@ -2075,6 +2136,7 @@ export class Sim {
   breakCrate(c) {
     if (!c.up) return;
     c.up = false; c.hp = 0; this.flowDirty = true; this.layoutVer++;
+    if (c.stall !== undefined) { const st = this.stalls[c.stall]; st.state = 'broken'; this.emit({ t: 'stallBreak', id: st.id, x: (st.rect[0] + st.rect[2]) / 2, z: (st.rect[1] + st.rect[3]) / 2 }); return; }
     if (c.shelf !== undefined) { const sh = this.shelves[c.shelf]; sh.state = 'broken'; this.emit({ t: 'shelfBreak', id: sh.id, x: (sh.fall[0] + sh.fall[2]) / 2, z: (sh.fall[1] + sh.fall[3]) / 2 }); return; }
     const [x0, z0, x1, z1] = c.rect;
     this.emit({ t: 'crateBreak', id: c.id, x: (x0 + x1) / 2, z: (z0 + z1) / 2 });
