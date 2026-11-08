@@ -184,7 +184,7 @@ export class Hud {
   }
 
   message(text) { $('msg').textContent = text; $('msg').classList.add('show'); this.msgT = 2.5; }
-  bark(who, text, kind) { $('sub').innerHTML = `<img class="face" src="${portraitURL(kind)}" alt=""><b class="${kind || ''}">${who}:</b> ${text}`; $('sub').classList.add('show'); this.subT = 3.2; }
+  bark(who, text, kind) { $('sub').innerHTML = `<img class="face" src="${portraitURL(kind)}" alt=""><b style="color:${(CATS[kind] || CATS.fred).collar}">${who}:</b> ${text}`; $('sub').classList.add('show'); this.subT = 3.2; }
   flashHurt() { const v = $('hurt'); v.classList.remove('go'); void v.offsetWidth; v.classList.add('go'); }
 
   showEnd(won, rating, sim, profile) {

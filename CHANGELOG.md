@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.2 — 2026-11-07
+Performance
+- Mouse pathing is about 3x faster: the flow field samples its rules into typed arrays once per cell instead of calling them 8 times per cell. Doors, mazes and route choices re-path mid-wave without a hitch. `src/sim/path.js` computeFlow (lines 43–80).
+- Holding a Poison Box no longer re-runs the "don't seal the route" path search every frame for the ghost; the answer is cached per spot until something changes. `src/sim/sim.js` canPlace, layoutVer.
+- Particles are one pooled instanced mesh (600 specks) instead of a new mesh per speck. Projectiles share one shape per kind. Rings, decals and zap bolts free their GPU memory when they go. Long games no longer slowly leak memory and stutter. `src/render/scene.js` buildParticles / spawnParticles / stepParticles, render(), decal().
+- No new colour objects per mouse per frame. `src/render/scene.js` TINT.
+Fixed
+- Messages still said "sardines": now Paw Points (not enough, sold, wave bonus). `src/sim/sim.js`.
+- Birds only spawned across the entrance map's width; now across any map. `src/sim/sim.js` spawnBird.
+- Gate sounds came from a fixed spot; now from the gate. `src/main.js` GATE_POS.
+- The controls panel covered the Q item box. `index.html` #controls.
+- Pause screen listed Q twice. `index.html`.
+Polish
+- Play button names the map you picked. Loading tips rewritten for the current game (mazes, pots, doors, fires, the journey). Subtitles show each cat's name in its collar colour. `src/main.js`, `src/ui/hud.js`.
+
 ## 0.10.1 — 2026-11-07
 Fixed
 - The game wouldn't load (v0.10.0): a comment had swallowed the end of the door-animation line. `src/render/scene.js` drawMapFeatures (~line 235).

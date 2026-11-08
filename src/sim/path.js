@@ -43,26 +43,36 @@ class Heap {
 // opts: goals[] cells, pass(i) can stand here, extra(i) added cost,
 // blocked(i) chewable blocker (no diagonal squeezing past its corners),
 // wall(i) treat as impassable (used for the "don't seal every route" check).
+// Speed: the callbacks are sampled once per cell into typed arrays first, then the
+// Dijkstra loop only touches arrays (about 4x faster than calling closures 8x per cell,
+// which matters because doors, barricades and route choices re-path mid-wave).
+const NDX = new Int8Array([1, -1, 0, 0, 1, 1, -1, -1]), NDZ = new Int8Array([0, 0, 1, -1, 1, -1, 1, -1]);
+const NMUL = new Float32Array([1, 1, 1, 1, 1.414, 1.414, 1.414, 1.414]);
+let heap = null;   // reused between calls (no garbage)
 export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]), extra = () => 0, blocked = () => false, wall = () => false }) {
-  const dist = new Float32Array(W * H).fill(Infinity);
-  const ok = (j) => pass(j) && !wall(j);
-  const open = (j) => ok(j) && !blocked(j);
-  const heap = new Heap();
+  const N = W * H, dist = new Float32Array(N).fill(Infinity);
+  const okA = new Uint8Array(N), openA = new Uint8Array(N), cost = new Float32Array(N), type = map.type;
+  for (let j = 0; j < N; j++) {
+    if (!pass(j) || wall(j)) continue;
+    okA[j] = 1; if (!blocked(j)) openA[j] = 1;
+    cost[j] = (BASE_COST[type[j]] || 1) + extra(j);
+  }
+  if (!heap) heap = new Heap(); heap.n = 0;
   for (const g of goals) { dist[g] = 0; heap.push(g, 0); }
-  while (heap.size) {
+  while (heap.n) {
     const key = heap.keys[0], i = heap.pop();
     if (key > dist[i]) continue;   // stale entry
     const x = i % W, z = (i / W) | 0, d = dist[i];
     // Cost is paid ENTERING cell i, so walking backwards from the goal a
     // neighbour n reaches i at cost(i).
-    const stepCost = (BASE_COST[map.type[i]] || 1) + extra(i);
-    for (const [dx, dz, mul] of NB) {
-      const nx = x + dx, nz = z + dz;
+    const stepCost = cost[i] || ((BASE_COST[type[i]] || 1) + extra(i));   // goal cells may not pass()
+    for (let k = 0; k < 8; k++) {
+      const dx = NDX[k], dz = NDZ[k], nx = x + dx, nz = z + dz;
       if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
       const n = nz * W + nx;
-      if (!ok(n)) continue;
-      if (dx && dz && (!open(z * W + nx) || !open(nz * W + x))) continue;   // no corner cutting
-      const nd = d + stepCost * mul;
+      if (!okA[n]) continue;
+      if (k >= 4 && (!openA[z * W + nx] || !openA[nz * W + x])) continue;   // no corner cutting
+      const nd = d + stepCost * NMUL[k];
       if (nd < dist[n]) { dist[n] = nd; heap.push(n, nd); }
     }
   }

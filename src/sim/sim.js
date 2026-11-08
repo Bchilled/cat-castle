@@ -186,7 +186,7 @@ export class Sim {
     this.spawnCells = SPAWNS.map(p => cellOf(p.x, p.z - 0.3));
     this.spawnCell = this.spawnCells[0];
     this.door = 0;                     // which entrance the next pack uses
-    this.flowDirty = true;
+    this.flowDirty = true; this.layoutVer = 0;   // layoutVer: bumps whenever walls/traps/doors change (caches key off it)
     this.updateFlow();
   }
 
@@ -404,16 +404,24 @@ export class Sim {
     if (kind === 'barricade') {
       for (const m of this.mice) if (m.state === 'walk' && cells.includes(cellOf(m.x, m.z))) return false;
       // Always leave the mice an open route (they can still chew through).
-      const extraWall = new Set(cells);
-      const test = computeFlow(this.map, { goals: this.goals, pass: this.passSmall, wall: (i) => extraWall.has(i) || this.occBarricade(i) });
-      if (this.spawnCells.some(c => !(test[c] < Infinity))) return 'seal';
+      // Cached per spot until the layout changes: the ghost asks this every frame while you
+      // hold a Poison Box, and each check is a full path search.
+      const key = cells.join(',');
+      if (this.sealVer !== this.layoutVer) { this.sealCache = new Map(); this.sealVer = this.layoutVer; }
+      let sealed = this.sealCache.get(key);
+      if (sealed === undefined) {
+        const extraWall = new Set(cells);
+        const test = computeFlow(this.map, { goals: this.goals, pass: this.passSmall, wall: (i) => extraWall.has(i) || this.occBarricade(i) });
+        sealed = this.spawnCells.some(c => !(test[c] < Infinity)); this.sealCache.set(key, sealed);
+      }
+      if (sealed) return 'seal';
     }
     return true;
   }
   placeTrap(cat, kind, ax, az, rot, wallDir) {
     if (cat && cat.loadout && !cat.loadout.includes(kind)) return;   // only traps you brought
     const def = TRAPS[kind]; if (!def || !cat) return;
-    if (this.sardines < def.cost) { this.emit({ t: 'msg', text: 'Not enough sardines' }); return; }
+    if (this.sardines < def.cost) { this.emit({ t: 'msg', text: 'Not enough Paw Points' }); return; }
     const ok = this.canPlace(kind, ax, az, rot, wallDir);
     if (ok === 'seal') { this.emit({ t: 'msg', text: 'Leave them a way through' }); return; }
     if (!ok) { this.emit({ t: 'msg', text: "Can't place that there" }); return; }
@@ -426,7 +434,7 @@ export class Sim {
     for (const i of cells) this.occ[tr.layer][i] = tr.id;
     this.traps.set(tr.id, tr);
     this.stats.trapsPlaced++;
-    this.flowDirty = true;
+    this.flowDirty = true; this.layoutVer++;
     this.emit({ t: 'trapAdd', trap: tr });
   }
   sellTrap(cell, layer) {
@@ -437,13 +445,13 @@ export class Sim {
         // Full refund; a chewed barricade refunds only for the health it has left.
         const refund = tr.kind === 'barricade' ? Math.floor(tr.cost * tr.hp / tr.maxHp) : tr.cost;
         this.removeTrap(tr); this.sardines += refund;
-        this.emit({ t: 'msg', text: `Sold for ${refund} sardines` }); this.emit({ t: 'sold', x: (tr.x0 + tr.x1) / 2, z: (tr.z0 + tr.z1) / 2 }); return;
+        this.emit({ t: 'msg', text: `Sold for ${refund} Paw Points` }); this.emit({ t: 'sold', x: (tr.x0 + tr.x1) / 2, z: (tr.z0 + tr.z1) / 2 }); return;
       }
     }
   }
   removeTrap(tr) {
     for (const i of tr.cells) if (this.occ[tr.layer][i] === tr.id) this.occ[tr.layer][i] = 0;
-    this.traps.delete(tr.id); this.flowDirty = true;
+    this.traps.delete(tr.id); this.flowDirty = true; this.layoutVer++;
     this.emit({ t: 'trapRemove', id: tr.id });
   }
 
@@ -526,7 +534,7 @@ export class Sim {
         this.phase = 'build'; this.phaseTimer = RULES.buildPhaseSeconds;
         // Income that doesn't depend on hauling tails, so you can always build.
         const bonus = Math.round((RULES.waveBonus + this.wave * 10) * this.mods.waveBonus); this.sardines += bonus;
-        this.emit({ t: 'msg', text: `Wave ${this.wave} cleared  +${bonus} sardines` }); this.emit({ t: 'waveClear', wave: this.wave });
+        this.emit({ t: 'msg', text: `Wave ${this.wave} cleared  +${bonus} Paw Points` }); this.emit({ t: 'waveClear', wave: this.wave });
         this.bark('clear', null, true);
       }
     }
@@ -825,7 +833,7 @@ export class Sim {
   // Crow: carry mice over the defences and drop them near the hole.
   spawnBird(type, hpMul) {
     const d = MICE[type], hp = Math.max(1, Math.round(d.hp * hpMul));
-    const x = 10 + this.rng() * 76, z = WORLD_H - 2;
+    const x = 6 + this.rng() * (WORLD_W - 12), z = WORLD_H - 2;   // across the whole map's south edge
     const b = { id: this.nextId++, type, x, y: 9, z, vx: 0, vy: 0, vz: 0, hp, maxHp: hp, state: 'in', t: 0, tx: x, tz: 40, ty: 0,
       target: null, carry: d.carry || 0, dead: false, flash: 0, stunT: 0, vulnT: 0, yaw: Math.PI };
     this.pickBirdTarget(b);
@@ -1066,7 +1074,7 @@ export class Sim {
       if (!want && (this.mice.some(m => !m.dead && inside(m)) || [...this.cats.values()].some(c => c.alive && inside(c)))) continue;
       d.open = want;
       for (let i = 0; i < this.map.door.length; i++) if (this.map.door[i] === di) { this.map.type[i] = want ? T.FLOOR : T.SOLID; this.map.solid[i] = want ? 0 : 6; }
-      this.flowDirty = true; this.routeCache = null;
+      this.flowDirty = true; this.routeCache = null; this.layoutVer++;
       this.emit({ t: 'door', i: di, open: want });
     }
     // Knock-over props: a cat brushing past knocks it flying. It falls; if it drops far

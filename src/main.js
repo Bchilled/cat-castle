@@ -1,12 +1,12 @@
 // main.js — wires input -> commands -> sim (fixed tick) -> renderer + HUD.
 
-import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE } from './config.js';
+import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE, RULES } from './config.js';
 import { CAT_INFO, abilityRows } from './ui/catinfo.js';
 import { portraitURL } from './ui/portraits.js';
 import { Sfx } from './audio/sfx.js';
 import { Sim } from './sim/sim.js';
 import { MAPS, MAP_ORDER } from './sim/map.js';
-import { W, CELL } from './sim/map.js';
+import { W, CELL, GATE } from './sim/map.js';
 import { LocalTransport } from './net/local.js';
 import { Scene } from './render/scene.js';
 import { Hud } from './ui/hud.js';
@@ -27,19 +27,24 @@ document.addEventListener('pointerdown', () => sfx.unlock(), { once: false });
 document.addEventListener('keydown', () => sfx.unlock());
 // Loading-screen tips.
 const TIPS = [
-  'Mice always get a way through. Toy Blocks decide WHICH way.',
+  'Mice always get a way through. Poison Boxes decide WHICH way: build a maze and they walk all of it.',
   'Put a Flinger beside the moat and point it at the water. Free drowning.',
-  'When Puddin kills a mouse with a Chomp he eats it: health back, but no tail.',
+  'When Puddin kills a mouse with a Chomp he eats it and gets health back.',
   'Eat a Mama Mouse and her Pinkies never come out.',
-  'A red ring on the floor means the Rat Captain is about to stomp. Move.',
+  'A red ring on the floor means a boss is about to stomp. Move.',
   'Stunned mice see stars. The circle of stars shrinks as the stun wears off.',
   'Trap lamps: green = ready, red = resetting.',
-  'Bug Zappers hang under anything with a roof: the guard passage, the colonnade, the table, the bench.',
-  'Packs of mice choose between three lanes north of the courtyard. Block one and they take another.',
+  'Bug Zappers hang under anything with a roof: passages, tables, benches, stall counters, the cellar vault.',
+  'Packs of mice split between routes that cost about the same. Make one dearer and they take another.',
   'Every kill pays Paw Points on the spot. Kill plenty, build more.',
   'Bring 8 traps and 1 item. Pick them under the cats on this screen.',
-  'Q uses your item. E is your second ability.',
+  'Q uses your item. E is your second ability. Hold F to sniff out where the mice are going.',
   'Fred can kick off walls twice before he has to land.',
+  'Brush past a pot on a table edge and it falls. Time it right and it lands on a pack of mice.',
+  'Market food piles make mice tougher. Kill them before they get there, or bait them away.',
+  "In the servants' passages the doors swing shut on a timer. Watch the radar: brown = shut.",
+  'Kitchen fires burn mice and cats alike. Fling mice into them.',
+  'Win a map to move onward: entrance, market, stables, cellar, passages, kitchen.',
 ];
 { let k = Math.floor(Math.random() * TIPS.length); const show = () => { const el = document.getElementById('tip'); if (el) el.textContent = 'Tip: ' + TIPS[k++ % TIPS.length]; }; show(); setInterval(show, 6000); }
 document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn`;
@@ -104,6 +109,8 @@ let chosenMap = MAPS[load('catcastle.map', 'entrance')] ? load('catcastle.map', 
 function drawMaps() {
   document.getElementById('maps').innerHTML = MAP_ORDER.map((k, i) => `<button class="mp ${k === chosenMap ? 'on' : ''}" data-map="${k}"><b>${i + 1}. ${MAPS[k].name}</b><small>${MAPS[k].twist}</small></button>`).join('');
   document.querySelectorAll('[data-map]').forEach(b => b.onclick = () => { chosenMap = b.dataset.map; save('catcastle.map', chosenMap); sfx.play('click'); drawMaps(); });
+  // The play button names the map you'll be playing.
+  const pb = document.querySelector('[data-mode="normal"]'); if (pb) pb.textContent = `${MAPS[chosenMap].name} · ${RULES.winWave} waves`;
 }
 drawMaps();
 if (new URLSearchParams(location.search).has('go')) setTimeout(() => { previewOn = false; history.replaceState(null, '', location.pathname); start('normal'); }, 0);
@@ -236,7 +243,7 @@ function start(mode) {
     if (e.id !== undefined && sim.traps.has(e.id)) { const t = sim.traps.get(e.id); return [(t.x0 + t.x1) / 2, (t.z0 + t.z1) / 2]; }
     return [undefined, undefined];
   };
-  const GATE_POS = [48, 83.5];
+  const GATE_POS = GATE ? [(GATE.x0 + GATE.x1) / 2, (GATE.z0 + GATE.z1) / 2] : [0, 0];   // only the entrance has a gate
   function sound(e) {
     const [x, z] = at(e);
     switch (e.t) {

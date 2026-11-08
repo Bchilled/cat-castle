@@ -33,7 +33,6 @@
   #trapinfo small { display: block; color: var(--dim); } #trapinfo p { margin: 4px 0 0; color: var(--ink); }
   #me { bottom: 92px; left: 10px; font-size: 15px; }
   #muted { position: fixed; top: 52px; left: 10px; font-size: 12px; color: var(--dim); display: none; }
-  #sub b.fred { color: #f0903a; } #sub b.puddin { color: #e8d8b0; }
   #pause label { display: grid; grid-template-columns: 130px 220px; align-items: center; gap: 8px; margin: 6px; color: var(--ink); }
   #pause input[type=range] { accent-color: var(--accent); }
   #pause .keys { color: var(--dim); font-size: 13px; line-height: 1.6; margin-top: 10px; }
@@ -69,7 +68,7 @@
   .slot .cost { color: var(--dim); } .slot .cost::before { content: "\1F43E  "; font-size: 10px; }
   .slot.sel { border-color: var(--accent); background: rgba(80,58,24,.92); } .slot.poor .cost { color: var(--bad); }
   /* Controls panel */
-  #controls { right: 10px; bottom: 92px; font-size: 12px; line-height: 1.55; color: var(--dim); }
+  #controls { right: 10px; bottom: 160px; font-size: 12px; line-height: 1.55; color: var(--dim); }
   #controls b { color: var(--ink); } #controls.hidden { display: none; }
   #prompt { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); font-size: 15px; text-shadow: 0 1px 3px #000; white-space: nowrap; }
   #msg { position: fixed; top: 116px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: bold; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity .3s; white-space: nowrap; }
@@ -173,7 +172,7 @@
   <button id="mute">Mute</button>
   <div class="keys">
     <b>WASD</b> move · <b>Mouse</b> look · <b>Wheel</b> zoom · <b>Left click</b> attack · <b>Right click</b> ability / place trap<br>
-    <b>Space</b> jump · <b>1–8</b> traps · <b>R</b> rotate · <b>X</b> sell · <b>Q</b> put away · <b>E</b> ability · <b>Q</b> item · <b>G</b> next wave · <b>F</b> sniff · <b>M</b> mute
+    <b>Space</b> jump · <b>1–8</b> traps (again to put away) · <b>R</b> rotate · <b>X</b> sell · <b>E</b> ability · <b>Q</b> item · <b>G</b> next wave · <b>F</b> sniff · <b>M</b> mute
   </div>
   <button id="quit">Quit to menu</button>
 </div>

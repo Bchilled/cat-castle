@@ -15,6 +15,9 @@ import { tmat } from './textures.js';
 const MAX_MICE = 800;
 const YAW_FOR = [Math.PI / 2, -Math.PI / 2, 0, Math.PI];   // DIRS4 index -> yaw pointing local +z that way
 const OPP = [1, 0, 3, 2];
+// Colours made once (not per mouse per frame).
+const TINT = { stuck: new THREE.Color(0xe0d060), slow: new THREE.Color(0x7a9a3a), stun: new THREE.Color(0xa0a0ff), zapOff: new THREE.Color(0x1c2a3a), zapOn: new THREE.Color(0x6fb8ff) };
+let DECAL_GEO = null;
 
 export class Scene {
   constructor(canvas, sim) {
@@ -329,14 +332,39 @@ export class Scene {
     this.ghost.traverse(o => { if (o.isMesh) o.material.color.setHex(col); });
   }
 
+  // Particles: one pooled instanced mesh (600 slots) instead of a new mesh per speck.
+  // Why: creating and dropping thousands of little meshes leaked GPU buffers and
+  // stuttered on long games. A speck shrinks away as it dies instead of fading.
+  buildParticles() {
+    const N = 600;
+    this.pmesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), N);
+    this.pmesh.count = 0; this.pmesh.frustumCulled = false; this.pmesh.setColorAt(0, new THREE.Color()); this.scene.add(this.pmesh);
+    this.pool = { N, n: 0, head: 0, x: new Float32Array(N), y: new Float32Array(N), z: new Float32Array(N), vx: new Float32Array(N), vy: new Float32Array(N), vz: new Float32Array(N),
+      life: new Float32Array(N), size: new Float32Array(N) };
+  }
   spawnParticles(x, y, z, color, n = 8, speed = 3, size = 0.08) {
+    if (!this.pool) this.buildParticles();
+    const P = this.pool, c = this._pc || (this._pc = new THREE.Color());
+    c.setHex(color);
     for (let k = 0; k < n; k++) {
-      if (this.particles.length > 400) this.scene.remove(this.particles.shift());
-      const p = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshBasicMaterial({ color, transparent: true }));
-      p.position.set(x, y, z);
-      p.userData = { vx: (Math.random() - 0.5) * speed, vy: Math.random() * speed, vz: (Math.random() - 0.5) * speed, life: 0.7 };
-      this.scene.add(p); this.particles.push(p);
+      const i = P.head; P.head = (P.head + 1) % P.N;       // oldest speck is recycled when full
+      P.x[i] = x; P.y[i] = y; P.z[i] = z; P.vx[i] = (Math.random() - 0.5) * speed; P.vy[i] = Math.random() * speed; P.vz[i] = (Math.random() - 0.5) * speed;
+      P.life[i] = 0.7; P.size[i] = size; this.pmesh.setColorAt(i, c);
     }
+    this.pmesh.instanceColor.needsUpdate = true;
+  }
+  stepParticles(dt) {
+    if (!this.pool) this.buildParticles();
+    const P = this.pool, L = this._l, v = this._v, q = this._q.identity(), s = this._s;
+    let top = 0;
+    for (let i = 0; i < P.N; i++) {
+      if (P.life[i] <= 0) { if (P.size[i]) { P.size[i] = 0; L.makeScale(0, 0, 0); this.pmesh.setMatrixAt(i, L); } continue; }
+      P.life[i] -= dt; P.vy[i] -= 9 * dt; P.x[i] += P.vx[i] * dt; P.y[i] += P.vy[i] * dt; P.z[i] += P.vz[i] * dt;
+      const k = Math.max(0, P.life[i] / 0.7) * P.size[i];
+      L.compose(v.set(P.x[i], P.y[i], P.z[i]), q, s.set(k, k, k)); this.pmesh.setMatrixAt(i, L); top = i + 1;
+    }
+    this.pmesh.count = top;
+    this.pmesh.instanceMatrix.needsUpdate = true;
   }
   // Cat's sense of smell (hold F): every mouse leaves a scent trail. While sniffing,
   // the last ~12 s of trails glow through walls, mice glow through walls, and the
@@ -382,9 +410,10 @@ export class Scene {
     this.scene.add(m); this.rings.push(m);
   }
   decal(x, z, color, r, y = 0.02) {
-    if (this.decals.length > 80) this.scene.remove(this.decals.shift());
-    const d = new THREE.Mesh(new THREE.CircleGeometry(r, 9), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false }));
-    d.rotation.x = -Math.PI / 2; d.rotation.z = Math.random() * 6; d.position.set(x, y + Math.random() * 0.005, z); d.userData.life = 8;
+    if (this.decals.length > 80) { const old = this.decals.shift(); this.scene.remove(old); old.material.dispose(); }
+    DECAL_GEO = DECAL_GEO || new THREE.CircleGeometry(1, 9);   // one shared disc, scaled per decal
+    const d = new THREE.Mesh(DECAL_GEO, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false }));
+    d.scale.setScalar(r); d.rotation.x = -Math.PI / 2; d.rotation.z = Math.random() * 6; d.position.set(x, y + Math.random() * 0.005, z); d.userData.life = 8;
     this.scene.add(d); this.decals.push(d);
   }
 
@@ -582,12 +611,14 @@ export class Scene {
       g.rotation.z = b.stunT > 0 ? now / 80 : 0;
       g.userData.cargo.visible = b.carry > 0;
     });
-    this.syncSimple(sim.globs, this.globMeshes, () => new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: 0x9adf3a })), (g, b) => { g.position.set(b.x, b.y, b.z); });
-    this.syncSimple(sim.missiles, this.missileMeshes, (b) => b.kind === 'pellet' ? new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 0), mat(0x8a8a5a))
-      : b.kind === 'whisker' ? new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.7), new THREE.MeshBasicMaterial({ color: 0xffffff }))
-      : b.kind === 'burr' ? new THREE.Mesh(new THREE.OctahedronGeometry(0.1, 1), mat(0x7a5a2a))
-      : b.kind === 'pebble' ? new THREE.Mesh(new THREE.DodecahedronGeometry(0.09, 0), mat(0x9a948a))
-      : outline(new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), mat(0x6a7a3a))), (g, b) => {
+    // Projectiles share one geometry + material per kind (made once): hundreds fly per wave.
+    const PG = this.projGeo || (this.projGeo = {
+      glob: [new THREE.IcosahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: 0x9adf3a })],
+      pellet: [new THREE.IcosahedronGeometry(0.06, 0), mat(0x8a8a5a)], whisker: [new THREE.BoxGeometry(0.025, 0.025, 0.7), new THREE.MeshBasicMaterial({ color: 0xffffff })],
+      burr: [new THREE.OctahedronGeometry(0.1, 1), mat(0x7a5a2a)], pebble: [new THREE.DodecahedronGeometry(0.09, 0), mat(0x9a948a)], hairball: [new THREE.IcosahedronGeometry(0.2, 0), mat(0x6a7a3a)] });
+    const proj = (k) => k === 'hairball' ? outline(new THREE.Mesh(...PG.hairball)) : new THREE.Mesh(...(PG[k] || PG.pellet));
+    this.syncSimple(sim.globs, this.globMeshes, () => proj('glob'), (g, b) => { g.position.set(b.x, b.y, b.z); });
+    this.syncSimple(sim.missiles, this.missileMeshes, (b) => proj(b.kind), (g, b) => {
         g.position.set(b.x, b.y, b.z);
         if (b.kind === 'whisker') g.rotation.set(0, Math.atan2(b.vx, b.vz), 0); else g.rotation.y += dt * 10;   // needles fly point-first
       });
@@ -605,7 +636,7 @@ export class Scene {
       if (ud.kind === 'mousetrap') ud.bar.rotation.x = f > 0 ? -0.15 - (2.75 * Math.max(0, (1 - f - 0.15) / 0.85)) : -2.9;   // slams, then cranks back
       if (ud.kind === 'flipper') ud.hinge.rotation.x = -Math.max(ud.anim, f > 0.8 ? 1 : f / 0.8) * 1.2;   // flips up, eases down
       if (ud.kind === 'grinder') { if (tr.active) ud.drum.rotation.x += dt * 25; }
-      if (ud.kind === 'zapper') ud.glow.material.color.setHex(ud.anim > 0.5 ? 0xffffff : f > 0 ? new THREE.Color(0x1c2a3a).lerp(new THREE.Color(0x6fb8ff), 1 - f).getHex() : 0x6fb8ff);
+      if (ud.kind === 'zapper') { if (ud.anim > 0.5) ud.glow.material.color.setHex(0xffffff); else ud.glow.material.color.copy(TINT.zapOff).lerp(TINT.zapOn, f > 0 ? 1 - f : 1); }
       if (ud.kind === 'glove') {
         const out = ud.anim > 0 ? 1 : f > 0 ? Math.max(0, (f - 0.2) / 0.8) : 0;     // punch out, wind back in
         const len = 0.1 + out * 1.6;
@@ -620,16 +651,16 @@ export class Scene {
       r.userData.life -= dt; const u = r.userData;
       if (u.grow) r.scale.setScalar(Math.max(0.01, 1 - u.life / u.max)); 
       r.material.opacity = u.warn ? 0.35 + 0.35 * Math.sin(now / 60) : Math.max(0, u.life / u.max) * 0.7;
-      if (u.life <= 0) { this.scene.remove(r); return false; } return true;
+      if (u.life <= 0) { this.scene.remove(r); r.geometry.dispose(); r.material.dispose(); return false; } return true;
     });
     // Particles, decals, water, route
+    this.stepParticles(dt);
+    // Zap bolts (short-lived lines): freed properly when they go.
     this.particles = this.particles.filter(p => {
-      const u = p.userData; u.life -= dt; if (!p.isLine) u.vy -= 9 * dt;
-      p.position.x += u.vx * dt; p.position.y += u.vy * dt; p.position.z += u.vz * dt;
-      p.material.opacity = Math.max(0, u.life / 0.7);
-      if (u.life <= 0) { this.scene.remove(p); return false; } return true;
+      const u = p.userData; u.life -= dt; p.material.opacity = Math.max(0, u.life / 0.2);
+      if (u.life <= 0) { this.scene.remove(p); p.geometry.dispose(); p.material.dispose(); return false; } return true;
     });
-    this.decals = this.decals.filter(d => { d.userData.life -= dt; d.material.opacity = Math.min(0.7, d.userData.life / 3); if (d.userData.life <= 0) { this.scene.remove(d); return false; } return true; });
+    this.decals = this.decals.filter(d => { d.userData.life -= dt; d.material.opacity = Math.min(0.7, d.userData.life / 3); if (d.userData.life <= 0) { this.scene.remove(d); d.material.dispose(); return false; } return true; });
     const t = now / 600;
     for (const wtr of this.waters) {
       const pos = wtr.mesh.geometry.attributes.position, base = wtr.base;
@@ -715,9 +746,9 @@ export class Scene {
       set(eyes, n, 0, 0.56, 0.75, 0, 1, 1, 1);
       col.setHex(d.color).offsetHSL(0, 0, mo.shade || 0);
       if (mo.flash > 0) col.lerp(this._w, 0.7);
-      else if (mo.state === 'stuck') col.lerp(new THREE.Color(0xe0d060), 0.5);
-      else if (mo.slowT > 0) col.lerp(new THREE.Color(0x7a9a3a), 0.5);
-      else if (mo.stunT > 0) col.lerp(new THREE.Color(0xa0a0ff), 0.4);
+      else if (mo.state === 'stuck') col.lerp(TINT.stuck, 0.5);
+      else if (mo.slowT > 0) col.lerp(TINT.slow, 0.5);
+      else if (mo.stunT > 0) col.lerp(TINT.stun, 0.4);
       body.setColorAt(n, col); head.setColorAt(n, col);
       eyes.setColorAt(n, col.setHex(d.boss ? 0xff2a1a : 0x111111));
       n++;
