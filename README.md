@@ -39,12 +39,12 @@ Click the game to lock the mouse.
 | Esc | Pause |
 | H | Hide the controls |
 
-Floor traps also go on table and counter tops: aim at the top.
+Traps snap to the trap grid, like Orcs Must Die: one tile is 2×2 units (60 cm), and the grid shows on the floor while you hold a trap. Most traps take one tile; some take two or four. A Poison Box is one tile. Ceiling traps hit the tiles under them (marked on the floor). Floor traps also go on table and counter tops: aim at the top.
 
 ## How it plays
 Mice pour out of the holes and take the cheapest route to the exit. You can see that route as glowing arrows on the floor.
-- **Routes:** they re-route when you build. You can wall them into a maze with Poison Boxes, but never seal them in.
-- **Packs:** they split between lanes. They remember where they keep dying and avoid it, and scouts run ahead.
+- **Routes:** each hole has one route, the path of least resistance, and every pack from that hole takes it. They re-route when you build. Lanes and doorways are a whole number of tiles wide (mostly 4), so a few Poison Boxes close one and send everyone the long way. You can wall them into a maze, but never seal them in.
+- **Packs:** scouts run ahead.
 - **Shortcuts:** they smash through crate stacks when it's worth it, and climb over fences, crates and the cellar cheese wheel when that beats going round, and take to the kitchen counters and the hay loft if you wall off the floor. A Poison Box on top closes a route.
 - **Food:** they stop to eat food piles, and climb furniture to eat what's on top. Eating makes them tougher.
 - **Things that fall over:** hit a tall shelf a few times and it topples across the corridor, flattening mice and blocking the way until they chew through. Break a market stall's legs and the counter comes down on the mice under it. Run into a barrel to roll it through a pack. They all reset each wave.

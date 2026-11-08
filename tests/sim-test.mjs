@@ -10,6 +10,7 @@ import { buildWave } from '../src/sim/waves.js';
 let fails = 0;
 const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) fails++; };
 const q = (w) => Math.floor(w / CELL);
+const g4 = (c) => 4 * Math.round(c / 4);   // snap a cell to the trap grid (4x4-cell tiles)
 const run = (s, secs, input) => { const ev = []; for (let t = 0; t < TICK_HZ * secs; t++) { if (input) input(t); s.step(); ev.push(...s.events); s.events.length = 0; } return ev; };
 const inp = (s, id, o = {}) => s.command({ type: 'input', id, mx: 0, mz: 0, yaw: 0, ...o });
 
@@ -20,14 +21,10 @@ ok(s.flowBig[s.spawnCell] < Infinity, 'big bosses also have a route');
 ok(s.routes().every(r => r.some(([x, z]) => x > 40 && x < 56 && z > 60 && z < 76)), 'both entrances route through the gatehouse');
 ok(new Set(s.routes().map(r => r[0].join())).size === 2, 'two entrances');
 {
-  // Lanes diverge north of the courtyard: colonnade (west), guard passage, east lane.
-  const rs = s.routes();
-  const west = rs.some(r => r.some(([x, z]) => x > 10 && x < 26 && z > 10 && z < 28));
-  const mid = rs.some(r => r.some(([x, z]) => x > 44 && x < 52 && z > 12 && z < 28));
-  const east = rs.some(r => r.some(([x, z]) => x > 66 && x < 84 && z > 8 && z < 28));
-  ok(west && mid && east, `routes split three ways north (west ${west}, passage ${mid}, east ${east})`);
+  // Path of least resistance: one route per entrance, and every pack takes it.
+  ok(s.routes().length === s.spawnCells.length, `one route per entrance (${s.routes().length})`);
   const picks = new Set(); for (let k = 0; k < 40; k++) picks.add(s.chooseVia(k % 2));
-  ok(picks.size >= 2, `packs pick different lanes (${[...picks].join(',')})`);
+  ok(picks.size === 1 && picks.has(-1), `every pack takes the cheapest route (${[...picks].join(',')})`);
 }
 
 // 2. Untouched wave: board gate gets chewed down, mice leak, lives drop.
@@ -41,7 +38,7 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
 {
   const s2 = new Sim({ seed: 3 }); s2.addPlayer('p1'); s2.sardines = 1e6;
   const route = s2.route(); const target = route.find(([x, z]) => z > 48 && z < 52);   // in the courtyard, south of the well
-  s2.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(target[0]) - 2, az: q(target[1]) - 2, rot: 0 });
+  s2.command({ type: 'place', id: 'p1', trap: 'barricade', ax: g4(q(target[0]) - 2), az: g4(q(target[1]) - 2), rot: 0 });
   s2.step();
   const b = [...s2.traps.values()][0];
   ok(b && !s2.route().some(([x, z]) => b.cells.includes(idx(q(x), q(z)))), 'mice reroute around a barricade on their path');
@@ -53,9 +50,9 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
 // 4. Flipper on the branch flings a mouse into the moat -> drowns.
 {
   const s3 = new Sim({ seed: 5 }); s3.addPlayer('p1'); s3.sardines = 9999; s3.gate.up = false; s3.flowDirty = true;
-  s3.command({ type: 'place', id: 'p1', trap: 'flipper', ax: q(41.5), az: q(87), rot: 1 });
+  s3.command({ type: 'place', id: 'p1', trap: 'flipper', ax: g4(q(44)), az: g4(q(87)), rot: 1 });
   ok(s3.traps.size === 1, 'flipper placed on the log bridge');
-  s3.step(); s3.spawnMouse('mouse', 1); const m = s3.mice[0]; m.x = 42; m.z = 87.5;
+  s3.step(); s3.spawnMouse('mouse', 1); const m = s3.mice[0], fl = [...s3.traps.values()][0]; m.x = (fl.x0 + fl.x1) / 2; m.z = (fl.z0 + fl.z1) / 2;   // on the plate
   ok(run(s3, 3).some(e => e.t === 'kill' && e.drowned), 'flipped mouse drowns in the moat');
 }
 
@@ -64,9 +61,9 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   const s4 = new Sim({ seed: 1 }); s4.addPlayer('p1');
   ok(!!s4.canPlace('zapper', q(48), q(66)), 'zapper fits in the gatehouse roof');
   ok(!s4.canPlace('zapper', q(60), q(50)), 'zapper refused in open air');
-  ok(!!s4.canPlace('grinder', q(40), q(66), 0, 1), 'grinder fits on the gatehouse wall');
+  ok(!!s4.canPlace('grinder', q(44), q(66), 0, 1), 'grinder fits on the gatehouse wall');
   ok(!s4.canPlace('grinder', q(60), q(50), 0, 1), 'grinder refused away from walls');
-  ok(!!s4.canPlace('zapper', q(18), q(18)), 'zapper fits under the colonnade');
+  ok(!!s4.canPlace('zapper', q(24), q(18)), 'zapper fits under the colonnade');
   ok(!!s4.canPlace('zapper', q(48), q(20)), 'zapper fits in the guard passage');
 }
 
@@ -172,9 +169,9 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
 // 15. Wall grinder reaches a tile out from the wall.
 {
   const s = new Sim({ seed: 22 }); s.addPlayer('p1'); s.sardines = 9999; s.gate.up = false; s.flowDirty = true;
-  s.command({ type: 'place', id: 'p1', trap: 'grinder', ax: q(40), az: q(64), wallDir: 1 });
+  s.command({ type: 'place', id: 'p1', trap: 'grinder', ax: q(44), az: q(64), wallDir: 1 });
   ok(s.traps.size === 1, 'grinder placed');
-  s.spawnMouse('mouse', 1); const m = s.mice[0]; m.x = 41.6; m.z = 65; m.state = 'stuck'; m.stuckT = 99;
+  s.spawnMouse('mouse', 1); const m = s.mice[0]; m.x = 45.6; m.z = 65; m.state = 'stuck'; m.stuckT = 99;
   for (let t = 0; t < 10; t++) s.stepTraps();
   ok(m.hp < m.maxHp, 'grinder hurts a mouse 1.6 units from the wall');
 }
@@ -356,7 +353,7 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
 for (const id of MAP_ORDER) {
   const s = new Sim({ map: id, seed: 101 }); s.addPlayer('p1'); s.step();
   ok(s.spawnCells.every(c => s.flow[c] < Infinity) && s.spawnCells.every(c => s.flowBig[c] < Infinity), `${id}: every entrance reaches the hole (mice and bosses)`);
-  ok(new Set(s.spawnCells.map((_, d) => [0, 1, 2, 3, 4, 5].map(() => s.chooseVia(d)).join())).size >= 1 && s.routes().length >= 2 * s.spawnCells.length, `${id}: ${s.routes().length} routes`);
+  ok(s.routes().length === s.spawnCells.length, `${id}: one route per entrance (${s.routes().length})`);
 }
 // 29. Mazing: mice walk a Poison Box zig-zag rather than chewing.
 {
@@ -494,7 +491,7 @@ for (const id of MAP_ORDER) {
   const old = P.normalise({ paws: 4, yarn: 1 }); ok(old.paws === 4 && old.traps && Array.isArray(old.hats), 'old saves load');
   // Upgrades reach the traps in the game.
   const g = new Sim({ seed: 400 }); g.addPlayer('p1', 'fred', { upgrades: P.upgradesFor(pr) }); g.sardines = 1e5; g.step();
-  g.placeTrap(g.cats.get('p1'), 'mousetrap', 80, 90, 0, -1);
+  g.placeTrap(g.cats.get('p1'), 'mousetrap', 80, 92, 0, -1);
   const tr = [...g.traps.values()][0];
   ok(tr && tr.p.bleed === 3 && tr.p.damage > TRAPS.mousetrap.damage, 'placed traps carry your upgrades');
 }
@@ -511,7 +508,8 @@ for (const id of MAP_ORDER) {
   for (let k = 0; k < 6; k++) wr.filter(([, z], j) => z > 10 && z < 34 && j % 3 === 0).forEach(([x, z]) => dg.addDanger(x, z, 3));   // a killing ground along it
   run(dg, 1.1);
   const rise = VI.map((_, k) => dg.laneDanger(0, k));
-  ok(rise[west] > 40 && rise[west] === Math.max(...rise), `the lane they keep dying in weighs more when packs choose (+${rise.map(v => v.toFixed(0)).join(' / +')})`);
+  // (Lane danger only steers packs when lanes split, which is off: mice take the cheapest route like OMD.)
+  void rise;
   ok(dg.flow[dg.spawnCells[0]] === flow0, 'but their step-by-step path is unchanged (traps in a lane still get walked into)');
   const picks = {}; for (let k = 0; k < 200; k++) { const v = dg.chooseVia(0); picks[v] = (picks[v] || 0) + 1; }
   ok((picks[west] || 0) < 15, `packs mostly stop picking it (${JSON.stringify(picks)})`);
@@ -527,21 +525,21 @@ for (const id of MAP_ORDER) {
   // Fire: mice path round the kitchen ovens.
   const fk = new Sim({ map: 'kitchen', seed: 502 }); fk.addPlayer('p1'); fk.step();
   ok(fk.extraArr[cellOf(44, 10.5)] >= 6, 'mice avoid stepping into fire when they can');
-  // Climbing: a mouse near the kitchen island climbs up, eats the roast and comes back down tougher.
+  // Climbing: a mouse near the kitchen table climbs up, eats the roast and comes back down tougher.
   const cl = new Sim({ map: 'kitchen', seed: 503 }); cl.addPlayer('p1'); cl.step();
-  const cm = cl.spawnAt('mouse', 48, 61.5, 100); cm.climber = true; cm.via = -1; let topY = 0;
+  const cm = cl.spawnAt('mouse', 49, 37.5, 100); cm.climber = true; cm.via = -1; let topY = 0;
   run(cl, 15, () => { topY = Math.max(topY, cm.y); });
-  ok(topY > 3 && cm.gorged && cm.maxHp > 100, `a mouse climbs the island (y ${topY.toFixed(1)}), eats and comes out tougher (${cm.maxHp} hp)`);
+  ok(topY > 3 && cm.gorged && cm.maxHp > 100, `a mouse climbs the kitchen table (y ${topY.toFixed(1)}), eats and comes out tougher (${cm.maxHp} hp)`);
   ok(!cm.climb && cm.y < 0.1, 'then climbs back down and carries on');
-  // Floor traps on furniture tops: a Snapper on the island catches the diner.
+  // Floor traps on furniture tops: a Snapper on the table catches the diner.
   const tt = new Sim({ map: 'kitchen', seed: 504 }); tt.addPlayer('p1'); tt.sardines = 1e5; tt.step();
-  const ax = Math.floor(47 / CELL), az = Math.floor(47 / CELL);
+  const ax = 96, az = 60;   // the tile x 48..50, z 30..32: between the table edge and the roast
   ok(tt.canPlace('mousetrap', ax, az, 0, -1, true) === true && tt.canPlace('bait', ax, az, 0, -1, true) !== true, 'floor traps go on furniture tops (not Cheese Chunks)');
   tt.command({ type: 'place', id: 'p1', trap: 'mousetrap', ax, az, rot: 0, top: true });
   const ttr = [...tt.traps.values()][0];
-  const tm = tt.spawnAt('mouse', 48, 61.5, 100); tm.climber = true; tm.via = -1;
+  const tm = tt.spawnAt('mouse', 49, 37.5, 100); tm.climber = true; tm.via = -1;
   const evt = run(tt, 8);
-  ok(ttr && ttr.y > 3 && evt.some(e => e.t === 'snap'), `the Snapper up on the island snaps a climbing mouse (hp ${Math.max(0, tm.hp).toFixed(0)})`);
+  ok(ttr && ttr.y > 3 && evt.some(e => e.t === 'snap'), `the Snapper up on the table snaps a climbing mouse (hp ${Math.max(0, tm.hp).toFixed(0)})`);
 }
 // 35. Co-op: the guest's mirror matches the host's game from snapshots + events, and the
 // guest's commands (sent as p2) work on the host.
@@ -556,7 +554,7 @@ for (const id of MAP_ORDER) {
   for (let t = 0; t < 30 * 40; t++) {
     host.command({ type: 'input', id: 'p2', mx: 0.5, mz: 0, yaw: 1, primary: true });
     host.step(); ev.push(...host.events.filter(e => !C.SKIP_EVENTS.has(e.t))); host.events.length = 0;
-    if (t % 2 === 0) { const msg = JSON.parse(JSON.stringify({ s: C.snapshot(host), ev })); ev = []; C.applySnapshot(mirror, msg.s); for (const e of msg.ev) C.applyEvent(mirror, e); }
+    if (t % 2 === 0 || t === 30 * 40 - 1) { const msg = JSON.parse(JSON.stringify({ s: C.snapshot(host), ev })); ev = []; C.applySnapshot(mirror, msg.s); for (const e of msg.ev) C.applyEvent(mirror, e); }   // (and a last send, so a leak on the final tick reaches the guest)
   }
   const hm = host.mice.filter(m => !m.dead);
   ok(hm.length > 5 && mirror.mice.length === hm.length, `mirror has the same mice (${mirror.mice.length}/${hm.length})`);
@@ -586,7 +584,7 @@ for (const id of MAP_ORDER) {
   // Packs take the direct route too, so every arrow on the floor is a route mice really use.
   const dr = new Sim({ seed: 702 }); dr.addPlayer('p1'); dr.step();
   const picks = new Set(); for (let k = 0; k < 60; k++) picks.add(dr.chooseVia(0));
-  ok(picks.has(-1) && picks.size >= 2, `the direct route gets a share of the packs (${[...picks].join(',')})`);
+  ok(picks.size === 1 && picks.has(-1), `every pack takes the direct route, the one the arrows show (${[...picks].join(',')})`);
 }
 // 37. Furniture routes: mice climb over the stable fences when it's shorter than going round.
 {
@@ -597,8 +595,8 @@ for (const id of MAP_ORDER) {
   ok(crossed && topY > 1, `a mouse climbs over the fence instead of going round (top ${topY.toFixed(1)})`);
   // A Poison Box up on the cellar cheese wheel closes the routes over it.
   const cw = new Sim({ map: 'cellar', seed: 801 }); cw.addPlayer('p1'); cw.sardines = 1e5; cw.step();
-  const n0 = cw.links.length, ok1 = cw.canPlace('barricade', 82, 126, 0, -1, true);
-  cw.placeTrap(cw.cats.get('p1'), 'barricade', 82, 126, 0, -1, true); cw.updateFlow();
+  const n0 = cw.links.length, ok1 = cw.canPlace('barricade', 84, 128, 0, -1, true);   // (the tile where both routes over the wheel cross)
+  cw.placeTrap(cw.cats.get('p1'), 'barricade', 84, 128, 0, -1, true); cw.updateFlow();
   ok(ok1 === true && cw.links.length < n0, `a Poison Box on top of the cheese wheel closes the routes over it (${n0 - cw.links.length} closed)`);
 }
 // 38. Difficulty: softer or tougher mice, more or fewer lives, scaled paw prints, fair rating.
@@ -648,7 +646,7 @@ for (const id of MAP_ORDER) {
   ok(Math.hypot(b.vx, b.vz) < 0.3 && b.lying && bs.map.type[cellOf(b.x, b.z)] !== 4, 'it comes to rest on open floor, on its side');
   bs.phase = 'build'; bs.phaseTimer = 0; bs.step();
   ok(b.x === hx && b.z === hz && !b.lying, 'barrels go home next wave');
-  ok(!bs.canPlace('mousetrap', q(hx) - 1, q(hz) - 1) && bs.canPlace('mousetrap', q(hx) + 6, q(hz) - 1) === true, "no floor traps on a barrel's spot");
+  ok(!bs.canPlace('mousetrap', g4(q(hx) - 2), g4(q(hz) - 2)) && bs.canPlace('mousetrap', g4(q(hx) + 8), g4(q(hz) - 2)) === true, "no floor traps on a barrel's spot");
   // Co-op: the guest's mirror sees the shelf go down (its spot turns to floor) and the barrels move.
   const C = await import('../src/net/coop.js');
   const host = new Sim({ map: 'passages', seed: 1003 }); host.addPlayer('p1'); host.step();
@@ -740,7 +738,7 @@ let findSpot, setup;
   const placed = ms.traps.size, pts = ms.sardines;
   const prop = ms.props.find(p => p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1);
   const under = [24, 28, 32].map(x => { const m = ms.spawnAt('mouse', x, 43, 100); m.stunT = 9; return m; }), tank = ms.spawnAt('tank', 26, 44, 600); tank.stunT = 9;
-  const cat = ms.cats.get('p1'); cat.x = 17.4; cat.z = 41.3; cat.y = 0;
+  const cat = ms.cats.get('p1'); cat.x = 11.4; cat.z = 41.3; cat.y = 0;
   const ev = run(ms, 7, () => inp(ms, 'p1', { yaw: Math.PI / 2, primary: true }));
   ok(st.state === 'down' && ev.some(e => e.t === 'stallFall'), `biting a stall leg brings the counter down (${ev.filter(e => e.t === 'stallHit').length} hits)`);
   ok(under.every(m => m.dead) && !tank.dead && !(tank.z > z0 && tank.z < z1 && tank.x > x0 && tank.x < x1), 'it flattens the mice under it; a survivor is shoved out');
@@ -798,22 +796,22 @@ let findSpot, setup;
     ok(sneeze && dirty && m.stunT >= 1.2, 'the Spice Jar makes mice sneeze, and peppered mice get knocked flat');
   }
 }
-// 44. Long runs (0.22): wall off the floor under the kitchen island and mice take to the
-// island top instead; a Poison Box up there closes the run.
+// 44. Long runs (0.22): wall off the floor under the kitchen table and mice take to the
+// table top instead; a Poison Box up there closes the run.
 {
   const loft = new Sim({ map: 'stables', seed: 1 }).map.links.some(l => l.name === 'Hay loft' && l.ladder);   // (one map at a time: check this first)
   const ks = new Sim({ map: 'kitchen', seed: 1300 }); ks.addPlayer('p1'); ks.sardines = 1e6; ks.step();
-  const L = ks.map.links.find(l => l.name === 'Over the island');
-  ok(ks.map.links.filter(l => /counter top|island/.test(l.name)).length === 3 && loft, 'the kitchen has three counter-top runs, the stables a hay-loft run with ladders');
-  // (m.climber = false: not one of the mice that go for the roast on the island)
+  const L = ks.map.links.find(l => l.name === 'Over the table');
+  ok(ks.map.links.filter(l => /worktop|table/.test(l.name)).length === 3 && loft, 'the kitchen has three worktop and table runs, the stables a hay-loft run with ladders');
+  // (m.climber = false: not one of the mice that go for the roast on the table)
   const climbs = (sim) => { const m = sim.spawnAt('mouse', L.a[0], L.a[1], 500); m.climber = false; let on = false; run(sim, 3, () => { if (m.link && m.link.L.name === L.name) on = true; }); sim.mice = sim.mice.filter(x => x !== m); return on; };
-  ok(!climbs(ks), 'with the floor open, mice walk under the island');
-  // A Poison Box wall right across the middle of the kitchen (the counters stay open underneath).
-  for (let x = q(14); x < q(82); x += 2) ks.command({ type: 'place', id: 'p1', trap: 'barricade', ax: x, az: q(47), rot: 0 });
+  ok(!climbs(ks), 'with the floor open, mice walk under the table');
+  // A Poison Box wall right across the kitchen through the table (the worktops stay open underneath).
+  for (let x = q(6); x < q(90); x += 4) ks.command({ type: 'place', id: 'p1', trap: 'barricade', ax: x, az: q(30), rot: 0 });
   ks.updateFlow();
-  ok(ks.flow[L.cellB] < Infinity && climbs(ks), `wall the floor off and they climb over the island instead (${ks.traps.size} Poison Boxes)`);
-  ks.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(45) - 1, az: q(46), rot: 0, top: true }); ks.updateFlow();
-  ok(!ks.links.includes(L) && !climbs(ks), 'a Poison Box on the island top closes the run');
+  ok(ks.flow[L.cellB] < Infinity && climbs(ks), `wall the floor off and they climb over the table instead (${ks.traps.size} Poison Boxes)`);
+  ks.command({ type: 'place', id: 'p1', trap: 'barricade', ax: q(44), az: q(30), rot: 0, top: true }); ks.updateFlow();
+  ok(!ks.links.includes(L) && !climbs(ks), 'a Poison Box on the table top closes the run');
 }
 // 44b. Regression (0.23): a mouse heading straight at a standing barrel goes round it (one
 // used to push into it forever and stall the wave).
@@ -863,7 +861,7 @@ let findSpot, setup;
     const gap = (jam) => {
       const { t, sp } = setup('stickyjam', { tier: 3, special: 'a' }), a = t.spawnAt('mouse', sp.cx, sp.cz, 500), b = t.spawnAt('mouse', sp.cx, sp.cz, 500);
       if (jam) run(t, 0.1, () => { for (const m of [a, b]) { m.x = sp.cx; m.z = sp.cz; } }); else { t.removeTrap([...t.traps.values()][0]); run(t, 0.1); }
-      a.x = sp.cx - 1.4; b.x = sp.cx + 1.4; a.z = b.z = sp.cz + 3; run(t, 0.6);
+      a.x = sp.cx - 0.7; b.x = sp.cx + 0.7; a.z = b.z = sp.cz + 3; run(t, 0.6);   // (within clinging distance: 1.5)
       return { d: Math.hypot(a.x - b.x, a.z - b.z), a, b, t };
     };
     const j = gap(true), n = gap(false), hp = j.b.hp; j.t.damageMouse(j.b, 10, 'trap', false, null);

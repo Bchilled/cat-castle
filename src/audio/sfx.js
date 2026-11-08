@@ -7,7 +7,12 @@
 // so 200 dying mice is a chorus, not a wall of noise.
 
 const STORE = 'catcastle.audio';
-function loadPrefs() { try { return { master: 0.8, music: 0.45, sfx: 0.9, muted: false, ...JSON.parse(localStorage.getItem(STORE)) }; } catch { return { master: 0.8, music: 0.45, sfx: 0.9, muted: false }; } }
+// Music is off unless you turn it up in the pause screen (v0.26: it was on by default and grated).
+// musicV2 marks prefs saved since then, so everyone's music starts off once, then stays as they set it.
+function loadPrefs() {
+  const d = { master: 0.8, music: 0, sfx: 0.9, muted: false, musicV2: true };
+  try { const p = { ...d, ...JSON.parse(localStorage.getItem(STORE)) }; if (!p.musicV2) { p.music = 0; p.musicV2 = true; } return p; } catch { return d; }
+}
 function savePrefs(p) { try { localStorage.setItem(STORE, JSON.stringify(p)); } catch { /* private window */ } }
 
 // Note name -> frequency (A4 = 440).
@@ -111,6 +116,7 @@ export class Sfx {
     const tick = () => {
       if (!this.ctx) return;
       if (this.nextT < this.ctx.currentTime - 0.5) this.nextT = this.ctx.currentTime + 0.05;   // tab was asleep: skip ahead
+      if (!(this.prefs.music > 0)) { this.nextT = this.ctx.currentTime + 0.05; return; }   // music off: don't even play the notes
       while (this.nextT < this.ctx.currentTime + 0.25) { this.musicStep(this.nextT); }
     };
     this.musicTimer = setInterval(tick, 60);

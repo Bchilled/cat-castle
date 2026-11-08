@@ -22,6 +22,10 @@ const TINT = { stuck: new THREE.Color(0xe0d060), slow: new THREE.Color(0x7a9a3a)
 const COMBO_COL = { chain: 0xf0e040, blaze: 0xff5a10, freeze: 0x9ad8ff, spread: 0xc8f0e8, knockdown: 0xd8c8a0, steam: 0xe8eef0 };
 let DECAL_GEO = null;
 const JAM_TINT = new THREE.Color(0x8a1830);
+// Model sizes as drawn (cells); a trap whose footprint differs gets stretched to fit, except the
+// hanging ones that cover 2x2 tiles: they stay lamp-sized in the middle of the area they hit
+// (the floor marks show that area).
+const AUTHORED = { cord: [6, 2], chandelier: [6, 6], zapper: [8, 8], bucket: [8, 8], salt: [8, 8], flypaper: [8, 8], honey: [8, 8], bubbles: [8, 8] };   // footprint (cells) a model was made for, where not one tile
 const BEAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);   // Magnifying Glass sunbeam (scaled per beam)
 
 export class Scene {
@@ -479,6 +483,37 @@ export class Scene {
     const y = def.surface === 'ceiling' ? this.sim.map.slabBot[good[0]] : top || 0;   // top: on a table/counter
     g.position.set(cx, y, cz);
     g.rotation.y = def.surface === 'wall' ? (wallDir >= 0 ? YAW_FOR[OPP[wallDir]] : 0) : YAW_FOR[ROT_DIR[rot % 4]];
+    // Models are made for one tile (cord and chandelier for their old sizes): stretch them
+    // to the trap's footprint in tiles, so a two-tile Rolling Pin or Grater spans two tiles.
+    const [aw, ad] = AUTHORED[kind] || (def.surface === 'wall' ? [4, 1] : [4, 4]), [w, d] = def.size;
+    g.scale.set(w / aw, 1, def.surface === 'wall' ? 1 : d / ad);
+  }
+  // The trap grid under the crosshair while you hold a trap (like Orcs Must Die): tile lines
+  // fading out from the aim point, and for ceiling traps, the floor tiles they will hit.
+  setGrid(on, x, z, y, foot, valid) {
+    if (!this.grid) {
+      // A floor-sized plane whose shader draws the tile lines in world space, so they stay
+      // put as it follows the crosshair. Lines are ~1.5 px wide at any distance (fwidth), bright
+      // near the aim point and fading out by ~10 units, like OMD's build grid.
+      const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2,
+        uniforms: { aimAt: { value: new THREE.Vector2() } },
+        vertexShader: 'varying vec2 wp; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); wp = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }',
+        fragmentShader: `uniform vec2 aimAt; varying vec2 wp;
+          void main(){
+            vec2 c = wp * 0.5;                                   // tile units (a tile is 2x2 world units)
+            vec2 gd = abs(fract(c - 0.5) - 0.5) / fwidth(c);     // pixels to the nearest tile line
+            float line = 1.0 - clamp(min(gd.x, gd.y) / 1.5, 0.0, 1.0);
+            float fade = 1.0 - smoothstep(4.0, 11.0, length(wp - aimAt));
+            gl_FragColor = vec4(1.0, 0.96, 0.82, (0.75 * line + 0.05) * fade);
+          }` });
+      this.grid = new THREE.Mesh(new THREE.PlaneGeometry(26, 26), m); this.grid.rotation.x = -Math.PI / 2; this.grid.renderOrder = 2; this.scene.add(this.grid);
+      this.footMark = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.35, depthWrite: false }));
+      this.footMark.rotation.x = -Math.PI / 2; this.scene.add(this.footMark);
+    }
+    this.grid.visible = !!on; this.footMark.visible = !!(on && foot);
+    if (!on) return;
+    this.grid.position.set(2 * Math.round(x / 2), y + 0.03, 2 * Math.round(z / 2)); this.grid.material.uniforms.aimAt.value.set(x, z);
+    if (foot) { const [x0, z0, x1, z1] = foot; this.footMark.position.set((x0 + x1) / 2, y + 0.04, (z0 + z1) / 2); this.footMark.scale.set(x1 - x0, z1 - z0, 1); this.footMark.material.color.setHex(valid ? 0x5ee06a : 0xe0503a); }
   }
   setGhost(kind, cells, valid, rot, wallDir, top = 0) {
     if (this.ghostKind !== kind) {
@@ -603,9 +638,15 @@ export class Scene {
         const g = makeTrap(e.trap.kind);
         this.placeTrapModel(g, e.trap.kind, e.trap.cells, e.trap.rot, e.trap.wallDir, e.trap.y);
         g.userData.id = e.trap.id; g.userData.kind = e.trap.kind; g.userData.anim = 0;
+        // A ceiling trap marks the floor tiles it hits (otherwise you can't tell what it covers).
+        if (TRAPS[e.trap.kind].surface === 'ceiling') {
+          const t = e.trap, w = t.x1 - t.x0, d = t.z1 - t.z0, y = 0.03;
+          const mark = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(t.x0 + 0.05, y, t.z0 + 0.05), new THREE.Vector3(t.x1 - 0.05, y, t.z0 + 0.05), new THREE.Vector3(t.x1 - 0.05, y, t.z1 - 0.05), new THREE.Vector3(t.x0 + 0.05, y, t.z1 - 0.05)]), new THREE.LineBasicMaterial({ color: 0xffd060, transparent: true, opacity: 0.55 }));
+          this.scene.add(mark); g.userData.floorMark = mark; void w; void d;
+        }
         this.scene.add(g); this.trapMeshes.set(e.trap.id, g); break;
       }
-      case 'trapRemove': { const g = trap(e.id); if (g) { this.spawnParticles(g.position.x, 0.4, g.position.z, 0xc4a46a, 10); this.scene.remove(g); for (const b of g.userData.beams || []) this.scene.remove(b); this.trapMeshes.delete(e.id); } break; }
+      case 'trapRemove': { const g = trap(e.id); if (g) { this.spawnParticles(g.position.x, 0.4, g.position.z, 0xc4a46a, 10); this.scene.remove(g); for (const b of g.userData.beams || []) this.scene.remove(b); if (g.userData.floorMark) this.scene.remove(g.userData.floorMark); this.trapMeshes.delete(e.id); } break; }
       case 'snap': case 'flip': case 'punch': case 'roll': case 'hypno': { const g = trap(e.id); if (g) g.userData.anim = 1; if (e.t === 'roll' && g) this.spawnParticles(g.position.x, 0.2, g.position.z, 0xd8c8a8, 12, 3); break; }
       case 'sizzle': { const g = trap(e.id); if (g) { g.userData.anim = 1; this.spawnParticles(g.position.x, 0.25, g.position.z, 0xff8a30, 10, 2.5, 0.06); } break; }
       case 'chill': { const g = trap(e.id); if (g) { g.userData.anim = 1; this.spawnParticles(g.position.x, 0.3, g.position.z, 0xcfefff, 10, 2, 0.06); } break; }
@@ -761,7 +802,7 @@ export class Scene {
     return { point: p.clone(), normal: n, surface, cell, wallDir };
   }
 
-  zoom(delta) { if (this.camDist != null) this.camDist = Math.max(2.5, Math.min(10, this.camDist + delta)); }
+  zoom(delta) { if (this.camDist != null) this.camDist = Math.max(1.4, Math.min(6, this.camDist + delta)); }   // wheel: in to whisker-close, out to a wider look
 
   render(dt, camYaw, camPitch, localId) {
     this.localId = localId;
@@ -992,15 +1033,19 @@ export class Scene {
       }
     }
 
-    // ----- third-person camera: over the right shoulder; mouse wheel zooms -----
+    // ----- third-person camera: low and close, at a cat's eye level (v0.26) -----
+    // Why: the old camera sat 1.6 m back and well above the cat, so you saw the world the
+    // way a person does and it all looked normal-sized. Down here, 50–70 cm behind and
+    // just above the cat's head, the walls, table legs and people tower over you.
+    // The cat is centred, just below the crosshair (no shoulder offset).
     const me = this.localCat;
     if (me) {
-      if (this.camDist == null) this.camDist = me.kind === 'puddin' ? 6.5 : 5.5;
+      if (this.camDist == null) this.camDist = me.kind === 'puddin' ? 2.8 : 2.3;
       const p = me.mesh.position, catH = me.kind === 'puddin' ? 1.25 : 0.95;
-      const target = new THREE.Vector3(p.x, p.y + catH * 1.4, p.z);
+      const target = new THREE.Vector3(p.x, p.y + catH * 1.25, p.z);
       const back = new THREE.Vector3(-Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), -Math.cos(camYaw) * Math.cos(camPitch));
       const right = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));
-      const shoulder = 0.9;
+      const shoulder = 0;
       let d = this.camDist;
       for (let s = 0.4; s <= this.camDist; s += 0.2) {
         const q = target.clone().addScaledVector(back, s).addScaledVector(right, shoulder * Math.min(1, s / 2));
@@ -1011,7 +1056,7 @@ export class Scene {
       if (this.shake > 0) { this.shake = Math.max(0, this.shake - dt); const a = this.shake * 0.35; this.camera.position.x += (Math.random() - 0.5) * a; this.camera.position.y += (Math.random() - 0.5) * a; }
       this.camera.lookAt(target.clone().addScaledVector(back, -14).addScaledVector(right, sh));
       // Fade the cat when the camera is squeezed right up against it.
-      const close = d < 1.6;
+      const close = d < 1.0;
       if (me.close !== close) { me.close = close; me.mesh.userData.body.traverse(o => { if (o.isMesh && o.material !== OUTLINE) { o.material = o.material.clone(); o.material.transparent = close; o.material.opacity = close ? 0.35 : 1; } }); }
     }
     this.renderer.render(this.scene, this.camera);

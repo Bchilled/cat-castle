@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.26.0 — 2026-11-08
+The trap grid, like Orcs Must Die, and every map rebuilt on it.
+- **Trap grid.** One tile is 2×2 units (60 cm). Every trap snaps to whole tiles, and while you hold a trap the grid shows on the floor round the crosshair.
+  - A Poison Box is one tile, like most traps.
+  - Rolling Pin, Frayed Cord and Dropping Pans are 2 by 1 tiles. The Cheese Grater is 2 tiles of wall.
+  - Sticky Jam, the Chandelier and the hanging traps that cover an area (Bug Zapper, Leaky Bucket, Salt Shaker, Flypaper, Honey Drip, Soap Bubbles) are 2 by 2.
+  - Floor traps can go on the tile row right at the mouse hole (not a Poison Box).
+- **Ceiling traps hit the tiles under them**, nothing outside. While you hold one, those floor tiles light up green or red. Placed ones keep a yellow outline on the floor.
+- **Maps on the grid.** Every wall sits on tile lines. Lanes and doorways are a whole number of tiles wide, mostly 4, so a few Poison Boxes close one:
+  - Castle Entrance: the gate, bridge, colonnade, guard passage and east lane are 4 tiles wide. The forest roads are 4 tiles and run straight. An armoury and a barracks close the north yard into the three lanes.
+  - Market: alleys of 5, 4 and 5 tiles.
+  - Stables: the aisle is 5 tiles, with three 3-tile doorways to the yard. A paddock wall crosses the yard with two 4-tile gaps.
+  - Cellar: four 4-tile corridors between rack stacks, and a 10-tile cheese hall in the middle.
+  - Kitchen: three back rooms (scullery, larder, bakehouse), one per hole, each with a 4-tile doorway into the main kitchen. Real-size worktops (1.2 m deep) and a long kitchen table replace the giant counters and island.
+  - Servants' Passages were already 3 tiles wide; the exit hole moved onto the grid.
+- **One route per hole**, the path of least resistance. Packs no longer split across lanes, so the arrows on the floor show exactly where the mice go.
+- **Camera** lower and closer, straight behind the cat so the cat and the crosshair line up. Field of view 75.
+- **Music is off** by default. Turn it up in the pause screen if you want it.
+- Real sizes: the bucket (now 30 cm across) and the guard's helmet in the entrance were as big as a table.
+- Fixed: a mouse on the line between two Glue Traps could be passed back and forth forever.
+- `src/sim/map.js` grid notes (5–7), road width (35), entrance (58–103), market (116–129), stables (142–158), cellar (172–179), passages hole (201), kitchen (212–233), food on tops, crates, long runs, shelves, barrels (243–283); `src/sim/sim.js` LANE_SPLIT and TILE (158–159), chooseVia and routes (447–491), canPlace grid and hole row (515–533), glue release (1834–1837), ceiling traps hit their tiles (2337–2375, 2413, 2430, 2535 and the rest of stepTraps); `src/config.js` VERSION (8), trap sizes (330–369); `src/main.js` field of view (283–285), snapping to tiles (344–355), grid while holding a trap (493–498); `src/render/scene.js` model sizes (25–28), the grid and floor marks (486–516), camera (641–649, 805), ceiling trap floor outlines (1036–1059); `src/audio/sfx.js` music off by default (10–15, 119); `src/ui/hud.js` tile count (111); `README.md` (42–47); `ROADMAP.md` (12).
+
+Tests: 260 checks, all passing (one route per entrance on every map, every pack on it; traps only on whole tiles; the maps' new lanes, doorways, worktops and table). The balance bot (starter traps, Puddin, Normal) wins 5 of 6 maps; the stables fall on the last boss.
+
 ## 0.25.0 — 2026-11-08
 Five more traps with new tricks (39 in all). Unlock them in the shop.
 - **Firecracker** (floor, 60 Paw Points, 8 paw prints). A one-shot banger. When three mice (or one big one) step near it, the fuse fizzes for 0.6 s, then it goes off: 70 fire damage in a 3-unit ring, and small mice are blown outward. A new one is set in 20 s.

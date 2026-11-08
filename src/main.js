@@ -280,7 +280,9 @@ function start(mode, co = null) {
   document.getElementById('combos').innerHTML = '<b>Element combos</b><br>' + Object.values(COMBOS).map(t => `<b>${t.split(':')[0]}</b>:${t.split(':').slice(1).join(':')}`).join('<br>');
   document.getElementById('quit').onclick = () => relaunch('');
   // Look settings (saved): mouse sensitivity, invert up/down, field of view.
-  const look = { sens: 1, invert: false, fov: 65, ...load('catcastle.look', {}) };
+  // Wider field of view by default (v0.26: 75): the low camera needs it to take in how tall things are.
+  const look = { sens: 1, invert: false, fov: 75, ...load('catcastle.look', {}) };
+  if (!look.v2) { look.fov = 75; look.v2 = true; }
   const applyLook = () => { scene.camera.fov = look.fov; scene.camera.updateProjectionMatrix(); save('catcastle.look', look); };
   const sensEl = document.getElementById('look-sens'), fovEl = document.getElementById('look-fov'), invEl = document.getElementById('look-invert');
   sensEl.value = look.sens; fovEl.value = look.fov; invEl.checked = look.invert;
@@ -339,23 +341,18 @@ function start(mode, co = null) {
     const top = aim.surface === 'top' && def.surface === 'floor';
     if (aim.surface !== def.surface && !top) return { ok: false, cells: aim.cell >= 0 && aim.surface !== 'none' ? sim.footprint(selected, aim.cell % W, (aim.cell / W) | 0, rot, aim.wallDir) : null, ax: 0, az: 0, wallDir: aim.wallDir };
     let [w, d] = def.size; if (def.surface !== 'wall' && rot % 2) [w, d] = [d, w];
-    // Traps snap to half-tiles (2 cells). If that spot clips a wall, try nudging one cell
-    // so a trap still fits snug against walls that aren't on the half-tile grid.
-    const half = (v) => 2 * Math.round(v / 2);
+    // The trap grid (like Orcs Must Die): traps snap to whole 4x4-cell tiles, the tile(s)
+    // under the crosshair. Wall traps snap along the wall.
+    const tile = (v, span) => 4 * Math.round((v - span / 2) / 4);
     let ax, az;
     if (def.surface === 'wall') {
       const alongZ = aim.wallDir === 0 || aim.wallDir === 1;
-      ax = alongZ ? aim.cell % W : half(aim.point.x / CELL - w / 2);
-      az = alongZ ? half(aim.point.z / CELL - w / 2) : (aim.cell / W) | 0;
+      ax = alongZ ? aim.cell % W : tile(aim.point.x / CELL, w);
+      az = alongZ ? tile(aim.point.z / CELL, w) : (aim.cell / W) | 0;
     } else {
-      ax = half(aim.point.x / CELL - w / 2); az = half(aim.point.z / CELL - d / 2);
+      ax = tile(aim.point.x / CELL, w); az = tile(aim.point.z / CELL, d);
     }
-    let res = sim.canPlace(selected, ax, az, rot, aim.wallDir, top);
-    if (res !== true) {
-      const along = def.surface === 'wall' ? ((aim.wallDir === 0 || aim.wallDir === 1) ? [[0, -1], [0, 1]] : [[-1, 0], [1, 0]])
-        : [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]];
-      for (const [ox, oz] of along) { if (sim.canPlace(selected, ax + ox, az + oz, rot, aim.wallDir, top) === true) { ax += ox; az += oz; res = true; break; } }
-    }
+    const res = sim.canPlace(selected, ax, az, rot, aim.wallDir, top);
     const cells = sim.footprint(selected, ax, az, rot, aim.wallDir);
     return { ok: res === true && sim.sardines >= def.cost, cells, ax, az, wallDir: aim.wallDir, top, y: top ? sim.topHeight(cells[0] >= 0 ? cells[0] : aim.cell) : 0 };
   }
@@ -493,6 +490,12 @@ function start(mode, co = null) {
     if (!ended) sfx.setMusic(sim.phase === 'wave' ? (sim.mice.some(m => MICE[m.type].boss) ? 'boss' : 'wave') : 'build');
     const p = placement();
     scene.setGhost(selected, p ? p.cells : null, p ? p.ok : false, rot, p ? p.wallDir : -1, p ? p.y : 0);
+    // The trap grid while holding a trap; ceiling traps also light the floor tiles they'd hit.
+    if (selected && aim && aim.point) {
+      const good = p && p.cells ? p.cells.filter(i => i >= 0) : [], ceil = TRAPS[selected].surface === 'ceiling';
+      const foot = ceil && good.length ? (() => { const xs = good.map(i => i % W), zs = good.map(i => (i / W) | 0); return [Math.min(...xs) * CELL, Math.min(...zs) * CELL, (Math.max(...xs) + 1) * CELL, (Math.max(...zs) + 1) * CELL]; })() : null;
+      scene.setGrid(true, aim.point.x, aim.point.z, p && p.top ? p.y : ceil ? 0 : (aim.surface === 'floor' ? aim.point.y : 0), foot, p && p.ok);
+    } else scene.setGrid(false);
     hud.update(dt, sim.hud(LOCAL_ID), selected, p ? p.ok : true);
     // Tips: how far you've walked, what you've placed, whether you've sniffed yet.
     if (me2 && !paused) { if (coachSeen.at) coachSeen.moved += Math.hypot(me2.x - coachSeen.at[0], me2.z - coachSeen.at[1]); coachSeen.at = [me2.x, me2.z]; }

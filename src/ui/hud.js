@@ -108,7 +108,7 @@ export class Hud {
     // Trap info card while a trap is in hand.
     if (sel) {
       const d = TRAPS[sel];
-      $('trapinfo').innerHTML = `<b>${d.name}</b> ${elTag(d.el)} <span class="cost">${d.cost}</span><small>${SURFACE[d.surface]} · ${d.size[0] / 4}×${Math.max(1, d.size[1] / 4)} tile${d.surface === 'wall' ? ' of wall' : ''}</small><p>${d.desc}</p>`;
+      $('trapinfo').innerHTML = `<b>${d.name}</b> ${elTag(d.el)} <span class="cost">${d.cost}</span><small>${SURFACE[d.surface]} · ${d.size[0] / 4}×${Math.max(1, d.size[1] / 4)} tile${d.size[0] * Math.max(4, d.size[1]) > 16 ? 's' : ''}${d.surface === 'wall' ? ' of wall' : ''}</small><p>${d.desc}</p>`;
     }
     $('trapinfo').style.display = sel ? '' : 'none';
     // Trap bar.

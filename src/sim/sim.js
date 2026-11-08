@@ -155,6 +155,8 @@ const BARREL_R = 1.0, BARREL_SPEED = 8, BARREL_FRICTION = 2.2;                  
 // Siege mice (v0.23) lob rocks at traps along their route: Poison Boxes take damage,
 // anything else jams for a while.
 const SIEGE_RANGE = 9, SIEGE_EVERY = 7, SIEGE_AIM = 1.0, SIEGE_DMG = 60, SIEGE_JAM = 5;
+const LANE_SPLIT = false;   // packs split across the map's lanes (off: one cheapest route per hole)
+const TILE = 4;   // trap grid: one tile = 4x4 cells (2 x 2 units, 60 cm)
 const STALL_HITS = 6, STALL_FALL_SECS = 0.45, STALL_CRUSH = 150, STALL_HP = 260, STALL_PILE_H = 0.9;
 // A shut door: mice wait at it rather than turning round, unless the way round is shorter
 // than this wait (per cell; doors are 2 cells thick). Without it, slow mice flip-flopped
@@ -442,7 +444,11 @@ export class Sim {
     }
     return sum * 4;
   }
+  // Path of least resistance (v0.26): every pack takes the one cheapest route from its hole.
+  // No spreading packs across lanes; the route only changes when what you build changes the
+  // costs. (The old lane-splitting is kept below, switched off, in case it's wanted again.)
   chooseVia(door) {
+    if (!LANE_SPLIT) return -1;
     this.routes();                                   // makes sure each lane's route is traced (cached)
     const costs = VIAS.map((_, k) => this.viaCost(k, door) + this.laneDanger(door, k));
     const direct = this.flow[this.spawnCells[door % this.spawnCells.length]] + this.laneDanger(door, -1);
@@ -480,9 +486,9 @@ export class Sim {
     const out = []; this.traces = new Map();
     this.spawnCells.forEach((start, door) => {
       const costs = VIAS.map((_, k) => this.viaCost(k, door)), min = Math.min(...costs);
-      // Direct route first (the one route() returns), then every lane packs may take.
+      // Direct route first (the one route() returns), then (only if lanes split) every lane packs may take.
       const d = trace(start, -1); out.push(d); this.traces.set(door + ':-1', d);
-      costs.forEach((c, k) => { if (c < Infinity && c <= min * 1.6 + 30) { const t = trace(start, k); out.push(t); this.traces.set(door + ':' + k, t); } });
+      if (LANE_SPLIT) costs.forEach((c, k) => { if (c < Infinity && c <= min * 1.6 + 30) { const t = trace(start, k); out.push(t); this.traces.set(door + ':' + k, t); } });
     });
     this.routeCache = out;
     return out;
@@ -506,6 +512,10 @@ export class Sim {
   canPlace(kind, ax, az, rot = 0, wallDir = -1, top = false) {
     const def = TRAPS[kind]; if (!def) return false;
     if (def.topOnly && !top) return false;                     // Knife Block: tables and counters only
+    // The trap grid (v0.26, like Orcs Must Die): every trap sits on whole 4x4-cell tiles.
+    // Wall traps line up along the wall; their other coordinate is just the cell by the wall.
+    if (def.surface === 'wall') { if ((wallDir === 0 || wallDir === 1 ? az : ax) % TILE) return false; }
+    else if (ax % TILE || az % TILE) return false;
     const cells = this.footprint(kind, ax, az, rot, wallDir);
     if (top) {
       if (def.surface !== 'floor' || kind === 'bait' || def.noTop) return false;   // a Poison Box on top closes a furniture route; no trapdoors in tables
@@ -517,7 +527,10 @@ export class Sim {
     for (const i of cells) {
       if (i < 0 || this.occ[layer][i] || this.noBuild(i)) return false;
       if (layer === 'floor' && this.barrels.some(b => Math.hypot((i % W + 0.5) * CELL - b.home[0], (((i / W) | 0) + 0.5) * CELL - b.home[1]) < 1.2)) return false;   // a barrel's spot (it comes back each wave)
-      if (!floorish(this.map.type[i]) || this.map.door[i] >= 0) return false;   // not in a doorway that swings shut
+      // Floor traps may cover the strip of the mouse hole itself (the tile row right in front of
+      // it), so the last tile before the hole can be trapped; never a Poison Box there.
+      const holeOk = layer === 'floor' && kind !== 'barricade' && this.map.type[i] === T.HOLE;
+      if ((!floorish(this.map.type[i]) && !holeOk) || this.map.door[i] >= 0) return false;   // not in a doorway that swings shut
       if (layer === 'ceiling' && !this.map.covered[i]) return false;
       if (layer === 'wall') {
         if (wallDir < 0) return false;
@@ -1818,7 +1831,10 @@ export class Sim {
     if (m.holdT > 0) { m.holdT -= DT; [m.x, m.z] = m.holdAt; if (m.holdT <= 0) m.holdBy = 0; return; }
     if (m.jamT > 0) { m.jamT -= DT; m.slowT = Math.max(m.slowT, 0.1); if (m.jamAnts) this.damageMouse(m, 3 * DT, 'poison'); if (m.dead) return; }   // Sticky Jam (Ant Trail: ants)
     if (m.stunT > 0) { m.stunT -= DT; if (m.stunT <= 0) m.asleep = false; return; }
-    if (m.state === 'stuck') { m.stuckT -= DT; if (m.stuckT <= 0) m.state = 'walk'; return; }
+    if (m.glueFreeT > 0) m.glueFreeT -= DT;
+    // Coming unstuck: a moment before any glue can grab it again, so a mouse standing on the
+    // line between two Glue Traps (both reach it) walks off instead of being passed back and forth.
+    if (m.state === 'stuck') { m.stuckT -= DT; if (m.stuckT <= 0) { m.state = 'walk'; m.glueFreeT = 0.3; } return; }
 
     const i = cellOf(m.x, m.z);
     if (i >= 0 && this.map.type[i] === T.HOLE) {
@@ -2318,7 +2334,8 @@ export class Sim {
       if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) { tr.charges = tr.p.nibbles; tr.cd = 0; } }
       this.baits.push(tr);
     }
-    const inRect = (b, tr, pad = 0.1) => b.x > tr.x0 - pad && b.x < tr.x1 + pad && b.z > tr.z0 - pad && b.z < tr.z1 + pad;
+    // pad: a mouse on the line between two tiles is on both (its body overlaps them).
+    const inRect = (b, tr, pad = 0.12) => b.x > tr.x0 - pad && b.x < tr.x1 + pad && b.z > tr.z0 - pad && b.z < tr.z1 + pad;
     // A floor trap hits mice standing at its level: the floor, or the furniture top it sits on.
     let lvl = 0;
     const live = (m) => !m.dead && (m.state === 'walk' || m.state === 'stuck') && Math.abs(m.y - lvl) < 0.35;
@@ -2330,7 +2347,8 @@ export class Sim {
     };
     const centre = (tr) => [(tr.x0 + tr.x1) / 2, (tr.z0 + tr.z1) / 2];
     // Ceiling traps reach the floor in a circle under them.
-    const below = (tr, r) => { const [cx, cz] = centre(tr); return this.nearMice(cx, cz, r + 0.5).filter(m => !m.dead && m.y < 1 && Math.hypot(m.x - cx, m.z - cz) < r); };
+    // Ceiling traps hit the tile(s) right under them (the grid, like Orcs Must Die), shown on the floor.
+    const below = (tr) => { const [cx, cz] = centre(tr); return this.nearMice(cx, cz, Math.max(tr.x1 - tr.x0, tr.z1 - tr.z0)).filter(m => !m.dead && m.y < 1 && inRect(m, tr, 0.15)); };
     const reset = (tr, secs) => { tr.cd = tr.cdMax = secs * baseMods.trapCd; };
     const bleed = (m, n, max) => { for (let k = 0; k < n; k++) { if (m.bleed.length < max) m.bleed.push(CAT.bleedSeconds); else m.bleed[0] = CAT.bleedSeconds; } };
     for (const tr of this.traps.values()) {
@@ -2343,18 +2361,18 @@ export class Sim {
       switch (tr.kind) {
         case 'barricade':
           // Fumes special: poisons mice walking past (not on it — that's chewing).
-          if (P.fumes && (tr.tickT -= DT) <= 0) { tr.tickT = 1; for (const m of this.mice) if (live(m) && inRect(m, tr, 1.2) && !inRect(m, tr, 0)) this.damageMouse(m, 2, 'trap', false, 'poison'); }
+          if (P.fumes && (tr.tickT -= DT) <= 0) { tr.tickT = 1; for (const m of this.mice) if (live(m) && inRect(m, tr, 1.2) && !inRect(m, tr, 0.12)) this.damageMouse(m, 2, 'trap', false, 'poison'); }
           break;
         case 'mousetrap': {
           if (tr.cd > 0) break;
           // Like a spike trap: snaps everything standing on the tile.
-          const vs = this.mice.filter(m => live(m) && inRect(m, tr, 0)).slice(0, P.maxHits);
+          const vs = this.mice.filter(m => live(m) && inRect(m, tr, 0.12)).slice(0, P.maxHits);
           if (!vs.length) break;
           reset(tr, P.cooldown); this.emit({ t: 'snap', id: tr.id });
           for (const m of vs) { if (P.bleed) bleed(m, P.bleed, mods.bleedMax); this.damageMouse(m, dmg, 'trap', false, el); }
           if (P.chain) {   // Chain Snap: the nearest mice just off the tile get it too
             const [cx, cz] = centre(tr);
-            const near = this.nearMice(cx, cz, 3).filter(m => live(m) && !inRect(m, tr, 0) && Math.hypot(m.x - cx, m.z - cz) < 2.6).sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz)).slice(0, P.chain);
+            const near = this.nearMice(cx, cz, 3).filter(m => live(m) && !inRect(m, tr, 0.12) && Math.hypot(m.x - cx, m.z - cz) < 2.6).sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz)).slice(0, P.chain);
             for (const m of near) this.damageMouse(m, dmg * 0.5, 'trap', false, el);
           }
           break;
@@ -2392,7 +2410,7 @@ export class Sim {
         case 'zapper': {
           if (tr.cd > 0) break;
           const [cx, cz] = centre(tr);
-          const vs = this.mice.filter(m => !m.dead && Math.hypot(m.x - cx, m.z - cz) < P.radius && m.y < 1);
+          const vs = this.mice.filter(m => !m.dead && m.y < 1 && inRect(m, tr, 0.15));   // the tile under it
           const bs = this.birds.filter(b => !b.dead && b.y < 4 && Math.hypot(b.x - cx, b.z - cz) < P.radius);   // bug zappers fry low-flying birds too
           if (!vs.length && !bs.length) break;
           reset(tr, P.cooldown); this.emit({ t: 'zap', id: tr.id, hits: vs.slice(0, 6).map(m => [m.x, m.z]) });
@@ -2409,7 +2427,7 @@ export class Sim {
         case 'trapdoor': {
           // Opens when a mouse that fits steps on it, stays open a moment, and drops up to
           // `swallow` mice down the chute (gone: no trinket, splitters don't split).
-          const fits = (m) => { const d = MICE[m.type]; return live(m) && inRect(m, tr, 0) && !d.boss && !d.ghost && (P.big || d.size < 0.9); };
+          const fits = (m) => { const d = MICE[m.type]; return live(m) && inRect(m, tr, 0.12) && !d.boss && !d.ghost && (P.big || d.size < 0.9); };
           if (!(tr.openT > 0)) {
             if (tr.cd > 0 || !this.nearMice(...centre(tr), 2).some(fits)) break;
             reset(tr, P.cooldown); tr.openT = 0.6; tr.left = P.swallow;
@@ -2514,7 +2532,7 @@ export class Sim {
         // ---- new in 0.24 ----
         case 'stickyjam': {
           // Wading through jam: slowed, and jammy for a while (they cling together; see stepMouse).
-          for (const m of this.nearMice(...centre(tr), 2)) if (live(m) && inRect(m, tr, 0)) {
+          for (const m of this.nearMice(...centre(tr), 2)) if (live(m) && inRect(m, tr, 0.12)) {
             if (!(m.jamT > 0)) this.emit({ t: 'jammed', x: m.x, z: m.z });
             m.jamT = P.jamSecs; m.jamVuln = !!P.vuln; m.jamAnts = !!P.ants; m.slowT = Math.max(m.slowT, 0.3);
           }
@@ -2524,7 +2542,7 @@ export class Sim {
           // Jabs whatever stands on it every prickSecs: a little damage and another bleed each time.
           if ((tr.tickT -= DT) <= 0) {
             tr.tickT = P.prickSecs; let n = 0;
-            for (const m of this.nearMice(...centre(tr), 2)) if (live(m) && inRect(m, tr, 0)) { bleed(m, P.stacks, mods.bleedMax); this.damageMouse(m, dmg, 'trap', false, el); n++; }
+            for (const m of this.nearMice(...centre(tr), 2)) if (live(m) && inRect(m, tr, 0.12)) { bleed(m, P.stacks, mods.bleedMax); this.damageMouse(m, dmg, 'trap', false, el); n++; }
             if (n) this.emit({ t: 'prick', id: tr.id, x: (tr.x0 + tr.x1) / 2, z: (tr.z0 + tr.z1) / 2 });
           }
           // Needle Burst: a ring of pins every few seconds.
@@ -2538,7 +2556,7 @@ export class Sim {
           // Lobs the first mouse on it `range` units the way the arrow points, in a high arc;
           // where it lands it splats whatever is there (see the landing in stepMouse).
           if (tr.cd > 0) break;
-          const v = this.nearMice(...centre(tr), 2).find(m => live(m) && inRect(m, tr, 0) && !MICE[m.type].boss && (P.big || MICE[m.type].size < 0.9));
+          const v = this.nearMice(...centre(tr), 2).find(m => live(m) && inRect(m, tr, 0.12) && !MICE[m.type].boss && (P.big || MICE[m.type].size < 0.9));
           if (!v) break;
           reset(tr, P.cooldown);
           const [dx, dz] = DIRS4[ROT_DIR[tr.rot % 4]], vy = 10, tf = 2 * vy / GRAVITY, vh = P.range / tf;
@@ -2585,7 +2603,7 @@ export class Sim {
           const [cx, cz] = centre(tr);
           tr.runners = (tr.runners || []).filter(id => { const m = this.mice.find(x => x.id === id); return m && !m.dead && m.holdT > 0 && m.holdBy === tr.id; });
           if (tr.cd <= 0 && tr.runners.length < (P.runners || 1)) {
-            const m = this.nearMice(cx, cz, 2).find(x => live(x) && inRect(x, tr, 0) && !MICE[x.type].boss && MICE[x.type].size < 0.9 && !(x.holdT > 0) && !tr.runners.includes(x.id));
+            const m = this.nearMice(cx, cz, 2).find(x => live(x) && inRect(x, tr, 0.12) && !MICE[x.type].boss && MICE[x.type].size < 0.9 && !(x.holdT > 0) && !tr.runners.includes(x.id));
             if (m) { m.holdT = P.hold; m.holdBy = tr.id; m.holdAt = [cx, cz]; tr.runners.push(m.id); if (tr.runners.length >= (P.runners || 1)) reset(tr, P.cooldown + P.hold); this.emit({ t: 'wheelOn', id: tr.id, x: cx, z: cz }); }
           }
           tr.active = tr.runners.length > 0;
@@ -2598,7 +2616,7 @@ export class Sim {
           // Jolts everything on it twice a second (Puddle Cord: soaks them first, so it chains).
           if ((tr.tickT -= DT) > 0) break;
           tr.tickT = 0.5; let n = 0;
-          for (const m of this.nearMice(...centre(tr), 2.5)) if (live(m) && inRect(m, tr, 0)) {
+          for (const m of this.nearMice(...centre(tr), 2.5)) if (live(m) && inRect(m, tr, 0.12)) {
             if (P.wet) m.wetT = Math.max(m.wetT || 0, 1);
             this.damageMouse(m, dmg, 'trap', false, el); n++;
           }
@@ -2639,7 +2657,7 @@ export class Sim {
           }
           if (tr.charges <= 0) { tr.rechargeT -= DT; tr.cd = Math.max(0, tr.rechargeT); if (tr.rechargeT <= 0) tr.charges = P.charges; break; }
           for (const m of this.mice) {
-            if (m.dead || m.state !== 'walk' || m.glueId === tr.id || !inRect(m, tr, 0)) continue;
+            if (m.dead || m.state !== 'walk' || m.glueId === tr.id || m.glueFreeT > 0 || !inRect(m, tr, 0.12)) continue;
             const d = MICE[m.type];
             if (tr.kind === 'flypaper' && (d.boss || (d.size > 0.7 && !(P.hold > TRAPS.flypaper.hold * 1.5)))) continue;   // strips only gum up smallish mice (Extra Sticky: bigger ones too)
             const secs = P.stickSecs * (d.boss ? (P.stickSecs > TRAPS.gluepad.stickSecs * 1.5 ? 0.8 : 0.4) : 1);
@@ -2651,7 +2669,7 @@ export class Sim {
         }
         case 'tacks':
           for (const m of this.mice) {
-            if (!live(m) || !inRect(m, tr, 0)) continue;
+            if (!live(m) || !inRect(m, tr, 0.12)) continue;
             if (P.caltrops) m.slowT = Math.max(m.slowT, 0.4);
             m.tackT -= DT;
             if (m.tackT <= 0) {
@@ -2691,7 +2709,7 @@ export class Sim {
         }
         case 'icetray': {
           if (tr.cd > 0) break;
-          const vs = this.mice.filter(m => live(m) && inRect(m, tr, 0));
+          const vs = this.mice.filter(m => live(m) && inRect(m, tr, 0.12));
           if (!vs.length) break;
           reset(tr, P.cooldown); this.emit({ t: 'chill', id: tr.id });
           for (const m of vs) {
@@ -2704,14 +2722,14 @@ export class Sim {
         case 'oilslick':
           // Oils every mouse crossing; some slip and go down for a moment.
           for (const m of this.mice) {
-            if (!live(m) || m.state !== 'walk' || !inRect(m, tr, 0)) continue;
+            if (!live(m) || m.state !== 'walk' || !inRect(m, tr, 0.12)) continue;
             m.oilT = Math.max(m.oilT || 0, P.oilSecs);
             if (!MICE[m.type].boss && this.rng() < P.slip * DT) { m.stunT = m.stunMax = 0.6; this.emit({ t: 'slip', x: m.x, z: m.z }); }
           }
           break;
         case 'rollingpin': {
           if (tr.cd > 0) break;
-          const vs = this.mice.filter(m => live(m) && inRect(m, tr, 0));
+          const vs = this.mice.filter(m => live(m) && inRect(m, tr, 0.12));
           if (!vs.length) break;
           reset(tr, P.cooldown); this.emit({ t: 'roll', id: tr.id });
           for (const m of vs) { if (P.flatten) m.dirtyT = Math.max(m.dirtyT || 0, 0.1); this.damageMouse(m, dmg, 'trap', false, el); }   // Marble Pin: always knocks flat
