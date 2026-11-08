@@ -113,7 +113,7 @@ const CAT_KEYS = ['x', 'y', 'z', 'vx', 'vy', 'vz', 'yaw', 'pitch', 'hp', 'energy
 // For the guest's own cat these stay as its local prediction (the host's copy goes to c.srv).
 const PREDICTED = new Set(['x', 'y', 'z', 'vx', 'vy', 'vz', 'yaw', 'pitch', 'onGround', 'pouncing', 'striking', 'dashing', 'charge', 'turn']);
 // Mouse flags packed into one number.
-const F = { asleep: 4, frozen: 8, burn: 16, wet: 32, oil: 64, dirty: 128, confuse: 256, slow: 512, climbing: 1024, flash: 2048, gorged: 4096 };
+const F = { asleep: 4, frozen: 8, burn: 16, wet: 32, oil: 64, dirty: 128, confuse: 256, slow: 512, climbing: 1024, flash: 2048, gorged: 4096, bubble: 8192, jam: 16384 };
 const STATES = ['walk', 'air', 'stuck', 'stranded'];
 
 export function snapshot(sim) {
@@ -122,7 +122,7 @@ export function snapshot(sim) {
   for (const m of sim.mice) {
     if (m.dead) continue;
     const fl = Math.max(0, STATES.indexOf(m.state)) | (m.asleep ? F.asleep : 0) | (m.frozen ? F.frozen : 0) | (m.burnT > 0 ? F.burn : 0) | (m.wetT > 0 ? F.wet : 0) | (m.oilT > 0 ? F.oil : 0)
-      | (m.dirtyT > 0 ? F.dirty : 0) | (m.confuseT > 0 ? F.confuse : 0) | (m.slowT > 0 ? F.slow : 0) | (m.climbing ? F.climbing : 0) | (m.flash > 0 ? F.flash : 0) | (m.gorged ? F.gorged : 0);
+      | (m.dirtyT > 0 ? F.dirty : 0) | (m.confuseT > 0 ? F.confuse : 0) | (m.slowT > 0 ? F.slow : 0) | (m.climbing ? F.climbing : 0) | (m.flash > 0 ? F.flash : 0) | (m.gorged ? F.gorged : 0) | (m.bubbleT > 0 ? F.bubble : 0) | (m.jamT > 0 ? F.jam : 0);
     mice.push(m.id, MT.indexOf(m.type), Math.round(m.x * 100), Math.round(m.y * 100), Math.round(m.z * 100), Math.round((m.yaw || 0) * 100),
       Math.round(Math.max(0, m.hp) / m.maxHp * 1000), fl, Math.round(m.stunT > 0 ? m.stunT / (m.stunMax || 1) * 100 : 0), Math.round((m.scale || 1) * 100), Math.round((m.shade || 0) * 100));
   }
@@ -167,7 +167,7 @@ export function applySnapshot(sim, s, localId = null) {
     m.maxHp = 1000; m.hp = s.mice[k + 6]; m.state = STATES[fl & 3]; m.stunMax = 1; m.stunT = s.mice[k + 8] / 100;
     m.scale = s.mice[k + 9] / 100; m.shade = s.mice[k + 10] / 100; m.dead = false;
     m.asleep = !!(fl & F.asleep); m.frozen = !!(fl & F.frozen); m.burnT = fl & F.burn ? 1 : 0; m.wetT = fl & F.wet ? 1 : 0; m.oilT = fl & F.oil ? 1 : 0;
-    m.dirtyT = fl & F.dirty ? 1 : 0; m.confuseT = fl & F.confuse ? 1 : 0; m.slowT = fl & F.slow ? 1 : 0; m.climbing = !!(fl & F.climbing); m.flash = fl & F.flash ? 0.1 : 0; m.gorged = !!(fl & F.gorged);
+    m.dirtyT = fl & F.dirty ? 1 : 0; m.confuseT = fl & F.confuse ? 1 : 0; m.slowT = fl & F.slow ? 1 : 0; m.climbing = !!(fl & F.climbing); m.flash = fl & F.flash ? 0.1 : 0; m.gorged = !!(fl & F.gorged); m.bubbleT = fl & F.bubble ? 1 : 0; m.jamT = fl & F.jam ? 1 : 0;
     out.push(m);
   }
   sim.mice = out;

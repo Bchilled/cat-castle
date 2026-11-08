@@ -21,6 +21,7 @@ const TINT = { stuck: new THREE.Color(0xe0d060), slow: new THREE.Color(0x7a9a3a)
 // Combo colours (rings and sparks where a combo goes off).
 const COMBO_COL = { chain: 0xf0e040, blaze: 0xff5a10, freeze: 0x9ad8ff, spread: 0xc8f0e8, knockdown: 0xd8c8a0, steam: 0xe8eef0 };
 let DECAL_GEO = null;
+const JAM_TINT = new THREE.Color(0x8a1830);
 const BEAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);   // Magnifying Glass sunbeam (scaled per beam)
 
 export class Scene {
@@ -642,6 +643,12 @@ export class Scene {
       case 'catapult': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
       case 'catapultLand': this.spawnParticles(e.x, 0.3, e.z, e.hot ? 0xe86a20 : 0xb8a888, 14, 3.5, 0.09); if (e.hits) this.shake = Math.max(this.shake, 0.15); break;
       case 'pan': for (const [tx, tz] of e.to) { const p = makePan(); p.position.set(e.x, e.y - 0.8, e.z); this.scene.add(p); this.pans.push({ p, from: [e.x, e.y - 0.8, e.z], to: [tx, 0.08, tz], t: 0 }); } break;
+      // New traps (0.25).
+      case 'fuse': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
+      case 'bang': for (let k = 0; k < 30; k++) { const a = Math.random() * 7, r = Math.random() * e.r; this.spawnParticles(e.x + Math.cos(a) * r, 0.3 + Math.random(), e.z + Math.sin(a) * r, Math.random() < 0.5 ? 0xffa030 : 0xe0d0c0, 1, 4, 0.1); } this.shake = Math.max(this.shake, 0.5); break;
+      case 'cordZap': { const g = trap(e.id); if (g) { const v = g.localToWorld(new THREE.Vector3((Math.random() - 0.5) * 2.4, 0.1, 0)); this.spawnParticles(v.x, 0.2, v.z, 0xf0f060, 6, 3, 0.04); } break; }
+      case 'peg': case 'pegFling': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
+      case 'bubbles': for (let k = 0; k < 10 * e.n; k++) this.spawnParticles(e.x + (Math.random() - 0.5) * 3, 0.5 + Math.random() * 2, e.z + (Math.random() - 0.5) * 3, 0xd8f0ff, 1, 0.6, 0.1); break;
       case 'potDrop': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.3, e.z, 0xc8643a, 14, 4, 0.1); this.spawnParticles(e.x, 0.2, e.z, 0x4a3020, 14, 3, 0.07); this.decal(e.x, e.z, 0x4a3020, 1.1); this.shake = Math.max(this.shake, 0.12); break; }
       case 'splashDown': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.4, e.z, 0x6ab0ff, 22, 3.5, 0.07); this.ring(e.x, e.z, e.r, 0x3a7ad8, 0.4, false, true); break; }
       case 'salt': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 8; k++) this.spawnParticles(e.x + (Math.random() - 0.5) * e.r * 1.4, 1.6, e.z + (Math.random() - 0.5) * e.r * 1.4, 0xffffff, 1, 0.3, 0.04); break; }
@@ -817,6 +824,10 @@ export class Scene {
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 12), new THREE.MeshBasicMaterial({ color: 0xe0b030, transparent: true, opacity: 0.6 })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.02; g.add(ring); return g;
     }, (g, t) => { g.position.set(t.x, t.y, t.z); g.children[0].rotation.y += dt; g.scale.setScalar(1 + Math.min(t.amount, 10) * 0.08); });
     this.syncSimple(sim.loot, this.lootMeshes, (l) => makeTrinket(TRINKETS[l.key].tier), (g, l) => { g.position.set(l.x, l.y + Math.sin(now / 250 + l.id) * 0.08, l.z); g.rotation.y += dt * 3; });
+    // Mice floating in Soap Bubbles get a bubble round them.
+    this.bubbleMeshes = this.bubbleMeshes || new Map();
+    this.syncSimple(sim.mice.filter(m => m.bubbleT > 0 && !m.dead), this.bubbleMeshes, () => new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 10), new THREE.MeshLambertMaterial({ color: 0xd8f0ff, transparent: true, opacity: 0.3, depthWrite: false })),
+      (g, m) => { g.position.set(m.x, m.y + 0.25, m.z); g.scale.setScalar(Math.max(0.7, MICE[m.type].size * 1.3)); });
     this.syncSimple(sim.shots, this.shotMeshes, () => outline(new THREE.Mesh(new THREE.DodecahedronGeometry(0.4, 0), mat(0x6f6a62))), (g, s) => { g.position.set(s.x, s.y, s.z); g.rotation.x += dt * 8; });
     // Item effects: the laser dot, flea clouds, squeaky toys.
     this.syncSimple(sim.zones, this.zoneMeshes, (z) => {
@@ -917,6 +928,11 @@ export class Scene {
       if (ud.kind === 'spicejar') ud.jar.rotation.z = -1.1 * Math.min(1, ud.anim * 2);
       // New traps (0.24).
       if (ud.kind === 'pincushion') ud.pins.position.y = 0.12 * ud.anim;
+      // New traps (0.25).
+      if (ud.kind === 'firecracker') { const lit = tr.active, spent = tr.cd > 0 && !lit; ud.body.visible = !spent; ud.scorch.visible = spent; ud.spark.visible = lit; if (lit) ud.spark.scale.setScalar(0.7 + Math.random() * 0.8); }
+      if (ud.kind === 'wheel' && tr.active) ud.wheel.rotation.x -= dt * 9;
+      if (ud.kind === 'peg') ud.jaw.rotation.z += ((tr.active ? 0 : 0.35) - ud.jaw.rotation.z) * Math.min(1, dt * (tr.active ? 30 : 4));
+      if (ud.kind === 'bubbles') ud.pipe.rotation.z = Math.sin(now / 800 + ud.id) * 0.06;
       if (ud.kind === 'catapult') ud.hinge.rotation.x = 1.9 * Math.max(0, Math.min(1, (f - 0.8) / 0.2));   // flips up, then cranks back
       if (ud.kind === 'pans') ud.pans.forEach((p, k) => { p.visible = !(f > 0.25 && k === 1); p.rotation.z = Math.sin(now / 600 + k) * 0.04; });
     }
@@ -1042,6 +1058,7 @@ export class Scene {
       else if (mo.burnT > 0) col.lerp(TINT.burn, 0.35 + Math.sin(now / 50 + mo.id) * 0.15);
       else if (mo.state === 'stuck') col.lerp(TINT.stuck, 0.5);
       else if (mo.wetT > 0) col.lerp(TINT.wet, 0.35);
+      else if (mo.jamT > 0) col.lerp(JAM_TINT, 0.4);   // jammy (Sticky Jam)
       else if (mo.oilT > 0) col.lerp(TINT.oil, 0.5);
       else if (mo.dirtyT > 0) col.lerp(TINT.dirty, 0.45);
       else if (mo.confuseT > 0) col.lerp(TINT.confuse, 0.4 + Math.sin(now / 80) * 0.15);

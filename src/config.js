@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.24.0';
+export const VERSION = '0.25.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -361,20 +361,26 @@ export const TRAPS = {
   pincushion:{ el: 'physical', name: 'Pin Cushion', desc: 'A fat pin cushion sunk in the floor. Pins jab up into anything standing on it, and every jab adds another bleed.', cost: 35, surface: 'floor', size: [4, 4], damage: 3, prickSecs: 0.4, stacks: 1, pathCost: 0 },
   catapult:  { el: 'physics', name: 'Spoon Catapult', desc: 'A spring-loaded spoon. Lobs one mouse 8 units the way the arrow points: it lands on whatever is there and splats them too (or drowns, if there is water).', cost: 70, surface: 'floor', size: [4, 4], cooldown: 2.5, range: 8, launchDamage: 10, splash: 25, splashR: 1.6, pathCost: 0 },
   pans:      { el: 'physics', name: 'Dropping Pans', desc: 'A rack of heavy iron pans. Drops one on the biggest mouse underneath and knocks it flat. Made for bosses.', cost: 75, surface: 'ceiling', size: [4, 4], damage: 90, radius: 2.2, cooldown: 5, pathCost: 0 },
+  // ---- new in 0.25 ----
+  firecracker:{ el: 'fire', name: 'Firecracker', desc: 'A one-shot banger. When a crowd (three mice, or a big one) steps near it, the fuse fizzes and it goes off: fire and blast in a wide ring. Servants set a new one in 20 s.', cost: 60, surface: 'floor', size: [4, 4], damage: 70, radius: 3, cooldown: 20, crowd: 3, pathCost: 0 },
+  wheel:     { el: null, name: 'Hamster Wheel', desc: 'The first mouse onto it gets stuck running in the wheel for 4 s, and while it runs, every trap within 5 resets twice as fast.', cost: 50, surface: 'floor', size: [4, 4], hold: 4, cooldown: 3, power: 2, reach: 5, pathCost: 0 },
+  cord:      { el: 'electric', name: 'Frayed Cord', desc: 'A frayed lamp cord across the floor. Jolts everything on it twice a second; wet mice pass the shock on to their friends.', cost: 30, surface: 'floor', size: [6, 2], damage: 4, pathCost: 0 },
+  peg:       { el: 'physical', name: 'Clothes Peg', desc: 'A giant sprung clothes peg. Clamps the biggest mouse that steps in, even a Fat Rat or a boss, and squeezes it while it is held.', cost: 65, surface: 'floor', size: [4, 4], hold: 2.5, dps: 20, cooldown: 6, pathCost: 0 },
+  bubbles:   { el: 'water', name: 'Soap Bubbles', desc: 'A bubble pipe on the ceiling. Blows bubbles round the mice underneath: they float helplessly for 2 s, out of reach of everything, then drop soaked.', cost: 55, surface: 'ceiling', size: [4, 4], radius: 2, cooldown: 4, float: 2, maxHits: 3, pathCost: 0 },
   glove:     { el: 'physics', name: 'Boxing Glove', desc: "Spring-loaded wall punch. Knocks small mice across the lane, dazes the big ones.",  cost: 70,  surface: 'wall',    size: [4, 1], cooldown: 3, reach: 4, push: 10, damage: 15, bigStun: 1.2, pathCost: 0 },   // OMD push trap
 };
 // Trap bar order = keys 1..8.
 export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove', 'bait',
   'hotplate', 'icetray', 'oilslick', 'rollingpin', 'skull', 'forkdarts', 'bellows', 'candle', 'hypno', 'flowerpot', 'bucket', 'salt', 'flypaper',
   'trapdoor', 'magnifier', 'knifeblock', 'honey', 'cuckoo', 'chandelier', 'kettle', 'spicejar',
-  'stickyjam', 'pincushion', 'catapult', 'pans'];
+  'stickyjam', 'pincushion', 'catapult', 'pans', 'firecracker', 'wheel', 'cord', 'peg', 'bubbles'];
 
 // Trap upgrades, bought in the shop with paw prints (kept between runs).
 // Tier 2: more power (damage/effect x1.25). Tier 3: resets 20% faster. Then pick one of two
 // specials (buy one, the other costs the same; once you own both you can swap freely).
 // A special changes numbers (mul / set) and/or switches on a behaviour flag the sim checks.
 export const UPGRADE = { tier2: 6, tier3: 10, special: 15, unlock: 8, power: 1.25, speed: 0.8 };
-export const POWER_KEYS = ['damage', 'dps', 'maxDps', 'launchDamage', 'poisonDps', 'birdDmg', 'hp', 'swallow', 'puddleSecs', 'jamSecs', 'splash'];   // what tier 2 boosts
+export const POWER_KEYS = ['damage', 'dps', 'maxDps', 'launchDamage', 'poisonDps', 'birdDmg', 'hp', 'swallow', 'puddleSecs', 'jamSecs', 'splash', 'hold'];   // what tier 2 boosts
 export const TIME_KEYS = ['cooldown', 'recharge', 'rampSecs', 'prickSecs'];                                                                 // what tier 3 shortens
 export const SPECIALS = {
   barricade:  { a: { name: 'Fumes', desc: 'Poisons mice walking past within a tile.', set: { fumes: true } }, b: { name: 'Steel Box', desc: 'Double health; mice chew half as fast.', mul: { hp: 2 }, set: { tough: true } } },
@@ -410,6 +416,11 @@ export const SPECIALS = {
   pincushion: { a: { name: 'Hat Pins', desc: 'Two bleeds per jab.', set: { stacks: 2 } }, b: { name: 'Needle Burst', desc: 'Every 6 s it fires pins at every mouse within 2.5.', set: { burst: 6 } } },
   catapult:   { a: { name: 'Ladle', desc: 'Lobs big mice too, and they splash 50% harder.', mul: { splash: 1.5 }, set: { big: true } }, b: { name: 'Soup Spoon', desc: 'Hot soup: the landing sets everything there burning.', set: { hot: true } } },
   pans:       { a: { name: 'Cast Iron', desc: '+60% damage.', mul: { damage: 1.6 } }, b: { name: 'Pan Rack', desc: 'Drops three pans on three mice.', set: { count: 3 } } },
+  firecracker:{ a: { name: 'Cherry Bomb', desc: 'A 50% wider blast.', mul: { radius: 1.5 } }, b: { name: 'String of Crackers', desc: 'Three bangs in a row instead of one (each 60% as hard).', set: { bangs: 3 } } },
+  wheel:      { a: { name: 'Dynamo', desc: 'Nearby traps reset three times as fast, and the runner gets zapped.', set: { power: 3, zap: true } }, b: { name: 'Big Wheel', desc: 'Two runners at once, held 50% longer.', mul: { hold: 1.5 }, set: { runners: 2 } } },
+  cord:       { a: { name: 'Live Wire', desc: 'Twice the shock.', mul: { damage: 2 } }, b: { name: 'Puddle Cord', desc: 'It lies in a puddle: mice on it get wet first, so every jolt chains.', set: { wet: true } } },
+  peg:        { a: { name: 'Bulldog Clip', desc: 'Holds twice as long.', mul: { hold: 2 } }, b: { name: 'Spring Peg', desc: 'Lets go with a fling: back the way it came (not bosses).', set: { fling: true } } },
+  bubbles:    { a: { name: 'Big Bubbles', desc: 'Lifts six at a time, Fat Rats included.', set: { maxHits: 6, big: true } }, b: { name: 'Soap Suds', desc: 'They come down slippery with soap: oiled, so fire makes them blaze.', set: { suds: true } } },
   flypaper:   { a: { name: 'Extra Sticky', desc: 'Holds birds twice as long and catches bigger mice.', mul: { hold: 2, stickSecs: 2 } }, b: { name: 'Wide Strips', desc: '50% wider and twice the charges.', mul: { radius: 1.5, charges: 2 } } },
 };
 // A trap's working numbers for a given upgrade state ({ tier, special }): base numbers,

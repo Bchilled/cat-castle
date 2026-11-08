@@ -588,6 +588,47 @@ export function makeTrap(kind, ghost = false) {
     }
     g.userData.pans = pans;
     lamp(0.85, -0.15, 0);
+  } else if (kind === 'firecracker') {
+    // A bundle of red paper bangers with a fuse; once it's gone off, a scorch mark.
+    const body = new THREE.Group(); add(body); g.userData.body = body;
+    for (const [x, z] of [[0, 0], [0.32, 0.1], [-0.2, 0.28], [0.1, -0.3]]) {
+      body.add(part(cyl(0.16, 0.16, 0.8, 10), 0xc8281e, x, 0.4, z, 1, 1, 1, !ghost));
+      for (const y of [0.15, 0.65]) body.add(part(cyl(0.165, 0.165, 0.06, 10), 0xe0b030, x, y, z, 1, 1, 1, false));
+    }
+    body.add(part(cyl(0.02, 0.02, 0.4, 4), 0x2a2420, 0, 0.98, 0, 1, 1, 1, false));
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffd040 })); spark.position.y = 1.2; spark.visible = false; body.add(spark); g.userData.spark = spark;
+    const scorch = new THREE.Mesh(new THREE.CircleGeometry(0.9, 16), new THREE.MeshBasicMaterial({ color: 0x1a1612, transparent: true, opacity: 0.7, depthWrite: false })); scorch.rotation.x = -Math.PI / 2; scorch.position.y = 0.02; scorch.visible = false; add(scorch); g.userData.scorch = scorch;
+    lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'wheel') {
+    // A wire hamster wheel on a stand. It spins while a mouse is running in it.
+    for (const x of [-0.35, 0.35]) { const leg = B(0x8a8a90, x, 0.45, 0, 0.05, 0.9, 0.05); leg.rotation.z = x > 0 ? 0.2 : -0.2; }
+    const wheel = new THREE.Group(); wheel.position.y = 0.9; add(wheel); g.userData.wheel = wheel;
+    for (const x of [-0.3, 0.3]) { const r = part(new THREE.TorusGeometry(0.8, 0.035, 5, 20), 0xb8b8c0, x, 0, 0, 1, 1, 1, !ghost); r.rotation.y = Math.PI / 2; wheel.add(r); }
+    for (let k = 0; k < 14; k++) { const a = k * Math.PI / 7, rung = part(cyl(0.015, 0.015, 0.6, 4), 0xa0a0a8, 0, Math.cos(a) * 0.8, Math.sin(a) * 0.8, 1, 1, 1, false); rung.rotation.z = Math.PI / 2; wheel.add(rung); }   // the rungs it runs on
+    lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'cord') {
+    // A frayed lamp cord lying across the floor (3 units along x): bare copper in the middle, a plug at one end.
+    const c1 = P(cyl(0.06, 0.06, 1.2, 6), 0xe8e0d0, -0.85, 0.06, 0); c1.rotation.z = Math.PI / 2;
+    const c2 = P(cyl(0.06, 0.06, 1.2, 6), 0xe8e0d0, 0.85, 0.06, 0.05); c2.rotation.z = Math.PI / 2;
+    for (let k = 0; k < 6; k++) { const w = P(cyl(0.012, 0.012, 0.35, 3), 0xd07a30, -0.2 + k * 0.08, 0.07, (k % 3 - 1) * 0.06); w.rotation.z = Math.PI / 2 + (k % 2 ? 0.4 : -0.4); }
+    B(0xe8e0d0, 1.45, 0.1, 0.05, 0.14, 0.18, 0.2); for (const z of [-0.05, 0.15]) B(0xc0a040, 1.56, 0.12, z, 0.1, 0.03, 0.03);
+    const scorch = new THREE.Mesh(new THREE.CircleGeometry(0.5, 14), new THREE.MeshBasicMaterial({ color: 0x2a2420, transparent: true, opacity: 0.35, depthWrite: false })); scorch.rotation.x = -Math.PI / 2; scorch.position.set(0, 0.015, 0); add(scorch);   // scorched where it sparks
+    lamp(1.4, 0.35, 0.4);
+  } else if (kind === 'peg') {
+    // A giant wooden clothes peg on its side: the top jaw springs shut on whatever steps in.
+    B(0xb89068, 0, 0.12, 0, 1.6, 0.18, 0.3);
+    const jaw = new THREE.Group(); jaw.position.set(0.3, 0.22, 0); add(jaw); g.userData.jaw = jaw;
+    jaw.add(part(BOX, 0xb89068, -0.3, 0.1, 0, 1.6, 0.18, 0.3, !ghost));
+    const spring = part(new THREE.TorusGeometry(0.16, 0.035, 5, 12), 0xb0b0b8, 0.3, 0.25, 0, 1, 1, 1, false); spring.rotation.y = Math.PI / 2; add(spring);
+    lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'bubbles') {
+    // A bubble pipe hanging from the roof over a soap dish lid.
+    B(0x3a3632, 0, -0.2, 0, 0.03, 0.4, 0.03);
+    const pipe = new THREE.Group(); pipe.position.y = -0.55; add(pipe); g.userData.pipe = pipe;
+    const stem = part(cyl(0.04, 0.04, 0.9, 6), 0x7a4a2a, 0.3, 0, 0, 1, 1, 1, !ghost); stem.rotation.z = 1.2; pipe.add(stem);
+    pipe.add(part(cyl(0.18, 0.14, 0.3, 10), 0x7a4a2a, -0.15, -0.15, 0, 1, 1, 1, !ghost));
+    for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.12 + k * 0.04, 10, 8), new THREE.MeshLambertMaterial({ color: 0xd8f0ff, transparent: true, opacity: 0.35, depthWrite: false })); b.position.set(-0.3 - k * 0.2, -0.45 - k * 0.15, 0.1 * k); pipe.add(b); }
+    lamp(0.6, -0.15, 0);
   }
   if (ghost) g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.5; o.material.depthWrite = false; } });
   return g;

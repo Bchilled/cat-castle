@@ -1812,6 +1812,10 @@ export class Sim {
     }
     if (m.state === 'stranded') { this.damageMouse(m, RULES.unreachableDps * DT, 'stranded'); return; }
     if (m.vulnT > 0) m.vulnT -= DT;
+    // Floating in a soap bubble: rises, can't move, then drops (and splats a little).
+    if (m.bubbleT > 0) { m.bubbleT -= DT; m.y = Math.min(2, m.y + DT * 3); if (m.bubbleT <= 0) this.launch(m, 0, 0, 0); return; }
+    // Held in place: running in a Hamster Wheel or clamped in a Clothes Peg.
+    if (m.holdT > 0) { m.holdT -= DT; [m.x, m.z] = m.holdAt; if (m.holdT <= 0) m.holdBy = 0; return; }
     if (m.jamT > 0) { m.jamT -= DT; m.slowT = Math.max(m.slowT, 0.1); if (m.jamAnts) this.damageMouse(m, 3 * DT, 'poison'); if (m.dead) return; }   // Sticky Jam (Ant Trail: ants)
     if (m.stunT > 0) { m.stunT -= DT; if (m.stunT <= 0) m.asleep = false; return; }
     if (m.state === 'stuck') { m.stuckT -= DT; if (m.stuckT <= 0) m.state = 'walk'; return; }
@@ -2552,6 +2556,79 @@ export class Sim {
           reset(tr, P.cooldown);
           this.emit({ t: 'pan', id: tr.id, x: (tr.x0 + tr.x1) / 2, y: tr.ceil, z: (tr.z0 + tr.z1) / 2, to: vs.map(m => [m.x, m.z]) });
           for (const m of vs) { m.dirtyT = Math.max(m.dirtyT || 0, 0.1); this.damageMouse(m, dmg, 'trap', false, el); }   // dirty + physics = knocked flat
+          break;
+        }
+        // ---- new in 0.25 ----
+        case 'firecracker': {
+          // Fuse when a crowd steps near, then bang (String of Crackers: three smaller bangs).
+          const [cx, cz] = centre(tr);
+          if (tr.fuseT > 0) {
+            if ((tr.fuseT -= DT) > 0) break;
+            const mul = P.bangs ? 0.6 : 1, vs = this.nearMice(cx, cz, P.radius + 0.5).filter(m => !m.dead && m.y < 2 && Math.hypot(m.x - cx, m.z - cz) < P.radius);
+            for (const m of vs) {
+              this.damageMouse(m, dmg * mul, 'trap', false, el);
+              if (!m.dead && !MICE[m.type].boss && MICE[m.type].size < 0.9 && m.state === 'walk') { const dx = m.x - cx, dz = m.z - cz, dd = Math.hypot(dx, dz) || 1; this.launch(m, dx / dd * 6, 5, dz / dd * 6); }   // blown outward
+            }
+            this.emit({ t: 'bang', id: tr.id, x: cx, z: cz, r: P.radius, hits: vs.length });
+            if (--tr.bangsLeft > 0) tr.fuseT = 0.5; else { reset(tr, P.cooldown); tr.active = false; }
+            break;
+          }
+          if (tr.cd > 0) break;
+          const near = this.nearMice(cx, cz, 2).filter(m => live(m) && Math.hypot(m.x - cx, m.z - cz) < 1.6);
+          if (near.length < P.crowd && !near.some(m => MICE[m.type].size >= 0.9)) break;
+          tr.fuseT = 0.6; tr.bangsLeft = P.bangs || 1; tr.cd = tr.cdMax = 99; tr.active = true;   // (lit: reset properly after the last bang)
+          this.emit({ t: 'fuse', id: tr.id, x: cx, z: cz });
+          break;
+        }
+        case 'wheel': {
+          // Grabs a runner (or two); while one runs, nearby traps reset `power` times as fast.
+          const [cx, cz] = centre(tr);
+          tr.runners = (tr.runners || []).filter(id => { const m = this.mice.find(x => x.id === id); return m && !m.dead && m.holdT > 0 && m.holdBy === tr.id; });
+          if (tr.cd <= 0 && tr.runners.length < (P.runners || 1)) {
+            const m = this.nearMice(cx, cz, 2).find(x => live(x) && inRect(x, tr, 0) && !MICE[x.type].boss && MICE[x.type].size < 0.9 && !(x.holdT > 0) && !tr.runners.includes(x.id));
+            if (m) { m.holdT = P.hold; m.holdBy = tr.id; m.holdAt = [cx, cz]; tr.runners.push(m.id); if (tr.runners.length >= (P.runners || 1)) reset(tr, P.cooldown + P.hold); this.emit({ t: 'wheelOn', id: tr.id, x: cx, z: cz }); }
+          }
+          tr.active = tr.runners.length > 0;
+          if (!tr.active) break;
+          for (const o of this.traps.values()) if (o !== tr && o.cd > 0 && Math.hypot((o.x0 + o.x1) / 2 - cx, (o.z0 + o.z1) / 2 - cz) < P.reach) o.cd = Math.max(0, o.cd - DT * (P.power - 1));
+          if (P.zap && (tr.tickT -= DT) <= 0) { tr.tickT = 0.5; for (const id of tr.runners) { const m = this.mice.find(x => x.id === id); if (m) this.damageMouse(m, 3, 'trap', false, 'electric'); } }
+          break;
+        }
+        case 'cord': {
+          // Jolts everything on it twice a second (Puddle Cord: soaks them first, so it chains).
+          if ((tr.tickT -= DT) > 0) break;
+          tr.tickT = 0.5; let n = 0;
+          for (const m of this.nearMice(...centre(tr), 2.5)) if (live(m) && inRect(m, tr, 0)) {
+            if (P.wet) m.wetT = Math.max(m.wetT || 0, 1);
+            this.damageMouse(m, dmg, 'trap', false, el); n++;
+          }
+          if (n) this.emit({ t: 'cordZap', id: tr.id, x: (tr.x0 + tr.x1) / 2, z: (tr.z0 + tr.z1) / 2 });
+          break;
+        }
+        case 'peg': {
+          // Clamps the biggest mouse that steps in (bosses for half as long) and squeezes it.
+          const [cx, cz] = centre(tr), held = tr.heldId && this.mice.find(m => m.id === tr.heldId && !m.dead && m.holdT > 0 && m.holdBy === tr.id);
+          if (held) {
+            if ((tr.tickT -= DT) <= 0) { tr.tickT = 0.5; this.damageMouse(held, P.dps * 0.5 * mods.trapDmg, 'trap', false, el); }
+            if (held.holdT <= DT * 1.5 && P.fling && !held.dead && !MICE[held.type].boss) { const a = (held.yaw || 0) + Math.PI; held.holdT = 0; this.launch(held, Math.sin(a) * 8, 6, Math.cos(a) * 8); this.emit({ t: 'pegFling', id: tr.id }); }
+            tr.active = true; break;
+          }
+          tr.active = false; tr.heldId = 0;
+          if (tr.cd > 0) break;
+          const m = this.nearMice(cx, cz, 2.5).filter(x => live(x) && inRect(x, tr, 0.3) && !(x.holdT > 0)).sort((a, b) => MICE[b.type].size - MICE[a.type].size)[0];
+          if (!m) break;
+          m.holdT = P.hold * (MICE[m.type].boss ? 0.5 : 1); m.holdBy = tr.id; m.holdAt = [m.x, m.z]; tr.heldId = m.id; tr.tickT = 0;
+          reset(tr, P.cooldown + m.holdT); this.emit({ t: 'peg', id: tr.id, x: cx, z: cz });
+          break;
+        }
+        case 'bubbles': {
+          // Floats up to maxHits mice underneath in bubbles (see stepMouse), soaked; Suds oils them.
+          if (tr.cd > 0) break;
+          const vs = below(tr, P.radius).filter(m => m.state === 'walk' && !(m.bubbleT > 0) && !MICE[m.type].boss && (P.big || MICE[m.type].size < 0.9)).slice(0, P.maxHits);
+          if (!vs.length) break;
+          reset(tr, P.cooldown);
+          for (const m of vs) { m.bubbleT = P.float; this.damageMouse(m, 1, 'trap', false, el); if (P.suds) m.oilT = Math.max(m.oilT || 0, STATUS.oilSecs); }
+          this.emit({ t: 'bubbles', id: tr.id, x: (tr.x0 + tr.x1) / 2, z: (tr.z0 + tr.z1) / 2, n: vs.length });
           break;
         }
         case 'gluepad': case 'flypaper': {

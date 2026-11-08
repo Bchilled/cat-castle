@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.25.0 — 2026-11-08
+Five more traps with new tricks (39 in all). Unlock them in the shop.
+- **Firecracker** (floor, 60 Paw Points, 8 paw prints). A one-shot banger. When three mice (or one big one) step near it, the fuse fizzes for 0.6 s, then it goes off: 70 fire damage in a 3-unit ring, and small mice are blown outward. A new one is set in 20 s.
+  - Specials: Cherry Bomb (50% wider), String of Crackers (three bangs in a row at 60% each).
+- **Hamster Wheel** (floor, 50, 10). The first mouse onto it is stuck running in the wheel for 4 s, and while it runs, every trap within 5 resets twice as fast. Put it in the middle of a kill zone.
+  - Specials: Dynamo (three times as fast, and the runner gets zapped), Big Wheel (two runners, held 50% longer).
+- **Frayed Cord** (floor, 3 by 1, rotatable, 30, 5). Jolts everything on it twice a second; wet mice pass the shock to their friends. Cheap and good next to a Leaky Bucket or Kettle.
+  - Specials: Live Wire (twice the shock), Puddle Cord (it lies in a puddle, so every jolt chains).
+- **Clothes Peg** (floor, 65, 10). Clamps the biggest mouse that steps in, even a Fat Rat or a boss (bosses for half as long), and squeezes it for 2.5 s.
+  - Specials: Bulldog Clip (holds twice as long), Spring Peg (lets go with a fling back the way it came, not bosses).
+- **Soap Bubbles** (ceiling, 55, 8). Floats up to three mice underneath in bubbles for 2 s, out of reach of floor traps and not going anywhere, then drops them soaked.
+  - Specials: Big Bubbles (six at a time, Fat Rats included), Soap Suds (they come down oiled, so fire makes them blaze).
+- Jammy mice now look jammy (dark red). Floating mice show their bubble. Co-op guests see both.
+- `src/config.js` TRAPS (364–369), TRAP_ORDER (376), POWER_KEYS (383), SPECIALS (419–423); `src/meta/profile.js` unlock prices (15); `src/sim/sim.js` held and floating mice (1815–1818), stepTraps firecracker, wheel, cord, peg, bubbles (2561–2633); `src/render/models.js` models (591–631); `src/render/scene.js` jam tint (24, 1061), events (646–651), bubbles round floating mice (827–830), animations (931–935); `src/net/coop.js` bubble and jam flags (116, 125, 170); `src/audio/sfx.js` sounds (266–273) and limits (142).
+
+Tests: 261 checks, all passing (every one of the 39 traps affects a mouse; the firecracker crowd, fuse and long reset, three crackers, the wheel speeding up a Snapper next to it, the cord chaining to a wet friend, the peg picking the Fat Rat and holding a boss briefly, Spring Peg, bubbles floating and dropping a mouse soaked and oiled).
+
 ## 0.24.0 — 2026-11-08
 The last four ideas from the trap list (34 traps in all). Unlock them in the shop.
 - **Sticky Jam** (floor, 40 Paw Points, 6 paw prints). Mice wading through it are slowed and stay jammy for 6 s; jammy mice cling together, so the pack clumps up for splash traps (Rolling Pin, Chandelier, Kettle, Catapult landings).

@@ -463,7 +463,7 @@ for (const id of MAP_ORDER) {
     const m = t.spawnAt('mouse', spot.cx, spot.cz, 100);
     for (let k = 1; k < (def.crowd || 1); k++) t.spawnAt('mouse', spot.cx + k * 0.2, spot.cz, 100);   // the Chandelier waits for a crowd
     const ev = run(t, 4, () => { if (kind !== 'bait' && !m.dead && m.state !== 'air') { m.x = spot.cx; m.z = spot.cz; } });
-    const hit = m.dead || m.hp < m.maxHp || m.oilT > 0 || ev.some(e => e.t === 'glue') || m.confuseT > 0 || m.wetT > 0 || (m.eatT > 0) || m.state === 'air' || m.slowT > 0;
+    const hit = m.dead || m.hp < m.maxHp || m.oilT > 0 || ev.some(e => e.t === 'glue') || m.confuseT > 0 || m.wetT > 0 || (m.eatT > 0) || m.state === 'air' || m.slowT > 0 || m.holdT > 0;
     ok(tr && hit, `${kind} (${def.surface}) affects a mouse in reach (hp ${Math.max(0, m.hp).toFixed(0)}/${m.maxHp}${m.oilT > 0 ? ', oily' : ''}${m.wetT > 0 ? ', wet' : ''}${m.confuseT > 0 ? ', confused' : ''}${m.eatT > 0 ? ', eating' : ''})`);
   }
   // Upgrades change numbers: tier 2 power, tier 3 speed, specials.
@@ -902,6 +902,54 @@ let findSpot, setup;
     const r = setup('pans', { tier: 3, special: 'b' }), three = [0, 1, 2, 3].map(k => r.t.spawnAt('mouse', r.sp.cx + k * 0.3, r.sp.cz, 500));
     run(r.t, 0.2, () => three.forEach((m, k) => { m.x = r.sp.cx + k * 0.3; m.z = r.sp.cz; }));
     ok(three.filter(m => m.hp < 500).length === 3, 'Pan Rack drops three');
+  }
+}
+// 47. Second batch (0.25): Firecracker, Hamster Wheel, Frayed Cord, Clothes Peg, Soap Bubbles.
+{
+  const hold = (t, ms, x, z, secs) => run(t, secs, () => ms.forEach(m => { if (!m.dead && m.state === 'walk' && !(m.holdT > 0) && !(m.bubbleT > 0)) { m.x = x; m.z = z; } }));
+  // Firecracker: two mice aren't worth it, three are; fuse, bang, blown outward, then a long reset.
+  {
+    const { t, sp } = setup('firecracker'); const two = [0, 1].map(() => t.spawnAt('tank', sp.cx, sp.cz, 900));
+    const e1 = hold(t, two, sp.cx, sp.cz, 0.5); const three = t.spawnAt('tank', sp.cx, sp.cz, 900);
+    const e2 = hold(t, [...two, three], sp.cx, sp.cz, 1.2), bang = e2.find(e => e.t === 'bang'), tr = [...t.traps.values()][0];
+    ok(!e1.some(e => e.t === 'fuse') && e2.some(e => e.t === 'fuse') && bang && bang.hits >= 3 && tr.cd > 15, `the Firecracker waits for a crowd, fizzes, bangs (${bang ? bang.hits : 0} hit) and takes 20 s to re-set`);
+    const c = setup('firecracker', { tier: 3, special: 'b' }), cm = [0, 1, 2].map(() => c.t.spawnAt('tank', c.sp.cx, c.sp.cz, 5000));
+    ok(hold(c.t, cm, c.sp.cx, c.sp.cz, 2.5).filter(e => e.t === 'bang').length === 3, 'String of Crackers bangs three times');
+  }
+  // Hamster Wheel: holds a runner; while it runs, traps nearby reset twice as fast.
+  {
+    const { t, sp } = setup('wheel');
+    const near = findSpot(t, 'mousetrap'); let snap = null;
+    for (const [dx, dz] of [[4, 0], [-4, 0], [0, 4], [0, -4], [4, 4]]) { const x = q(sp.cx - 1) + dx, z = q(sp.cz - 1) + dz; if (t.canPlace('mousetrap', x, z) === true) { t.command({ type: 'place', id: 'p1', trap: 'mousetrap', ax: x, az: z, rot: 0 }); snap = [...t.traps.values()].find(o => o.kind === 'mousetrap'); break; } }
+    const r = t.spawnAt('mouse', sp.cx, sp.cz, 500); run(t, 0.1, () => { r.x = sp.cx; r.z = sp.cz; });
+    snap.cd = snap.cdMax = 2.5; run(t, 0.5);
+    ok(r.holdT > 3 && snap.cd < 1.6, `a mouse runs in the Hamster Wheel (${r.holdT.toFixed(1)} s left) and the Snapper next to it resets twice as fast (${snap.cd.toFixed(2)} s left of 2.5 after 0.5 s)`);
+    run(t, 4); ok(!(r.holdT > 0) && (r.dead || Math.hypot(r.x - sp.cx, r.z - sp.cz) > 0.5), 'then it gets out and carries on');
+  }
+  // Frayed Cord: jolts what's on it; Puddle Cord soaks them so the jolt chains to friends.
+  {
+    const { t, sp } = setup('cord', { tier: 3, special: 'b' }); const on = t.spawnAt('tank', sp.cx, sp.cz, 900), friend = t.spawnAt('tank', sp.cx + 1.5, sp.cz + 1.5, 900);
+    friend.wetT = 5; const ev = run(t, 0.6, () => { on.x = sp.cx; on.z = sp.cz; friend.x = sp.cx + 1.5; friend.z = sp.cz + 1.5; friend.wetT = 5; });
+    ok(on.hp < 900 && friend.hp < 900 && ev.some(e => e.t === 'combo' || e.t === 'chain'), 'the Frayed Cord jolts mice on it, and Puddle Cord chains to a wet friend');
+  }
+  // Clothes Peg: clamps the biggest one, even a boss (for half as long), and squeezes.
+  {
+    const { t, sp } = setup('peg'); const small = t.spawnAt('mouse', sp.cx, sp.cz, 500), fat = t.spawnAt('fatty', sp.cx, sp.cz, 900);
+    hold(t, [small, fat], sp.cx, sp.cz, 0.2); run(t, 1.5);
+    ok(fat.holdT > 0 && !(small.holdT > 0) && fat.hp < 900 && Math.hypot(fat.x - sp.cx, fat.z - sp.cz) < 1.2, `the Clothes Peg clamps the Fat Rat, not the little one, and squeezes (${(900 - fat.hp).toFixed(0)} so far)`);
+    // (out in the open courtyard, where a boss fits)
+    const bt = new Sim({ seed: 1100 }); bt.addPlayer('p1'); bt.sardines = 1e6; bt.step(); bt.command({ type: 'place', id: 'p1', trap: 'peg', ax: 120, az: 100, rot: 0 });
+    const boss = bt.spawnAt('miniboss', 61, 51, 5000); hold(bt, [boss], 61, 51, 0.2);
+    ok(boss.holdT > 0 && boss.holdT <= 1.25, 'it even holds a boss, briefly');
+    const f = setup('peg', { tier: 3, special: 'b' }), fm = f.t.spawnAt('tank', f.sp.cx, f.sp.cz, 900); hold(f.t, [fm], f.sp.cx, f.sp.cz, 0.2);
+    const fev = run(f.t, 3.5); ok(fev.some(e => e.t === 'pegFling'), 'Spring Peg lets go with a fling');   // (tier 2 holds 25% longer)
+  }
+  // Soap Bubbles: float out of reach of floor traps, then drop soaked; Suds oils them.
+  {
+    const { t, sp } = setup('bubbles', { tier: 3, special: 'b' }); const m = t.spawnAt('mouse', sp.cx, sp.cz, 500);
+    hold(t, [m], sp.cx, sp.cz, 0.8);
+    const up = m.y, floating = m.bubbleT > 0; run(t, 2);
+    ok(floating && up > 1.5 && m.y < 0.5 && m.wetT > 0 && m.oilT > 0, `Soap Bubbles float a mouse up (${up.toFixed(1)} high), drop it soaked; Soap Suds oils it`);
   }
 }
 process.exit(fails ? 1 : 0);
