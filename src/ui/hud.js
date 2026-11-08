@@ -186,7 +186,7 @@ export class Hud {
       html += '<ul class="bonus">' + rating.bonus.map(b => `<li class="${b.got ? 'got' : ''}">${PAW(b.got)} ${b.name}</li>`).join('') + '</ul>';
     }
     if (reward) {
-      html += '<ul class="bonus">' + reward.lines.map(([t, n]) => `<li class="got">+${n} paw prints · ${t}</li>`).join('') + (reward.yarn ? `<li class="got">+${reward.yarn} yarn · bosses</li>` : '') + '</ul>';
+      html += '<ul class="bonus">' + reward.lines.map(([t, n]) => `<li class="got">${n < 0 ? '' : '+'}${n} paw prints · ${t}</li>`).join('') + (reward.yarn ? `<li class="got">+${reward.yarn} yarn · bosses</li>` : '') + '</ul>';
     }
     html += `<p class="dim">You have ${profile.paws} paw prints · ${profile.yarn} yarn${profile.sandbox ? ' (sandbox: not saved)' : ''}. Spend them in the shop.</p>`;
     html += `<button onclick="window.__relaunch('shop')">Shop</button><button onclick="window.__relaunch('')">Back to menu</button>`;

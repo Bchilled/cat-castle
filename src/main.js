@@ -1,6 +1,6 @@
 // main.js — wires input -> commands -> sim (fixed tick) -> renderer + HUD.
 
-import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE, RULES, COMBOS } from './config.js';
+import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE, RULES, COMBOS, DIFFICULTY, DIFFICULTY_ORDER } from './config.js';
 import { CAT_INFO, abilityRows, elTag } from './ui/catinfo.js';
 import { portraitURL } from './ui/portraits.js';
 import { Sfx } from './audio/sfx.js';
@@ -132,6 +132,13 @@ function drawMaps() {
   const pb = document.querySelector('[data-mode="normal"]'); if (pb) pb.textContent = `${MAPS[chosenMap].name} · ${RULES.winWave} waves`;
 }
 drawMaps();
+// Difficulty: Relaxed / Normal / Brutal (remembered).
+let chosenDiff = DIFFICULTY[load('catcastle.diff', 'normal')] ? load('catcastle.diff', 'normal') : 'normal';
+function drawDiff() {
+  document.getElementById('diff').innerHTML = DIFFICULTY_ORDER.map(k => `<button class="df ${k === chosenDiff ? 'picked' : ''}" data-diff="${k}" title="${DIFFICULTY[k].desc}">${DIFFICULTY[k].name}</button>`).join('') + `<small>${DIFFICULTY[chosenDiff].desc}</small>`;
+  document.querySelectorAll('[data-diff]').forEach(b => b.onclick = () => { chosenDiff = b.dataset.diff; save('catcastle.diff', chosenDiff); sfx.play('click'); drawDiff(); });
+}
+drawDiff();
 if (new URLSearchParams(location.search).has('go')) setTimeout(() => { previewOn = false; dropFlags(); start('normal'); }, 0);
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
   if (loadout.length < 1) { sfx.play('deny'); return; }
@@ -164,8 +171,8 @@ function hostStart(mode, map) {
   const seed = (Date.now() & 0xffff) | 1;
   const live = coop.guests.filter(g => !g.gone);
   const players = [{ id: 'p1', cat: chosenCat, hat: profile.worn[chosenCat] || null, item: chosenItem }, ...live.map(g => ({ id: g.id, cat: g.hello.cat, hat: g.hello.hat, item: g.hello.item }))];
-  for (const g of live) g.link.send({ t: 'start', map, mode, seed, you: g.id, players });
-  start(mode, { ...coop, role: 'host', seed, map, players, guests: live });
+  for (const g of live) g.link.send({ t: 'start', map, mode, seed, you: g.id, players, difficulty: chosenDiff });
+  start(mode, { ...coop, role: 'host', seed, map, players, guests: live, difficulty: chosenDiff });
 }
 document.getElementById('joinbtn').onclick = async () => {
   const code = document.getElementById('joincode').value.trim().toUpperCase();
@@ -175,7 +182,7 @@ document.getElementById('joinbtn').onclick = async () => {
     const link = await joinRoom(code, hello(), coopStatus);
     coop.link = link;
     // 'start' also arrives mid-game when the host moves everyone on to the next map.
-    link.on('data', (d) => { if (d && d.t === 'start') { previewOn = false; start(d.mode, { ...coop, role: 'guest', seed: d.seed, map: d.map, you: d.you, players: d.players }); } });
+    link.on('data', (d) => { if (d && d.t === 'start') { previewOn = false; start(d.mode, { ...coop, role: 'guest', seed: d.seed, map: d.map, you: d.you, players: d.players, difficulty: d.difficulty }); } });
     link.on('close', () => { if (!coop.started) { coop = null; coopStatus('The host closed the room.'); } });
   } catch { coop = null; }
 };
@@ -190,7 +197,8 @@ function start(mode, co = null) {
   sfx.unlock(); sfx.setMusic('build');
   if (co) { co.started = true; chosenMap = co.map; coop = co; }
   const guest = co && co.role === 'guest', LOCAL_ID = guest ? co.you : 'p1';
-  const sim = new Sim({ mode, seed: co ? co.seed : (Date.now() & 0xffff) | 1, map: chosenMap });
+  const difficulty = co ? co.difficulty || 'normal' : chosenDiff;   // co-op: the host's choice
+  const sim = new Sim({ mode, seed: co ? co.seed : (Date.now() & 0xffff) | 1, map: chosenMap, difficulty });
   const mine = { loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null };
   if (!co) sim.addPlayer('p1', chosenCat, mine);
   else for (const p of co.players) {
@@ -437,7 +445,7 @@ function start(mode, co = null) {
           ended = true;
           // Pay out: paw prints for waves cleared, the rating and a first-win bonus; yarn from bosses.
           const cleared = e.won ? sim.wave : Math.max(0, sim.wave - 1);
-          const reward = runReward(profile, { won: e.won, waves: cleared, rating: e.rating, yarn: sim.yarn, map: chosenMap });
+          const reward = runReward(profile, { won: e.won, waves: cleared, rating: e.rating, yarn: sim.yarn, map: chosenMap, difficulty });
           applyReward(profile, reward, { won: e.won, map: chosenMap }); saveProfile(profile);
           document.exitPointerLock?.();
           hud.showEnd(e.won, e.rating, sim, profile, reward, chosenCat);

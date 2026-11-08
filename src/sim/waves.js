@@ -74,8 +74,9 @@ export function buildWave(n, rng, gateUp, opts = {}) {
 }
 
 // Paw-print rating: base 1–5 from lives left; bonus paws for optional challenges.
-export function ratePaws(lives, stats) {
-  const base = Math.max(1, Math.min(5, 5 - Math.floor((20 - lives) / 4)));
+// start = lives you began with (difficulty changes it): lose a fifth of them per paw.
+export function ratePaws(lives, stats, start = 20) {
+  const base = Math.max(1, Math.min(5, 5 - Math.floor((start - lives) / (start / 5))));
   const bonus = [
     { name: 'No traps', got: stats.trapsPlaced === 0 },
     { name: 'Never got hit', got: stats.damageTaken === 0 },

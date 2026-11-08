@@ -6,7 +6,7 @@
 // rating, and the first win on each map pays a bonus. Bosses drop yarn.
 // Spending: paw prints unlock traps and items and buy trap upgrades; yarn buys hats.
 
-import { TRAPS, TRAP_ORDER, ITEMS, ITEM_ORDER, STARTER_TRAPS, STARTER_ITEMS, UPGRADE, SPECIALS, CAT_ORDER } from '../config.js';
+import { TRAPS, TRAP_ORDER, ITEMS, ITEM_ORDER, STARTER_TRAPS, STARTER_ITEMS, UPGRADE, SPECIALS, CAT_ORDER, DIFFICULTY } from '../config.js';
 
 const KEY = 'catcastle.profile';
 
@@ -107,12 +107,14 @@ export function buy(p, what) {
 
 // ---- earning ----
 // What a finished run pays. waves = waves cleared.
-export function runReward(p, { won, waves, rating, yarn, map }) {
+export function runReward(p, { won, waves, rating, yarn, map, difficulty = 'normal' }) {
   const lines = [];
   const forWaves = Math.floor(waves / 3); if (forWaves) lines.push([`${waves} waves cleared`, forWaves]);
   if (won && rating) lines.push(['Paw-print rating', rating.total]);
   if (won && !p.wins[map]) lines.push(['First win on this map', FIRST_WIN_BONUS]);
-  const paws = lines.reduce((a, [, n]) => a + n, 0);
+  let paws = lines.reduce((a, [, n]) => a + n, 0);
+  const mul = (DIFFICULTY[difficulty] || DIFFICULTY.normal).paws;
+  if (mul !== 1 && paws) { const extra = Math.round(paws * mul) - paws; lines.push([`${DIFFICULTY[difficulty].name} difficulty`, extra]); paws += extra; }
   return { paws, yarn: yarn || 0, lines };
 }
 export function applyReward(p, r, { won, map }) {

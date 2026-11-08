@@ -54,7 +54,7 @@ export const MAPS = {
   entrance: {
     id: 'entrance', name: 'Castle Entrance', order: 1, w: 96, h: 120, floor: 'cobbles', birds: true,
     blurb: 'Hold the road, the bridge and the gate. Three lanes split north of the courtyard.',
-    twist: 'The gate holds them back until wave 6. Flingers by the moat drown them.',
+    twist: 'A board jams the gate until the mice chew through it. Flingers by the moat drown them.',
     furniture: [
       // Heights are human scale (1 unit = 30 cm): the castle walls are ~8.5 m, a door is ~2.1 m.
       { name: 'West wall', kind: 'solid', rect: [0, 0, 2, 84],   h: 28, look: 'stone' },

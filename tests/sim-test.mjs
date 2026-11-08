@@ -505,12 +505,13 @@ for (const id of MAP_ORDER) {
   // deadly: its cost should rise the most, so packs favour the others.
   const VI = (await import('../src/sim/map.js')).VIAS;
   const west = VI.findIndex(v => v.x < 30);
-  const cost0 = VI.map((_, k) => dg.viaCost(k, 0));
+  const cost0 = VI.map((_, k) => dg.viaCost(k, 0)), flow0 = dg.flow[dg.spawnCells[0]];
   const wr = dg.routes()[1];   // entrance 1's first lane route = the west lane
   for (let k = 0; k < 6; k++) wr.filter(([, z], j) => z > 10 && z < 34 && j % 3 === 0).forEach(([x, z]) => dg.addDanger(x, z, 3));   // a killing ground along it
   run(dg, 1.1);
-  const rise = VI.map((_, k) => dg.viaCost(k, 0) - cost0[k]);
-  ok(rise[west] > 40 && rise[west] === Math.max(...rise), `the lane they keep dying in gets dearer (+${rise.map(v => v.toFixed(0)).join(' / +')})`);
+  const rise = VI.map((_, k) => dg.laneDanger(0, k));
+  ok(rise[west] > 40 && rise[west] === Math.max(...rise), `the lane they keep dying in weighs more when packs choose (+${rise.map(v => v.toFixed(0)).join(' / +')})`);
+  ok(dg.flow[dg.spawnCells[0]] === flow0, 'but their step-by-step path is unchanged (traps in a lane still get walked into)');
   const picks = {}; for (let k = 0; k < 200; k++) { const v = dg.chooseVia(0); picks[v] = (picks[v] || 0) + 1; }
   ok((picks[west] || 0) < 15, `packs mostly stop picking it (${JSON.stringify(picks)})`);
   for (let k = 0; k < 120; k++) { dg.dangerT = 0; dg.stepDanger(); }
@@ -598,5 +599,15 @@ for (const id of MAP_ORDER) {
   const n0 = cw.links.length, ok1 = cw.canPlace('barricade', 82, 126, 0, -1, true);
   cw.placeTrap(cw.cats.get('p1'), 'barricade', 82, 126, 0, -1, true); cw.updateFlow();
   ok(ok1 === true && cw.links.length < n0, `a Poison Box on top of the cheese wheel closes the routes over it (${n0 - cw.links.length} closed)`);
+}
+// 38. Difficulty: softer or tougher mice, more or fewer lives, scaled paw prints, fair rating.
+{
+  const { ratePaws } = await import('../src/sim/waves.js'); const P = await import('../src/meta/profile.js');
+  const r = new Sim({ seed: 900, difficulty: 'relaxed' }), b = new Sim({ seed: 900, difficulty: 'brutal' });
+  r.addPlayer('p1'); b.addPlayer('p1'); r.phaseTimer = 0; b.phaseTimer = 0; r.step(); b.step();
+  ok(r.lives === 30 && b.lives === 12 && b.spawn.hpMul > r.spawn.hpMul * 1.6, `relaxed: 30 lives, brutal: 12 lives and much tougher mice (${(b.spawn.hpMul / r.spawn.hpMul).toFixed(2)}x)`);
+  ok(ratePaws(12, {}, 12).base === 5 && ratePaws(6, {}, 12).base <= 3, 'a flawless Brutal run still rates 5 paws');
+  const w = P.runReward(P.freshProfile(), { won: true, waves: 24, rating: { total: 6 }, map: 'entrance', difficulty: 'brutal' });
+  ok(w.paws === Math.round((8 + 6 + P.FIRST_WIN_BONUS) * 1.5), `Brutal pays 50% more paw prints (${w.paws})`);
 }
 process.exit(fails ? 1 : 0);

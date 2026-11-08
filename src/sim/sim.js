@@ -4,7 +4,7 @@
 // other cat. Players only ever talk to it through commands, and it never calls
 // Math.random (seeded RNG instead) so every run is reproducible.
 
-import { DT, GRAVITY, RULES, CAT, CATS, MICE, TRAPS, GATE as GATE_CFG, TRINKETS, ABILITY2, ITEMS, STATUS, COMBOS, ATTACK_EL, trapParams } from '../config.js';
+import { DT, GRAVITY, RULES, CAT, CATS, MICE, TRAPS, GATE as GATE_CFG, TRINKETS, ABILITY2, ITEMS, STATUS, COMBOS, ATTACK_EL, trapParams, DIFFICULTY } from '../config.js';
 import {
   W, H, CELL, T, idx, cellOf, cellCenter, buildMap, floorish, miceWalkable, goalCells,
   GATE, SPAWNS, CAT_SPAWN, DIRS4, WORLD_W, WORLD_H, VIAS, useMap, MAP,
@@ -138,10 +138,12 @@ const BARRICADE_COST = 5000;
 const MUD_SLOW = 0.55;      // stables: mud slows mice and cats
 const FIRE_DPS = 20;        // kitchen: ovens and hearth burn mice (cats take 3/4)
 const GORGE_SECS = 2.5, GORGE_HP = 1.3;   // food piles: time spent eating, and how much tougher they come out
-// Smarter mice (v0.12).
-// Danger memory: every death leaves "danger" on the floor around it; small mice add it to
-// their path cost (capped per cell), so a kill zone they keep dying in becomes worth avoiding
-// if another way costs about the same. It fades over ~20 s. Scouts dying count four times.
+// Smarter mice (v0.12; v0.14.1: lanes only).
+// Danger memory: every death leaves "danger" on the floor around it. When a pack picks its lane
+// it adds up the danger along each lane, so a lane they keep dying in loses its share of packs.
+// It does NOT change their step-by-step path: within the lane they chose, they still walk
+// straight into your traps (otherwise they just skirted every kill zone in the open yards).
+// It fades over ~20 s. Scouts dying count four times.
 const DANGER_KILL = 3, DANGER_SCOUT = 4, DANGER_CAP = 10, DANGER_MAX = 30, DANGER_DECAY = 0.965, DANGER_REPATH = 12;
 const FIRE_AVOID = 6;            // extra path cost near ovens: mice go round fires if they can
 const CRATE_COST = 15, CRATE_HP = 90, CRATE_H = 1.6;   // crate stacks: cheap enough to smash through for a real shortcut
@@ -156,7 +158,8 @@ const SRC_EL = { cat: 'physical', bleed: 'physical', trap: 'physical', splat: 'p
 
 export class Sim {
   // map = which campaign map ('entrance', 'market', 'stables', 'cellar', 'passages', 'kitchen').
-  constructor({ mode = 'normal', seed = 1234, map = 'entrance' } = {}) {
+  constructor({ mode = 'normal', seed = 1234, map = 'entrance', difficulty = 'normal' } = {}) {
+    this.diff = DIFFICULTY[difficulty] || DIFFICULTY.normal; this.difficulty = DIFFICULTY[difficulty] ? difficulty : 'normal';
     this.mapDef = useMap(map);
     this.map = buildMap();
     this.goals = goalCells();
@@ -166,7 +169,7 @@ export class Sim {
     this.phase = 'build';              // build | wave | won | lost
     this.phaseTimer = Infinity;        // first build phase waits for G
     this.wave = 0;
-    this.lives = RULES.startLives;
+    this.lives = this.diff.lives;
     this.sardines = RULES.startSardines;
     this.yarn = 0;
     this.gate = { hp: GATE_CFG.hp, up: !!GATE };       // maps without a gate start open
@@ -353,9 +356,7 @@ export class Sim {
     for (const c of this.crates) if (c.up) for (const i of c.cells) { extra[i] += CRATE_COST; blk[i] = 1; }
     if (this.doors.length) for (let i = 0; i < N; i++) if (this.doorShut(i)) { extra[i] += DOOR_WAIT_COST; blk[i] = 1; }
     for (let i = 0; i < N; i++) if (this.fireCost[i]) extra[i] += this.fireCost[i];
-    // Small mice also weigh the danger they remember; bosses don't care.
-    const extraS = Float32Array.from(extra), DB = this.DB;
-    for (let i = 0; i < N; i++) { const dv = this.danger[((((i / W) | 0) / DB) | 0) * this.dbw + (((i % W) / DB) | 0)]; if (dv > 0.5) extraS[i] += Math.min(DANGER_CAP, dv); }
+    const extraS = extra;   // (danger used to go in here; now it only weighs lane choice, see chooseVia)
     this.blk = blk; this.extraArr = extraS; this.extraBig = extra;
     // Furniture routes that are open (a Poison Box on top closes one). Small mice only.
     this.links = this.openLinks();
@@ -395,9 +396,20 @@ export class Sim {
   // about the same; a lane made expensive (barricades, the gate) loses its share.
   // The direct (cheapest) route is a candidate too (-1), so the arrows on the floor are
   // all routes mice really take, and the shortest one gets the biggest share.
+  // Danger remembered along a lane (sampled every 2 units of its route), in path-cost units.
+  laneDanger(door, k) {
+    const pts = this.traces && this.traces.get(door + ':' + k); if (!pts) return 0;
+    let sum = 0;
+    for (let j = 0; j < pts.length; j += 4) {
+      const b = Math.floor(pts[j][1] / (this.DB * CELL)) * this.dbw + Math.floor(pts[j][0] / (this.DB * CELL));
+      sum += Math.min(DANGER_CAP, this.danger[b] || 0);
+    }
+    return sum * 4;
+  }
   chooseVia(door) {
-    const costs = VIAS.map((_, k) => this.viaCost(k, door));
-    const direct = this.flow[this.spawnCells[door % this.spawnCells.length]];
+    this.routes();                                   // makes sure each lane's route is traced (cached)
+    const costs = VIAS.map((_, k) => this.viaCost(k, door) + this.laneDanger(door, k));
+    const direct = this.flow[this.spawnCells[door % this.spawnCells.length]] + this.laneDanger(door, -1);
     const min = Math.min(direct, ...costs);
     if (!(min < Infinity)) return -1;
     const w = costs.map((c, k) => (c < Infinity && c <= min * 1.6 + 30) ? VIAS[k].weight * Math.exp(-(c - min) / 40) : 0);
@@ -429,12 +441,12 @@ export class Sim {
       }
       return pts;
     };
-    const out = [];
+    const out = []; this.traces = new Map();
     this.spawnCells.forEach((start, door) => {
       const costs = VIAS.map((_, k) => this.viaCost(k, door)), min = Math.min(...costs);
       // Direct route first (the one route() returns), then every lane packs may take.
-      out.push(trace(start, -1));
-      costs.forEach((c, k) => { if (c < Infinity && c <= min * 1.6 + 30) out.push(trace(start, k)); });
+      const d = trace(start, -1); out.push(d); this.traces.set(door + ':-1', d);
+      costs.forEach((c, k) => { if (c < Infinity && c <= min * 1.6 + 30) { const t = trace(start, k); out.push(t); this.traces.set(door + ':' + k, t); } });
     });
     this.routeCache = out;
     return out;
@@ -589,7 +601,7 @@ export class Sim {
       if (d[b] > 4) spots.push([((b % this.dbw) + 0.5) * bs, (((b / this.dbw) | 0) + 0.5) * bs, Math.min(1, d[b] / DANGER_MAX)]);
     }
     this.dangerSpots = spots;   // [x, z, 0..1] block centres, for the radar
-    if (this.dangerDelta > DANGER_REPATH) { this.dangerDelta = 0; this.flowDirty = true; }
+    this.dangerDelta = 0;
   }
   addDanger(x, z, amt) {
     const bx = Math.floor(x / (this.DB * CELL)), bz = Math.floor(z / (this.DB * CELL));
@@ -607,7 +619,7 @@ export class Sim {
       if (this.phaseTimer <= 0) {
         this.wave++; this.phase = 'wave';
         this.spawn = { ...buildWave(this.wave, this.rng, this.gate.up, { birds: this.mapDef.birds !== false }), t: 0 }; this.packVia = -2;
-        this.spawn.hpMul *= 1 + 0.08 * ((this.mapDef.order || 1) - 1);     // each map further in is a bit tougher
+        this.spawn.hpMul *= (1 + 0.08 * ((this.mapDef.order || 1) - 1)) * this.diff.hp;     // each map further in is a bit tougher; difficulty
         this.emit({ t: 'msg', text: `Wave ${this.wave}` + (this.wave % 12 === 0 ? ' — BIG BOSS RAT' : this.wave % 6 === 0 ? ' — mini boss' : '') });
         this.emit({ t: 'waveStart', wave: this.wave, boss: this.wave % 6 === 0 });
         for (const f of this.foods) f.left = f.amount;                                                       // food restocked
@@ -634,12 +646,12 @@ export class Sim {
     } else if (this.mice.length === 0 && this.shots.length === 0 && this.birds.length === 0) {
       if (this.mode === 'normal' && this.wave >= RULES.winWave) {
         this.phase = 'won';
-        this.rating = ratePaws(this.lives, this.stats);
+        this.rating = ratePaws(this.lives, this.stats, this.diff.lives);
         this.emit({ t: 'end', won: true, rating: this.rating });
       } else {
         this.phase = 'build'; this.phaseTimer = RULES.buildPhaseSeconds;
         // Income that doesn't depend on hauling tails, so you can always build.
-        const bonus = Math.round((RULES.waveBonus + this.wave * 10) * this.mods.waveBonus); this.sardines += bonus;
+        const bonus = Math.round((RULES.waveBonus + this.wave * 15) * this.mods.waveBonus); this.sardines += bonus;
         this.emit({ t: 'msg', text: `Wave ${this.wave} cleared  +${bonus} Paw Points` }); this.emit({ t: 'waveClear', wave: this.wave });
         this.bark('clear', null, true);
       }
@@ -648,7 +660,7 @@ export class Sim {
 
   spawnMouse(type, hpMul, packSize = 1, door = 0, via = -1) {
     const SPAWN = SPAWNS[door % SPAWNS.length];
-    const hp = Math.max(1, Math.round(MICE[type].hp * hpMul));
+    const hp = Math.max(1, Math.round(MICE[type].hp * (MICE[type].boss ? 1 + (hpMul - 1) * 0.5 : hpMul)));   // bosses only get half the per-wave toughening
     // Packs spawn in a clump; stragglers come out alone.
     const spread = packSize > 1 ? 2.2 : 0.6;
     const m = this.spawnAt(type, SPAWN.x + (this.rng() - 0.5) * spread * 2, SPAWN.z - 0.4 - this.rng() * spread, hp, via);

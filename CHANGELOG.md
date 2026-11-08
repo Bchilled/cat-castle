@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.15.0 — 2026-11-07
+Balance pass. A "new player" bot was used to check this: starter traps only, no upgrades, one kill zone at the hole, cat standing still and attacking. Before the changes it lost every map by wave 6–18, almost all of it at boss waves. After them, a bot with Puddin wins 4 of 6 maps on Normal, and one with Fred gets to waves 18–24. It's a rough guide; real hands-on play should decide the rest.
+- Danger memory reworked. Mice used to step around any patch where friends had died, so after a few kills they simply skirted kill zones in open yards and traps felt useless. Now danger only weighs which lane a pack picks; inside the lane they still walk into your traps. `src/sim/sim.js` laneDanger, chooseVia, routes() (traces per lane), updateFlow.
+- Bosses softer. Rat Captain 900 → 600 health, King Rat 2600 → 1600. Bosses also get only half the per-wave health growth (a wave-24 King Rat was over 5000). `src/config.js` MICE, `src/sim/sim.js` spawnMouse.
+- Snapper: 70 → 75 damage, resets in 2.5 s (was 3). Thumbtacks: 3 → 4 damage a tick. Wave-clear bonus grows 15 per wave (was 10). `src/config.js`, `src/sim/sim.js`.
+- New: difficulty on the menu, remembered. In co-op the host's choice applies.
+  - Relaxed: 75% mouse health, 30 lives, half the paw prints.
+  - Normal.
+  - Brutal: 130% mouse health, 12 lives, 50% more paw prints.
+  - The paw-print rating is now out of your starting lives, so a flawless Brutal run still rates 5.
+  - `src/config.js` DIFFICULTY, `src/sim/sim.js` constructor, `src/sim/waves.js` ratePaws, `src/meta/profile.js` runReward, `src/main.js` menu, `index.html`.
+- Fixed: the Castle Entrance description said the gate holds until wave 6. In fact the mice chew through the board; a siege mouse only breaks it on wave 6 if it's still standing. `src/sim/map.js`.
+
+Tests: 177 checks, all passing (lane-only danger, difficulty, rating).
+
 ## 0.14.0 — 2026-11-07
 Furniture routes
 - Mice now climb over low furniture when going over is shorter than going round:

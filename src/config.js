@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.14.0';
+export const VERSION = '0.15.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -20,7 +20,7 @@ export const RULES = {
   livesLostPerMouse: 1,
   livesLostPerBoss: 5,
   startSardines: 1000,       // starting Paw Points (the code still calls them sardines): ~15–20 traps
-  waveBonus: 100,            // Paw Points for clearing a wave (+10 per wave number)
+  waveBonus: 100,            // Paw Points for clearing a wave (+15 per wave number)
   pickupRadius: 1.2,         // trinkets lying on the ground
   buildPhaseSeconds: 25,     // break between waves (press G to skip)
   winWave: 24,               // clearing this wave wins the map
@@ -77,6 +77,14 @@ export const ATTACK_EL = {
   whisker: 'physical', purr: null, claw: 'physical', frenzy: 'physical', strike: 'physics', burr: 'earth', yawn: 'psychic',
   pebble: 'earth', roar: 'psychic', dash: 'physical', sit: 'physics', skyswipe: 'physical',
 };
+
+// Difficulty (picked on the menu). hp = mouse health, lives = starting lives, paws = paw prints earned.
+export const DIFFICULTY = {
+  relaxed: { name: 'Relaxed', hp: 0.75, lives: 30, paws: 0.5, desc: 'Mice are softer and you get 30 lives. Half the paw prints.' },
+  normal:  { name: 'Normal',  hp: 1,    lives: 20, paws: 1,   desc: 'The way it is meant to be played.' },
+  brutal:  { name: 'Brutal',  hp: 1.3,  lives: 12, paws: 1.5, desc: 'Tougher mice, only 12 lives. 50% more paw prints.' },
+};
+export const DIFFICULTY_ORDER = ['relaxed', 'normal', 'brutal'];
 
 // Shared cat combat numbers.
 export const CAT = {
@@ -303,9 +311,9 @@ export const MICE = {
   // mice past your traps and drop them. Kill a crow in the air and its mice fall to their deaths.
   magpie:  { name: 'Magpie', res: { wind: 2, electric: 1.5 },      points: 10, hp: 30,   speed: 7,   size: 0.6,  tails: 0, tailChance: 0,   bite: 4,  gateDmg: 0,  color: 0x1a1a22, bird: true, intro: 8, reward: 10 },
   crow:    { name: 'Crow', res: { wind: 2, electric: 1.5 },        points: 15, hp: 45,   speed: 6,   size: 0.7,  tails: 0, tailChance: 0,   bite: 4,  gateDmg: 0,  color: 0x121216, bird: true, intro: 10, reward: 15, carry: 3 },
-  miniboss:{ name: 'Rat Captain', res: { psychic: 0.5, death: 0.5, poison: 0.75 }, points: 150, hp: 900,  speed: 2.1, size: 2.0,  tails: 6, tailChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true, aggro: 6,
+  miniboss:{ name: 'Rat Captain', res: { psychic: 0.5, death: 0.5, poison: 0.75 }, points: 150, hp: 600,  speed: 2.1, size: 2.0,  tails: 6, tailChance: 1,   bite: 25, gateDmg: 60, color: 0x3d3633, boss: true, yarn: 1, big: true, aggro: 6,
              stomp: { every: 5, radius: 3.5, dmg: 15, stun: 1.0, fling: 7 } },
-  bigboss: { name: 'King Rat', res: { psychic: 0.3, death: 0.3, poison: 0.5, holy: 1.25 },    points: 400, hp: 2600, speed: 1.6, size: 2.8,  tails: 15, tailChance: 1,  bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true, aggro: 7,
+  bigboss: { name: 'King Rat', res: { psychic: 0.3, death: 0.3, poison: 0.5, holy: 1.25 },    points: 400, hp: 1600, speed: 1.6, size: 2.8,  tails: 15, tailChance: 1,  bite: 40, gateDmg: 120, color: 0x2a2422, boss: true, yarn: 3, big: true, aggro: 7,
              stomp: { every: 4, radius: 4.5, dmg: 22, stun: 1.4, fling: 9 } },
 };
 
@@ -317,12 +325,12 @@ export const MICE = {
 export const TILE = 4;
 export const TRAPS = {
   barricade: { el: 'poison', name: 'Poison Box', desc: "A crate of rat poison. Mice hate it: they only chew through if there's no other way, and the poison eats them while they do.", cost: 20, surface: 'floor', size: [4, 4], hp: 160, height: 1.4, poisonDps: 9 },
-  mousetrap: { el: 'physical', name: 'Snapper', desc: "A proper human mousetrap. Snaps everything standing on the tile, then cranks back.",     cost: 30,  surface: 'floor',   size: [4, 4], damage: 70, cooldown: 3, maxHits: 6, pathCost: 0 },   // OMD spike trap
+  mousetrap: { el: 'physical', name: 'Snapper', desc: "A proper human mousetrap. Snaps everything standing on the tile, then cranks back.",     cost: 30,  surface: 'floor',   size: [4, 4], damage: 75, cooldown: 2.5, maxHits: 6, pathCost: 0 },   // OMD spike trap
   flipper:   { el: 'physics', name: 'Flinger', desc: "Spring plate. Throws mice the way the arrow points — into walls, the moat, other traps. Splat.", cost: 60,  surface: 'floor',   size: [4, 4], cooldown: 3.5, launchH: 11, launchV: 14, launchDamage: 10, pathCost: 0 },
   grinder:   { el: 'physical', name: 'Cheese Grater', desc: "Spinning grater on a wall. Shreds anything walking within a tile of it.",  cost: 80,  surface: 'wall',    size: [4, 1], dps: 45, reach: 2, pathCost: 0 },
   zapper:    { el: 'electric', name: 'Bug Zapper', desc: "Hangs under roofs, tables and benches. Fries the whole crowd underneath.",    cost: 90,  surface: 'ceiling', size: [4, 4], damage: 35, cooldown: 2, radius: 2.4, pathCost: 0 },
   gluepad:   { el: 'physical', name: 'Glue Trap', desc: "Sticks mice in place. Holds ten, then needs to dry before it works again.",      cost: 30,  surface: 'floor',   size: [4, 4], stickSecs: 2.5, charges: 10, recharge: 6, pathCost: 0 },   // OMD tar
-  tacks:     { el: 'physical', name: 'Thumbtacks', desc: "A carpet of tacks. Everyone crossing it bleeds.",    cost: 35,  surface: 'floor',   size: [4, 4], damage: 3, tick: 0.4, pathCost: 0 },                      // OMD briar
+  tacks:     { el: 'physical', name: 'Thumbtacks', desc: "A carpet of tacks. Everyone crossing it bleeds.",    cost: 35,  surface: 'floor',   size: [4, 4], damage: 4, tick: 0.4, pathCost: 0 },                      // OMD briar
   bait:      { el: null, name: 'Cheese Chunk', desc: 'A big lump of cheese. Mice nearby leave their route to nibble it, standing still on whatever traps you put around it.', cost: 25, surface: 'floor', size: [4, 4], lure: 6, nibbles: 30, eatSecs: 2.5, recharge: 12, pathCost: 0 },
   // ---- new in 0.11: elemental traps ----
   hotplate:  { el: 'fire', name: 'Hot Plate', desc: 'A stove ring left on. Scorches everything standing on it and sets it burning.', cost: 70, surface: 'floor', size: [4, 4], damage: 14, cooldown: 1.2, pathCost: 0 },
