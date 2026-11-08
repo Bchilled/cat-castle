@@ -238,7 +238,19 @@ const LINKS = {
   cellar: [{ name: 'Cheese wheel', a: [42, 69.5], b: [42, 58.5], y: 3, path: [[42, 67.6], [42, 60.4]] },
            { name: 'Cheese wheel', a: [36.5, 64], b: [47.5, 64], y: 3, path: [[38.4, 64], [45.6, 64]] }],
 };
-for (const k of MAP_ORDER) { MAPS[k].tops = TOPS[k] || []; MAPS[k].crates = CRATES[k] || []; MAPS[k].links = LINKS[k] || []; }
+// Humans (v0.16, scenery only). 'side': that outer wall is drawn as a low curb (its collider
+// stays full height) and the lit human space lies beyond it, with people walking about.
+// 'wallWalk': guards patrol along the top of walls (x0, x1, z, y).
+const HUMANS = {
+  entrance: { kind: 'guard', walks: [[4, 38, 80, 28], [58, 92, 80, 28], [30, 66, 1, 32]] },
+  market: { kind: 'shopper', side: 'east', count: 6, floor: 'cobbles' },
+  stables: { kind: 'stablehand', side: 'east', count: 3, floor: 'dirt' },
+  kitchen: { kind: 'cook', side: 'east', count: 3, floor: 'stone' },
+};
+for (const k of MAP_ORDER) {
+  const M = MAPS[k]; M.tops = TOPS[k] || []; M.crates = CRATES[k] || []; M.links = LINKS[k] || []; M.humans = HUMANS[k] || null;
+  if (M.humans && M.humans.side === 'east') for (const f of M.furniture) if (f.name === 'East wall') f.visH = 1.4;
+}
 
 // Point every live export at map `id`. Call before building a Sim.
 export function useMap(id) {

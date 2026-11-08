@@ -9,7 +9,7 @@ import {
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
-import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp } from './models.js';
+import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp, makeHuman } from './models.js';
 import { tmat } from './textures.js';
 
 const MAX_MICE = 800;
@@ -45,6 +45,7 @@ export class Scene {
     this.particles = []; this.decals = [];
     this.aimProxies = new THREE.Group();
     this.buildWorld();
+    this.buildHumans();
     this.buildMiceInstancing();
     this.buildRoute();
     this.ghost = null; this.ghostKind = null;
@@ -203,6 +204,49 @@ export class Scene {
     }
     function part3(geo, color, x, y, z) { const m = new THREE.Mesh(geo, mat(color)); m.position.set(x, y, z); return m; }
     this.aimProxies.updateMatrixWorld(true);
+  }
+
+  // ---------- humans (scenery, out of zone) ----------
+  // Beyond a low curb on one side: the lit human space (market square, stable yard, the cooks'
+  // floor), people walking up and down at full size. On the entrance, guards on the wall tops.
+  buildHumans() {
+    const H = MAP.humans; this.humans = [];
+    if (!H) return;
+    const s = this.scene;
+    if (H.side === 'east') {
+      const x0 = WORLD_W, w = 34, FLOORS = { cobbles: ['cobbles', 3, 0xd8d0c4], dirt: ['dirt', 4, 0xe0d4c0], stone: ['stone', 4, 0xc8c0b4] }, fl = FLOORS[H.floor] || FLOORS.stone;
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.3, WORLD_H + 20), tmat(fl[0], fl[1], fl[2])); floor.position.set(x0 + w / 2, -0.15, WORLD_H / 2); s.add(floor);
+      // The far side: house fronts (market) or a plain wall (indoors), and the human space is lit.
+      s.add(makeFurniture({ name: 'Far side', kind: 'solid', rect: [x0 + w, -10, x0 + w + 3, WORLD_H + 10], h: 26, look: H.kind === 'shopper' ? 'house' : 'plaster' }));
+      for (let z = 15; z < WORLD_H; z += 35) { const l = new THREE.PointLight(0xfff0d0, 22, 45, 1.2); l.position.set(x0 + w / 2, 14, z); s.add(l); }
+      // A few human-size things for scale: barrels, a table leg, a cart wheel.
+      for (let k = 0; k < 5; k++) {
+        const z = 10 + k * (WORLD_H - 20) / 4, b = outline(new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 4.2, 12), tmat('planks', 2, 0xb08a60)), 1.01);
+        b.position.set(x0 + w - 4, 2.1, z); s.add(b);
+      }
+      for (let k = 0; k < (H.count || 3); k++) {
+        const g = makeHuman(H.kind, k + 1); s.add(g);
+        this.humans.push({ g, axis: 'z', lo: 6, hi: WORLD_H - 6, pos: 6 + (k * 37) % (WORLD_H - 12), lane: x0 + 4 + (k * 5.3) % (w - 12), dir: k % 2 ? 1 : -1, sp: 2.8 + (k * 0.7) % 1.8, wait: 0, step: 0 });
+      }
+    }
+    for (const [a, b, c, y] of H.walks || []) {   // guards on the walls: walk along x at height y
+      const g = makeHuman(H.kind, a + c); s.add(g);
+      this.humans.push({ g, axis: 'x', lo: a, hi: b, pos: (a + b) / 2, lane: c, y, dir: 1, sp: 2.2, wait: 0, step: 0 });
+    }
+  }
+  stepHumans(dt) {
+    for (const h of this.humans || []) {
+      if (h.wait > 0) { h.wait -= dt; h.g.userData.legs.forEach(l => { l.rotation.x *= 0.8; }); continue; }
+      h.pos += h.dir * h.sp * dt; h.step += h.sp * dt * 1.1;
+      if (h.pos > h.hi || h.pos < h.lo) { h.dir = -h.dir; h.pos = Math.max(h.lo, Math.min(h.hi, h.pos)); h.wait = 1 + Math.random() * 3; }   // turn round, maybe stop to look at something
+      const x = h.axis === 'z' ? h.lane : h.pos, z = h.axis === 'z' ? h.pos : h.lane;
+      h.g.position.set(x, (h.y || 0) + Math.abs(Math.sin(h.step)) * 0.12, z);
+      h.g.rotation.y = h.axis === 'z' ? (h.dir > 0 ? 0 : Math.PI) : (h.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+      const sw = Math.sin(h.step) * 0.5, ud = h.g.userData;
+      ud.legs[0].rotation.x = sw; ud.legs[1].rotation.x = -sw; ud.arms[0].rotation.x = -sw * 0.8; ud.arms[1].rotation.x = sw * 0.8;
+      // Footsteps you can hear when you're near (the floor shakes a little when one passes close).
+      const ph = Math.floor(h.step / Math.PI); if (ph !== h.lastPh) { h.lastPh = ph; if (this.onStep) this.onStep(x, z); }
+    }
   }
 
   // Dark arched hole facing +z (rotY 0) or -z (rotY PI), flush with a wall face.
@@ -755,6 +799,7 @@ export class Scene {
       pos.needsUpdate = true; wtr.mesh.geometry.computeVertexNormals();
     }
     this.drawMapFeatures(dt, now);
+    this.stepHumans(dt);
     this.exitRing.material.opacity = 0.5 + Math.sin(now / 250) * 0.3;
     this.flames.forEach((f, k) => { const n = Math.sin(now / 90 + k * 1.7) * 0.5 + Math.sin(now / 37 + k) * 0.5; f.scale.set(1 + n * 0.12, 1 + n * 0.25, 1 + n * 0.12); });
     this.updateRoute(now);

@@ -243,6 +243,7 @@ function start(mode, co = null) {
   const canvas = document.getElementById('game');
   const scene = new Scene(canvas, sim);
   const hud = new Hud(sim, loadout);
+  scene.onStep = (x, z) => sfx.play('footstep', x, z, { vol: 0.6 });   // humans walking past
   game = { stop() {
     running = false; ac.abort(); offs.forEach(f => f()); scene.dispose(); document.exitPointerLock?.();
     const c = document.getElementById('game'); c.replaceWith(c.cloneNode(false));   // a clean canvas for the next game

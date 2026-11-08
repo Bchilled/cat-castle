@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.16.0 — 2026-11-07
+Humans (scenery only, out of zone)
+- Market, stables and kitchen: the east wall is now a low curb. It still can't be crossed (its collider stays full height). Beyond it is the lit human space, with people walking up and down at full size, about 1.8 m to your cat's 30 cm:
+  - shoppers with baskets in the market square
+  - stable hands with pitchforks
+  - cooks in the kitchen
+- They stop and turn now and then, and you can hear their footsteps when they pass close.
+- Castle Entrance: guards with spears patrol the tops of the curtain walls and the hall wall.
+- The cellar and the servants' passages have no humans: one is dark, the other is inside the walls.
+- `src/render/models.js` makeHuman, makeFurniture (low curb drawing); `src/sim/map.js` HUMANS; `src/render/scene.js` buildHumans, stepHumans; `src/audio/sfx.js` footstep; `src/main.js` footstep hook.
+
 ## 0.15.0 — 2026-11-07
 Balance pass. A "new player" bot was used to check this: starter traps only, no upgrades, one kill zone at the hole, cat standing still and attacking. Before the changes it lost every map by wave 6–18, almost all of it at boss waves. After them, a bot with Puddin wins 4 of 6 maps on Normal, and one with Fred gets to waves 18–24. It's a rough guide; real hands-on play should decide the rest.
 - Danger memory reworked. Mice used to step around any patch where friends had died, so after a few kills they simply skirted kill zones in open yards and traps felt useless. Now danger only weighs which lane a pack picks; inside the lane they still walk into your traps. `src/sim/sim.js` laneDanger, chooseVia, routes() (traces per lane), updateFlow.

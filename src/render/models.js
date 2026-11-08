@@ -492,7 +492,47 @@ export function makeTrinket(tier) {
 // Rule: every piece of art stays inside its collision box (rect + height), so
 // anything you can see, you bump into. Nothing decorative pokes into walkways.
 const WOOD = 0x6e4e30, DARKWOOD = 0x4a3420, STONE = 0x6f6a62, STONE2 = 0x5e5850;
+// Humans (scenery, never hazards): full size, about 6 units (1.8 m) tall, so a cat comes up
+// to their ankle. kind: guard | shopper | stablehand | cook. userData: legs, arms for walking.
+export function makeHuman(kind, seed = 0) {
+  const g = new THREE.Group(), R = (k) => ((Math.sin(seed * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
+  const pick = (arr, k) => arr[Math.floor(R(k) * arr.length)];
+  const skin = pick([0xe8c0a0, 0xc89878, 0x8a5a3a, 0xf0d0b8], 1);
+  const look = {
+    guard: { shirt: 0x8a8a92, legs: 0x4a4038, shoe: 0x2a2018, hat: 'helmet' },
+    shopper: { shirt: pick([0x9a3a3a, 0x3a5a9a, 0x6a8a3a, 0x8a6a3a, 0x7a4a8a], 2), legs: pick([0x5a4a3a, 0x3a3a4a, 0x6a5a40], 3), shoe: 0x3a2a1a, hat: pick(['none', 'hood', 'cap'], 4), basket: R(5) < 0.6 },
+    stablehand: { shirt: 0xb89a6a, legs: 0x5a4028, shoe: 0x2a1a10, hat: 'straw' },
+    cook: { shirt: 0xf0ece4, legs: 0x4a4a4a, shoe: 0x222222, hat: 'chef', apron: true },
+  }[kind] || {};
+  const P = (geo, c, x, y, z, line = true) => { const m = part(geo, c, x, y, z, 1, 1, 1, line); return m; };
+  const legs = [], arms = [];
+  for (const sx of [-0.35, 0.35]) {   // hips at y 3.0
+    const hip = new THREE.Group(); hip.position.set(sx, 3.0, 0); g.add(hip); legs.push(hip);
+    hip.add(P(new THREE.BoxGeometry(0.42, 2.8, 0.45), look.legs, 0, -1.4, 0));
+    hip.add(P(new THREE.BoxGeometry(0.48, 0.3, 0.95), look.shoe, 0, -2.85, 0.2));
+  }
+  g.add(P(new THREE.BoxGeometry(1.25, 2.1, 0.7), look.shirt, 0, 4.05, 0));           // body
+  if (look.apron) g.add(P(new THREE.BoxGeometry(1.0, 2.2, 0.05), 0xffffff, 0, 3.5, 0.38, false));
+  for (const sx of [-0.8, 0.8]) {   // shoulders at y 5
+    const sh = new THREE.Group(); sh.position.set(sx, 5.0, 0); g.add(sh); arms.push(sh);
+    sh.add(P(new THREE.BoxGeometry(0.32, 1.9, 0.36), look.shirt, 0, -0.95, 0));
+    sh.add(P(new THREE.BoxGeometry(0.3, 0.32, 0.32), skin, 0, -2.0, 0));
+  }
+  const head = P(new THREE.BoxGeometry(0.75, 0.85, 0.75), skin, 0, 5.65, 0); g.add(head);
+  for (const ex of [-0.17, 0.17]) { const e = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.02), mat(0x1a1a1a)); e.position.set(ex, 5.75, 0.38); g.add(e); }
+  if (look.hat === 'helmet') { g.add(P(new THREE.SphereGeometry(0.48, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0x9a9aa2, 0, 5.95, 0)); const sp = P(new THREE.CylinderGeometry(0.05, 0.05, 8, 6), 0x6a4a2a, 0.95, 4.2, 0.3); g.add(sp); g.add(P(new THREE.ConeGeometry(0.14, 0.5, 6), 0xb0b0b8, 0.95, 8.4, 0.3)); }
+  else if (look.hat === 'straw') { g.add(P(new THREE.CylinderGeometry(0.75, 0.8, 0.08, 14), 0xe0c070, 0, 6.1, 0)); g.add(P(new THREE.CylinderGeometry(0.38, 0.42, 0.35, 12), 0xe0c070, 0, 6.28, 0)); }
+  else if (look.hat === 'chef') { g.add(P(new THREE.CylinderGeometry(0.4, 0.38, 0.45, 12), 0xffffff, 0, 6.25, 0)); g.add(P(new THREE.SphereGeometry(0.5, 10, 8), 0xffffff, 0, 6.6, 0)); }
+  else if (look.hat === 'hood') g.add(P(new THREE.BoxGeometry(0.85, 0.5, 0.85), look.shirt, 0, 6.05, -0.05));
+  else if (look.hat === 'cap') g.add(P(new THREE.BoxGeometry(0.8, 0.22, 0.85), 0x4a3a2a, 0, 6.15, 0.05));
+  if (look.basket) { const b = P(new THREE.CylinderGeometry(0.45, 0.35, 0.5, 10), 0xb8904a, 0, -2.3, 0.3); arms[1].add(b); }
+  if (kind === 'stablehand') { const fork = P(new THREE.CylinderGeometry(0.04, 0.04, 5, 6), 0x8a6a40, 0, -1.6, 0.4); fork.rotation.x = 0.2; arms[0].add(fork); }
+  g.userData = { legs, arms };
+  return g;
+}
+
 export function makeFurniture(f) {
+  if (f.visH) f = { ...f, h: f.visH, look: 'curb', tex: 'stone', tint: 0xb8b0a4 };   // a wall drawn low (a curb): the collider stays tall, so nobody leaves the map
   const [x0, z0, x1, z1] = f.rect, w = x1 - x0, d = z1 - z0;
   const g = new THREE.Group(); g.position.set(x0 + w / 2, 0, z0 + d / 2);
   const B = (c, x, y, z, sx, sy, sz, line = true) => { const m = box(c, x, y, z, sx, sy, sz, line); g.add(m); return m; };

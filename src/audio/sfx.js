@@ -139,7 +139,7 @@ export class Sfx {
 }
 
 // Rate limits: [max plays, per seconds]. Unlisted sounds: 6 per 0.1 s.
-const LIMITS = { sizzle: [2, 0.3], chill: [2, 0.3], salt: [1, 0.4], slip: [2, 0.2], darts: [2, 0.2], combo_chain: [2, 0.15], combo_blaze: [2, 0.2], combo_freeze: [3, 0.15], combo_spread: [1, 0.3], combo_knockdown: [3, 0.1], combo_steam: [1, 0.3], execute: [3, 0.1], toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25] };
+const LIMITS = { footstep: [2, 0.2], sizzle: [2, 0.3], chill: [2, 0.3], salt: [1, 0.4], slip: [2, 0.2], darts: [2, 0.2], combo_chain: [2, 0.15], combo_blaze: [2, 0.2], combo_freeze: [3, 0.15], combo_spread: [1, 0.3], combo_knockdown: [3, 0.1], combo_steam: [1, 0.3], execute: [3, 0.1], toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25] };
 
 // Each sound: (sfx, output node, random, options).
 const SOUNDS = {
@@ -237,6 +237,8 @@ const SOUNDS = {
   intro: (a, o) => { [880, 1175].forEach((f, k) => a.tone(o, { type: 'triangle', f, t: k * 0.12, dur: 0.3, vol: 0.18 })); },
   win: (a, o) => { [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, k) => a.tone(o, { type: 'triangle', f, t: k * 0.14, dur: 0.4, vol: 0.2 })); },
   lose: (a, o) => { [392, 370, 349, 262].forEach((f, k) => a.tone(o, { type: 'sawtooth', f, t: k * 0.35, dur: 0.5, vol: 0.12, vib: 4 })); },
+  // Humans walking past (0.16): a deep, soft thump.
+  footstep: (a, o, R) => { a.tone(o, { f: 70 + R() * 15, f2: 40, dur: 0.18, vol: 0.35 }); a.noise(o, { dur: 0.1, vol: 0.12, type: 'lowpass', f: 300 }); },
   // Smarter mice (0.12).
   crateBreak: (a, o) => { a.noise(o, { dur: 0.12, vol: 0.8, type: 'highpass', f: 1500 }); a.tone(o, { f: 110, f2: 45, t: 0.03, dur: 0.4, vol: 0.6 }); a.noise(o, { t: 0.05, dur: 0.5, vol: 0.4, type: 'lowpass', f: 900, f2: 150 }); },
   crateUp: (a, o) => { a.tone(o, { type: 'triangle', f: 200, f2: 140, dur: 0.1, vol: 0.2 }); },
