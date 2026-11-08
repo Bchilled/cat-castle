@@ -545,8 +545,58 @@ export function makeTrap(kind, ghost = false) {
     jar.add(part(cyl(0.26, 0.26, 0.1, 12), 0x2a2a2a, 0, 0.66, 0, 1, 1, 1, !ghost));
     jar.add(part(BOX, 0xf0e4c8, 0, 0.32, 0.25, 0.3, 0.18, 0.01, false));
     lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'stickyjam') {
+    // A glossy puddle of berry jam spreading from a tipped-over jar.
+    const jam = new THREE.MeshLambertMaterial({ color: 0x8a1830, emissive: 0x2a0410, transparent: ghost, opacity: ghost ? 0.5 : 1 });
+    for (const [x, z, r] of [[0, 0, 0.75], [-0.4, 0.35, 0.45], [0.45, -0.3, 0.5], [0.3, 0.5, 0.35], [-0.5, -0.45, 0.35]]) { const p = new THREE.Mesh(cyl(r, r, 0.04, 14), jam); p.position.set(x, 0.025, z); add(p); }
+    for (let k = 0; k < 6; k++) P(new THREE.SphereGeometry(0.08, 6, 5), 0x5a0a20, Math.cos(k * 1.9) * 0.5, 0.07, Math.sin(k * 1.9) * 0.5);
+    const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.6, 12), new THREE.MeshLambertMaterial({ color: 0xd8e8f0, transparent: true, opacity: 0.4, depthWrite: false }));
+    jar.rotation.z = Math.PI / 2; jar.position.set(-0.55, 0.28, -0.55); add(jar);
+    const fill = P(cyl(0.24, 0.24, 0.5, 10), 0x8a1830, -0.55, 0.25, -0.55); fill.rotation.z = Math.PI / 2;
+    lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'pincushion') {
+    // A fat red tomato pin cushion sunk in the floor, bristling with pins.
+    B(0x4a3624, 0, 0.04, 0, S * 0.9, 0.08, S * 0.9);
+    P(new THREE.SphereGeometry(0.75, 14, 8), 0xc0281e, 0, 0.12, 0, 1, 0.38, 1);
+    for (let k = 0; k < 5; k++) { const seam = B(0x8a1a14, 0, 0.3, 0, 0.03, 0.05, 1.45); seam.rotation.y = k * Math.PI / 5; }
+    const pins = new THREE.Group(); add(pins); g.userData.pins = pins;
+    for (let k = 0; k < 12; k++) {
+      const a = k * 2.4, r = 0.2 + (k % 4) * 0.14, pin = new THREE.Group(); pin.position.set(Math.cos(a) * r, 0.2, Math.sin(a) * r); pin.rotation.set(Math.sin(a) * 0.3, 0, Math.cos(a) * 0.3); pins.add(pin);
+      pin.add(part(cyl(0.012, 0.012, 0.45, 4), 0xc8c8cc, 0, 0.22, 0, 1, 1, 1, false));
+      pin.add(part(new THREE.SphereGeometry(0.05, 6, 5), [0xf0d040, 0x3a6ad8, 0xf0f0f0, 0x40a040][k % 4], 0, 0.46, 0, 1, 1, 1, false));
+    }
+    lamp(h - 0.15, 0.35, -h + 0.15);
+  } else if (kind === 'catapult') {
+    // A big wooden spoon on a sprung hinge: the bowl at the back flips up and over to the
+    // front (the arrow), lobbing whatever was in it.
+    B(0x4d4a46, 0, 0.05, 0, S * 0.96, 0.1, S * 0.96);
+    B(0x5a3a20, 0, 0.2, 0.45, 0.6, 0.3, 0.2);
+    const hinge = new THREE.Group(); hinge.position.set(0, 0.32, 0.45); add(hinge); g.userData.hinge = hinge;
+    hinge.add(part(BOX, 0xb08850, 0, 0, -0.5, 0.16, 0.08, 1.0, !ghost));
+    hinge.add(part(new THREE.SphereGeometry(0.38, 12, 8), 0xb08850, 0, 0.04, -1.0, 1, 0.32, 1.2, !ghost));   // the spoon's bowl
+    const arrow = P(new THREE.ConeGeometry(0.22, 0.45, 3), 0xd8c048, 0, 0.18, 0.75); arrow.rotation.x = Math.PI / 2;
+    lamp(h - 0.15, 0.4, -h + 0.15);
+  } else if (kind === 'pans') {
+    // A hanging rack of heavy iron pans.
+    for (const x of [-0.7, 0.7]) B(0x2a2826, x, -0.3, 0, 0.03, 0.6, 0.03);
+    B(0x3a3632, 0, -0.62, 0, 1.7, 0.08, 0.08);
+    const pans = [];
+    for (const x of [-0.55, 0, 0.55]) {
+      const pg = new THREE.Group(); pg.position.set(x, -0.62, 0); add(pg); pans.push(pg);
+      pg.add(part(BOX, 0x1e1c1a, 0, -0.25, 0, 0.06, 0.45, 0.04, false));
+      const pan = part(cyl(0.3, 0.26, 0.08, 14), 0x2a2826, 0, -0.75, 0, 1, 1, 1, !ghost); pan.rotation.x = Math.PI / 2; pg.add(pan);
+    }
+    g.userData.pans = pans;
+    lamp(0.85, -0.15, 0);
   }
   if (ghost) g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.5; o.material.depthWrite = false; } });
+  return g;
+}
+// A falling iron pan (Dropping Pans).
+export function makePan() {
+  const g = new THREE.Group();
+  g.add(part(cyl(0.3, 0.26, 0.08, 14), 0x2a2826, 0, 0, 0, 1, 1, 1, true));
+  g.add(part(BOX, 0x1e1c1a, 0, 0, 0.5, 0.06, 0.04, 0.5, false));
   return g;
 }
 // A thrown kitchen knife (Knife Block): steel blade, black handle, along +z.

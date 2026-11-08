@@ -732,6 +732,7 @@ export class Sim {
     if (el && d.res && d.res[el] !== undefined) n *= d.res[el];
     if (m.packed && source !== 'stranded') n *= RULES.packDamageTaken;
     if (m.vulnT > 0) n *= CAT.roarVuln;          // shaken by Mimo's roar
+    if (m.jamT > 0 && m.jamVuln) n *= 1.25;      // Marmalade
     let fizzled = false;
     if (source !== 'dot' && el) {
       // Combos that change this very hit.
@@ -1789,6 +1790,14 @@ export class Sim {
       }
       if (m.onGround) {
         const li = cellOf(m.x, m.z);
+        // Landing from a Spoon Catapult: splat whatever it lands on.
+        if (m.catapult) {
+          const c = m.catapult; m.catapult = null; let n = 0;
+          for (const o of this.nearMice(m.x, m.z, c.r + 0.5)) if (o !== m && !o.dead && Math.abs(o.y - m.y) < 1 && Math.hypot(o.x - m.x, o.z - m.z) < c.r) { this.damageMouse(o, c.dmg, 'splat'); if (c.hot && !o.dead) this.damageMouse(o, 1, 'trap', false, 'fire'); n++; }
+          if (c.hot && !m.dead) this.damageMouse(m, 1, 'trap', false, 'fire');
+          this.emit({ t: 'catapultLand', x: m.x, z: m.z, hits: n, hot: c.hot });
+          if (m.dead) return;
+        }
         if (this.isWater(li)) { this.emit({ t: 'splash', x: m.x, z: m.z }); this.killMouse(m, 'trap', true); return; }
         if (m.landV > RULES.splatSpeed) {
           this.emit({ t: 'splat', x: m.x, y: m.y, z: m.z, big: m.landV > 16 });
@@ -1803,6 +1812,7 @@ export class Sim {
     }
     if (m.state === 'stranded') { this.damageMouse(m, RULES.unreachableDps * DT, 'stranded'); return; }
     if (m.vulnT > 0) m.vulnT -= DT;
+    if (m.jamT > 0) { m.jamT -= DT; m.slowT = Math.max(m.slowT, 0.1); if (m.jamAnts) this.damageMouse(m, 3 * DT, 'poison'); if (m.dead) return; }   // Sticky Jam (Ant Trail: ants)
     if (m.stunT > 0) { m.stunT -= DT; if (m.stunT <= 0) m.asleep = false; return; }
     if (m.state === 'stuck') { m.stuckT -= DT; if (m.stuckT <= 0) m.state = 'walk'; return; }
 
@@ -1987,15 +1997,17 @@ export class Sim {
     }
 
     // Neighbours: count packmates (strength in numbers) and push apart (collision).
-    let packN = 0, sx = 0, sz = 0;
+    let packN = 0, sx = 0, sz = 0, jx = 0, jz = 0, jn = 0;
     for (const o of this.nearMice(m.x, m.z, RULES.packRadius)) {
       if (o === m || o.dead || o.state !== 'walk') continue;
       const dx = m.x - o.x, dz = m.z - o.z, dist = Math.hypot(dx, dz);
       if (dist < RULES.packRadius) packN++;
+      if (m.jamT > 0 && o.jamT > 0 && dist < RULES.packRadius) { jx += o.x; jz += o.z; jn++; }   // jammy mice cling together
       const min = r + MICE[o.type].size * 0.35;
       if (dist < min && dist > 0.0001) { const push = (min - dist) / dist * (MICE[o.type].size >= d.size ? 0.5 : 0.25); sx += dx * push; sz += dz * push; }
     }
     m.packed = packN >= RULES.packCount;
+    if (jn) { const cx = jx / jn - m.x, cz = jz / jn - m.z, cd = Math.hypot(cx, cz); if (cd > 0.3) { const k = Math.min(cd - 0.3, 1.5 * DT) / cd; sx += cx * k; sz += cz * k; } }   // drawn to the middle of the jammy clump
 
     const ok = (x, z) => { const c = cellOf(x, z); return c >= 0 && pass(c) && !this.isBlocker(c); };
     if (this.map.mud[i]) m.dirtyT = Math.max(m.dirtyT || 0, 1);     // stables mud: dirty mice get knocked flat by physics
@@ -2493,6 +2505,53 @@ export class Sim {
             }
           }
           this.emit({ t: tr.kind, id: tr.id, x: cx, y: tr.y, z: cz, hits: vs.length });
+          break;
+        }
+        // ---- new in 0.24 ----
+        case 'stickyjam': {
+          // Wading through jam: slowed, and jammy for a while (they cling together; see stepMouse).
+          for (const m of this.nearMice(...centre(tr), 2)) if (live(m) && inRect(m, tr, 0)) {
+            if (!(m.jamT > 0)) this.emit({ t: 'jammed', x: m.x, z: m.z });
+            m.jamT = P.jamSecs; m.jamVuln = !!P.vuln; m.jamAnts = !!P.ants; m.slowT = Math.max(m.slowT, 0.3);
+          }
+          break;
+        }
+        case 'pincushion': {
+          // Jabs whatever stands on it every prickSecs: a little damage and another bleed each time.
+          if ((tr.tickT -= DT) <= 0) {
+            tr.tickT = P.prickSecs; let n = 0;
+            for (const m of this.nearMice(...centre(tr), 2)) if (live(m) && inRect(m, tr, 0)) { bleed(m, P.stacks, mods.bleedMax); this.damageMouse(m, dmg, 'trap', false, el); n++; }
+            if (n) this.emit({ t: 'prick', id: tr.id, x: (tr.x0 + tr.x1) / 2, z: (tr.z0 + tr.z1) / 2 });
+          }
+          // Needle Burst: a ring of pins every few seconds.
+          if (P.burst && tr.cd <= 0) {
+            const [cx, cz] = centre(tr), vs = this.nearMice(cx, cz, 3).filter(m => live(m) && Math.hypot(m.x - cx, m.z - cz) < 2.5);
+            if (vs.length) { reset(tr, P.burst); for (const m of vs) { bleed(m, 1, mods.bleedMax); this.damageMouse(m, dmg, 'trap', false, el); } this.emit({ t: 'pinBurst', id: tr.id, x: cx, z: cz }); }
+          }
+          break;
+        }
+        case 'catapult': {
+          // Lobs the first mouse on it `range` units the way the arrow points, in a high arc;
+          // where it lands it splats whatever is there (see the landing in stepMouse).
+          if (tr.cd > 0) break;
+          const v = this.nearMice(...centre(tr), 2).find(m => live(m) && inRect(m, tr, 0) && !MICE[m.type].boss && (P.big || MICE[m.type].size < 0.9));
+          if (!v) break;
+          reset(tr, P.cooldown);
+          const [dx, dz] = DIRS4[ROT_DIR[tr.rot % 4]], vy = 10, tf = 2 * vy / GRAVITY, vh = P.range / tf;
+          this.launch(v, dx * vh, vy, dz * vh);
+          v.catapult = { dmg: P.splash * mods.trapDmg, r: P.splashR, hot: !!P.hot };
+          this.damageMouse(v, P.launchDamage * mods.trapDmg, 'trap', false, el);
+          this.emit({ t: 'catapult', id: tr.id, x: v.x, z: v.z });
+          break;
+        }
+        case 'pans': {
+          // Drops a pan on the biggest mouse(s) underneath: a heavy physics hit that knocks it flat.
+          if (tr.cd > 0) break;
+          const vs = below(tr, P.radius).sort((a, b) => MICE[b.type].size - MICE[a.type].size || b.hp - a.hp).slice(0, P.count || 1);
+          if (!vs.length) break;
+          reset(tr, P.cooldown);
+          this.emit({ t: 'pan', id: tr.id, x: (tr.x0 + tr.x1) / 2, y: tr.ceil, z: (tr.z0 + tr.z1) / 2, to: vs.map(m => [m.x, m.z]) });
+          for (const m of vs) { m.dirtyT = Math.max(m.dirtyT || 0, 0.1); this.damageMouse(m, dmg, 'trap', false, el); }   // dirty + physics = knocked flat
           break;
         }
         case 'gluepad': case 'flypaper': {

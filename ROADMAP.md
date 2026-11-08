@@ -24,9 +24,7 @@ In from v0.10.0: all six maps, mazing with Poison Boxes, knock-over props, food 
   6. The Kitchen: under the counters, behind the ovens (fire), the pantry. The last stand.
 
 ## B. Many more traps (each with its own size, surface and ability)
-In from v0.11.0: Hot Plate, Ice Tray, Oil Slick, Rolling Pin, Mouse Skull, Fork Darts, Bellows, Candle Torch, Hypno Wheel, Flower Pot, Leaky Bucket, Salt Shaker, Flypaper (22 traps in all). In from v0.19.0: Trapdoor, Magnifying Glass, Knife Block (table tops only), Honey Drip (26 in all). In from v0.21.0: Cuckoo Clock, Chandelier, Kettle and Spice Jar (table tops only) (30 in all). Ideas still to pick from (the rest of the original list is built):
-- **Floor:** sticky jam, pin cushion, spring-loaded spoon catapult.
-- **Ceiling:** dropping pans.
+In from v0.11.0: Hot Plate, Ice Tray, Oil Slick, Rolling Pin, Mouse Skull, Fork Darts, Bellows, Candle Torch, Hypno Wheel, Flower Pot, Leaky Bucket, Salt Shaker, Flypaper (22 traps in all). In from v0.19.0: Trapdoor, Magnifying Glass, Knife Block (table tops only), Honey Drip (26 in all). In from v0.21.0: Cuckoo Clock, Chandelier, Kettle and Spice Jar (table tops only) (30 in all). In from v0.24.0: Sticky Jam, Pin Cushion, Spoon Catapult, Dropping Pans (34 in all); the original idea list is all built.
 
 ## C. Out-of-game progression (like Orcs Must Die 2's spellbook)
 In from v0.11.0: the shop (unlocks, tier 2 and 3, a choice of two specials per trap, hats for yarn).

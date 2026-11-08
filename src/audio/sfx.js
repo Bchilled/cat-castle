@@ -139,7 +139,7 @@ export class Sfx {
 }
 
 // Rate limits: [max plays, per seconds]. Unlisted sounds: 6 per 0.1 s.
-const LIMITS = { footstep: [2, 0.2], sizzle: [2, 0.3], chill: [2, 0.3], salt: [1, 0.4], slip: [2, 0.2], darts: [2, 0.2], combo_chain: [2, 0.15], combo_blaze: [2, 0.2], combo_freeze: [3, 0.15], combo_spread: [1, 0.3], combo_knockdown: [3, 0.1], combo_steam: [1, 0.3], execute: [3, 0.1], toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25], shelfHit: [2, 0.12], barrelHit: [2, 0.15], barrelRoll: [2, 0.4], knife: [3, 0.08], beam: [2, 0.3], honeyDrip: [2, 0.3], cuckoo: [2, 0.25], kettle: [2, 0.4], spicejar: [2, 0.3] };
+const LIMITS = { footstep: [2, 0.2], sizzle: [2, 0.3], chill: [2, 0.3], salt: [1, 0.4], slip: [2, 0.2], darts: [2, 0.2], combo_chain: [2, 0.15], combo_blaze: [2, 0.2], combo_freeze: [3, 0.15], combo_spread: [1, 0.3], combo_knockdown: [3, 0.1], combo_steam: [1, 0.3], execute: [3, 0.1], toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25], shelfHit: [2, 0.12], barrelHit: [2, 0.15], barrelRoll: [2, 0.4], knife: [3, 0.08], beam: [2, 0.3], honeyDrip: [2, 0.3], cuckoo: [2, 0.25], kettle: [2, 0.4], spicejar: [2, 0.3], jammed: [2, 0.15], prick: [3, 0.1], catapult: [2, 0.2], catapultLand: [2, 0.2], pan: [2, 0.2] };
 
 // Each sound: (sfx, output node, random, options).
 const SOUNDS = {
@@ -256,6 +256,13 @@ const SOUNDS = {
   lob: (a, o) => { a.noise(o, { dur: 0.3, vol: 0.2, type: 'bandpass', f: 600, f2: 1400 }); },
   rockHit: (a, o) => { a.tone(o, { f: 110, f2: 50, dur: 0.18, vol: 0.5 }); a.noise(o, { dur: 0.12, vol: 0.3, type: 'lowpass', f: 900 }); },
   jam: (a, o) => { a.tone(o, { type: 'square', f: 260, f2: 180, dur: 0.12, vol: 0.08 }); a.tone(o, { type: 'square', f: 200, f2: 140, t: 0.1, dur: 0.12, vol: 0.08 }); },
+  // New traps (0.24): jam squelch, pin jab, pin burst, spoon boing, landing splat, pan clang.
+  jammed: (a, o) => { a.noise(o, { dur: 0.12, vol: 0.12, type: 'lowpass', f: 500 }); },
+  prick: (a, o) => { a.tone(o, { type: 'triangle', f: 2400, f2: 2000, dur: 0.04, vol: 0.06 }); },
+  pinBurst: (a, o) => { a.noise(o, { dur: 0.2, vol: 0.25, type: 'highpass', f: 5000 }); },
+  catapult: (a, o) => { a.tone(o, { type: 'triangle', f: 180, f2: 420, dur: 0.18, vol: 0.25, vib: 18 }); a.noise(o, { t: 0.05, dur: 0.25, vol: 0.12, type: 'bandpass', f: 800, f2: 1600 }); },
+  catapultLand: (a, o) => { a.tone(o, { f: 140, f2: 60, dur: 0.15, vol: 0.4 }); a.noise(o, { dur: 0.1, vol: 0.2, type: 'lowpass', f: 1200 }); },
+  pan: (a, o) => { a.tone(o, { type: 'triangle', f: 900, f2: 860, t: 0.3, dur: 0.6, vol: 0.18, vib: 5 }); a.tone(o, { type: 'square', f: 1350, f2: 1300, t: 0.3, dur: 0.4, vol: 0.05 }); a.tone(o, { f: 120, f2: 70, t: 0.3, dur: 0.12, vol: 0.45 }); },
   // Things that fall over (0.17): a wooden knock and creak, a big crash with breaking jars, a rolling rumble.
   shelfHit: (a, o, R) => { a.tone(o, { f: 160 + R() * 30, f2: 90, dur: 0.12, vol: 0.4 }); a.tone(o, { type: 'sawtooth', f: 90, f2: 70, t: 0.05, dur: 0.35, vol: 0.06, vib: 9 }); },
   shelfFall: (a, o, R) => { a.tone(o, { f: 90, f2: 35, dur: 0.6, vol: 0.8 }); a.noise(o, { dur: 0.7, vol: 0.6, type: 'lowpass', f: 1200, f2: 150 }); for (let k = 0; k < 5; k++) a.noise(o, { t: 0.04 + k * 0.05 + R() * 0.04, dur: 0.07, vol: 0.25, type: 'highpass', f: 3500 + R() * 2000 }); },

@@ -854,4 +854,54 @@ let findSpot, setup;
   const lob2 = ss.spawnAt('lobber', 46, bz + 6, 9999); run(ss, 4.6, () => { lob2.x = 46; lob2.z = bz + 6; });
   ok(box.hp <= hp0 - 60 || !ss.traps.has(box.id), `a siege rock knocks ${hp0 - box.hp} health off a Poison Box`);
 }
+// 46. The four trap ideas (0.24): Sticky Jam, Pin Cushion, Spoon Catapult, Dropping Pans.
+{
+  const { trapParams, ROT_DIR } = await import('../src/config.js').then(c => ({ ...c, ROT_DIR: [2, 1, 3, 0] }));
+  // Sticky Jam: jammy mice cling together (and Marmalade makes them softer). Same pair, same
+  // spot, with and without jam: the jammy pair ends up closer.
+  {
+    const gap = (jam) => {
+      const { t, sp } = setup('stickyjam', { tier: 3, special: 'a' }), a = t.spawnAt('mouse', sp.cx, sp.cz, 500), b = t.spawnAt('mouse', sp.cx, sp.cz, 500);
+      if (jam) run(t, 0.1, () => { for (const m of [a, b]) { m.x = sp.cx; m.z = sp.cz; } }); else { t.removeTrap([...t.traps.values()][0]); run(t, 0.1); }
+      a.x = sp.cx - 1.4; b.x = sp.cx + 1.4; a.z = b.z = sp.cz + 3; run(t, 0.6);
+      return { d: Math.hypot(a.x - b.x, a.z - b.z), a, b, t };
+    };
+    const j = gap(true), n = gap(false), hp = j.b.hp; j.t.damageMouse(j.b, 10, 'trap', false, null);
+    ok(j.a.jamT > 0 && j.d < n.d - 0.3 && hp - j.b.hp > 12, `jammy mice cling together (${j.d.toFixed(2)} apart vs ${n.d.toFixed(2)} without jam); Marmalade softens them`);
+  }
+  // Pin Cushion: every jab another bleed; Hat Pins two.
+  {
+    const { t, sp } = setup('pincushion', { tier: 1, special: null }); const m = t.spawnAt('tank', sp.cx, sp.cz, 900);
+    run(t, 1.5, () => { m.x = sp.cx; m.z = sp.cz; });
+    const h = setup('pincushion', { tier: 3, special: 'a' }), m2 = h.t.spawnAt('tank', h.sp.cx, h.sp.cz, 900);
+    run(h.t, 0.35, () => { m2.x = h.sp.cx; m2.z = h.sp.cz; });
+    ok(m.bleed.length >= 3 && m2.bleed.length >= 2, `the Pin Cushion stacks bleeds the longer they stand on it (${m.bleed.length} in 1.5 s); Hat Pins add two a jab`);
+  }
+  // Spoon Catapult: lobs one mouse ~8 units the way the arrow points; it lands on a pack and splats them.
+  {
+    const t = new Sim({ seed: 1500 }); t.addPlayer('p1'); t.sardines = 1e6; t.gate.up = false; t.flowDirty = true; t.step();
+    let spot = null;
+    for (let z = 20; z < 200 && !spot; z += 2) for (let x = 4; x < 188 && !spot; x += 2) for (let rot = 0; rot < 4 && !spot; rot++) {
+      if (t.canPlace('catapult', x, z, rot) !== true) continue;
+      const cx = x * CELL + 1, cz = z * CELL + 1, [dx, dz] = DIRS4[ROT_DIR[rot]], lx = cx + dx * 8, lz = cz + dz * 8, li = cellOf(lx, lz);
+      let clear = true;   // a clear flight path, a little wider than a mouse
+      for (let k = 0.5; k <= 9; k += 0.5) for (const w of [-0.7, 0, 0.7]) { const c = cellOf(cx + dx * k + dz * w, cz + dz * k + dx * w); if (c < 0 || t.map.type[c] !== 0 || t.map.covered[c] || t.map.slabTop[c] > 0) clear = false; }
+      if (clear && li >= 0 && t.flow[li] < Infinity) spot = { x, z, rot, cx, cz, lx, lz };
+    }
+    t.command({ type: 'place', id: 'p1', trap: 'catapult', ax: spot.x, az: spot.z, rot: spot.rot });
+    const v = t.spawnAt('mouse', spot.cx, spot.cz, 500), pack = [0, 1].map(k => t.spawnAt('mouse', spot.lx + k * 0.3, spot.lz, 500));
+    const ev = run(t, 1.5, () => { for (const m of pack) { m.x = spot.lx; m.z = spot.lz; m.stunT = m.stunMax = 0.1; } });
+    const land = ev.find(e => e.t === 'catapultLand');
+    ok(land && Math.hypot(land.x - spot.lx, land.z - spot.lz) < 2 && pack.every(m => m.hp < 500), `the Spoon Catapult lobs a mouse ~8 units onto a pack and splats them (landed ${land ? Math.hypot(land.x - spot.cx, land.z - spot.cz).toFixed(1) : '?'} away)`);
+  }
+  // Dropping Pans: the biggest mouse underneath gets the pan and is knocked flat; Pan Rack drops three.
+  {
+    const { t, sp } = setup('pans'); const small = t.spawnAt('mouse', sp.cx, sp.cz, 500), fat = t.spawnAt('fatty', sp.cx + 0.4, sp.cz, 900);
+    run(t, 0.2, () => { small.x = sp.cx; small.z = sp.cz; fat.x = sp.cx + 0.4; fat.z = sp.cz; });
+    ok(fat.hp < 900 && small.hp === 500 && fat.stunT > 0, 'Dropping Pans picks the biggest mouse and knocks it flat');
+    const r = setup('pans', { tier: 3, special: 'b' }), three = [0, 1, 2, 3].map(k => r.t.spawnAt('mouse', r.sp.cx + k * 0.3, r.sp.cz, 500));
+    run(r.t, 0.2, () => three.forEach((m, k) => { m.x = r.sp.cx + k * 0.3; m.z = r.sp.cz; }));
+    ok(three.filter(m => m.hp < 500).length === 3, 'Pan Rack drops three');
+  }
+}
 process.exit(fails ? 1 : 0);

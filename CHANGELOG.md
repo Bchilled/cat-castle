@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.24.0 — 2026-11-08
+The last four ideas from the trap list (34 traps in all). Unlock them in the shop.
+- **Sticky Jam** (floor, 40 Paw Points, 6 paw prints). Mice wading through it are slowed and stay jammy for 6 s; jammy mice cling together, so the pack clumps up for splash traps (Rolling Pin, Chandelier, Kettle, Catapult landings).
+  - Specials: Marmalade (jammy mice take 25% more damage from everything), Ant Trail (ants swarm them: poison).
+- **Pin Cushion** (floor, 35, 6). Jabs whatever stands on it every 0.4 s: a little damage and another bleed each jab, up to five.
+  - Specials: Hat Pins (two bleeds a jab), Needle Burst (every 6 s, pins at every mouse within 2.5).
+- **Spoon Catapult** (floor, 70, 10). Lobs one mouse 8 units the way the arrow points (rotate with R). It lands on whatever's there and splats them for 25; in water it drowns. Bosses and Fat Rats are too heavy.
+  - Specials: Ladle (lobs Fat Rats too, 50% harder splash), Soup Spoon (the landing sets everything there burning).
+- **Dropping Pans** (ceiling, 75, 10). Drops an iron pan on the biggest mouse underneath for 90 damage and knocks it flat (shorter on bosses).
+  - Specials: Cast Iron (+60% damage), Pan Rack (three pans on three mice).
+- Tier 2 also boosts how long jam lasts and the catapult's splash; tier 3 makes the Pin Cushion jab faster.
+- `src/config.js` TRAPS (359–363), TRAP_ORDER (369–370), POWER_KEYS/TIME_KEYS (377–378), SPECIALS (409–412); `src/meta/profile.js` unlock prices (15); `src/sim/sim.js` Marmalade (735), catapult landing splash (1793–1800), jammy ticks (1815), jammy mice clinging (2000–2010), stepTraps stickyjam, pincushion, catapult, pans (2510–2556); `src/render/models.js` models and makePan (548–601); `src/render/scene.js` events (638–644), falling pans and animations (918–931); `src/audio/sfx.js` sounds (259–265) and limits (142).
+
+Tests: 247 checks, all passing (every trap affects a mouse; jammy mice ending up closer than plain ones, bleeds stacking, a catapulted mouse landing 8 units out on a pack, pans picking the biggest mouse, Pan Rack).
+
 ## 0.23.0 — 2026-11-08
 Siege mice wreck your traps, plus two stalls fixed
 - Siege Mice now turn up in ordinary waves from wave 13 (they used to appear only at the castle gate). Every 7 s one stops, aims at the nearest trap within 9 units and lobs a rock at it:

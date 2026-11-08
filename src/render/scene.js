@@ -9,7 +9,7 @@ import {
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
-import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp, makeHuman, makeShelf, makeBarrel, makeKnife } from './models.js';
+import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp, makeHuman, makeShelf, makeBarrel, makeKnife, makePan } from './models.js';
 import { tmat } from './textures.js';
 
 const MAX_MICE = 800;
@@ -42,7 +42,7 @@ export class Scene {
     this.camDist = null;                                            // set per cat on first frame; wheel zooms
 
     this.cats = new Map(); this.trapMeshes = new Map(); this.tailMeshes = new Map(); this.lootMeshes = new Map();
-    this.shotMeshes = new Map(); this.globMeshes = new Map(); this.birdMeshes = new Map(); this.zoneMeshes = new Map(); this.decoyMeshes = new Map(); this.rings = []; this.shake = 0; this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map(); this.knives = [];
+    this.shotMeshes = new Map(); this.globMeshes = new Map(); this.birdMeshes = new Map(); this.zoneMeshes = new Map(); this.decoyMeshes = new Map(); this.rings = []; this.shake = 0; this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map(); this.knives = []; this.pans = [];
     this.particles = []; this.decals = [];
     this.aimProxies = new THREE.Group();
     this.buildWorld();
@@ -635,6 +635,13 @@ export class Scene {
       case 'chandelier': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.3, e.z, 0xc8b8a0, 30, 6, 0.12); this.spawnParticles(e.x, 0.6, e.z, 0xffb040, 12, 4, 0.06); this.shake = Math.max(this.shake, 0.4); break; }
       case 'kettle': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 20; k++) { const a = Math.random() * 7, r = Math.random() * 3; this.spawnParticles(e.x + Math.cos(a) * r, e.y - Math.random() * e.y, e.z + Math.sin(a) * r, 0xf0f4f8, 1, 1.2, 0.18); } break; }
       case 'spicejar': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 24; k++) { const a = Math.random() * 7, r = Math.random() * 2.8; this.spawnParticles(e.x + Math.cos(a) * r, 0.3 + Math.random() * 1.2, e.z + Math.sin(a) * r, Math.random() < 0.5 ? 0x8a2a14 : 0x3a2a1a, 1, 0.8, 0.06); } break; }
+      // New traps (0.24).
+      case 'jammed': this.spawnParticles(e.x, 0.15, e.z, 0x8a1830, 3, 1, 0.05); break;
+      case 'prick': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
+      case 'pinBurst': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 16; k++) { const a = k * 0.39; this.spawnParticles(e.x + Math.cos(a) * 0.6, 0.3, e.z + Math.sin(a) * 0.6, 0xd8d8e0, 1, 4, 0.04); } break; }
+      case 'catapult': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
+      case 'catapultLand': this.spawnParticles(e.x, 0.3, e.z, e.hot ? 0xe86a20 : 0xb8a888, 14, 3.5, 0.09); if (e.hits) this.shake = Math.max(this.shake, 0.15); break;
+      case 'pan': for (const [tx, tz] of e.to) { const p = makePan(); p.position.set(e.x, e.y - 0.8, e.z); this.scene.add(p); this.pans.push({ p, from: [e.x, e.y - 0.8, e.z], to: [tx, 0.08, tz], t: 0 }); } break;
       case 'potDrop': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.3, e.z, 0xc8643a, 14, 4, 0.1); this.spawnParticles(e.x, 0.2, e.z, 0x4a3020, 14, 3, 0.07); this.decal(e.x, e.z, 0x4a3020, 1.1); this.shake = Math.max(this.shake, 0.12); break; }
       case 'splashDown': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.4, e.z, 0x6ab0ff, 22, 3.5, 0.07); this.ring(e.x, e.z, e.r, 0x3a7ad8, 0.4, false, true); break; }
       case 'salt': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 8; k++) this.spawnParticles(e.x + (Math.random() - 0.5) * e.r * 1.4, 1.6, e.z + (Math.random() - 0.5) * e.r * 1.4, 0xffffff, 1, 0.3, 0.04); break; }
@@ -908,7 +915,20 @@ export class Scene {
       }
       if (ud.kind === 'kettle') { ud.lid.position.y = 0.72 + (ud.anim > 0 ? Math.abs(Math.sin(now / 25)) * 0.05 : 0); if (f < 0.25 && Math.random() < 0.05) this.spawnParticles(g.position.x + 0.5, g.position.y + 0.9, g.position.z, 0xf0f4f8, 1, 0.5, 0.08); }
       if (ud.kind === 'spicejar') ud.jar.rotation.z = -1.1 * Math.min(1, ud.anim * 2);
+      // New traps (0.24).
+      if (ud.kind === 'pincushion') ud.pins.position.y = 0.12 * ud.anim;
+      if (ud.kind === 'catapult') ud.hinge.rotation.x = 1.9 * Math.max(0, Math.min(1, (f - 0.8) / 0.2));   // flips up, then cranks back
+      if (ud.kind === 'pans') ud.pans.forEach((p, k) => { p.visible = !(f > 0.25 && k === 1); p.rotation.z = Math.sin(now / 600 + k) * 0.04; });
     }
+    // Falling pans: drop in 0.3 s, clang, lie there a moment, gone.
+    this.pans = this.pans.filter(o => {
+      o.t += dt; const k = Math.min(1, (o.t / 0.3) ** 2);
+      o.p.position.set(o.from[0] + (o.to[0] - o.from[0]) * Math.min(1, o.t / 0.3), o.from[1] + (o.to[1] - o.from[1]) * k, o.from[2] + (o.to[2] - o.from[2]) * Math.min(1, o.t / 0.3));
+      o.p.rotation.x = Math.min(1, o.t / 0.3) * 0.3;
+      if (o.t >= 0.3 && !o.landed) { o.landed = true; this.spawnParticles(o.to[0], 0.2, o.to[2], 0xc8b8a0, 10, 3, 0.07); }
+      if (o.t > 0.9) { this.scene.remove(o.p); return false; }
+      return true;
+    });
     // Thrown knives fly to their mark in 0.18 s, then glint and vanish.
     this.knives = this.knives.filter(o => {
       o.t += dt / 0.18; const k = Math.min(1, o.t);
