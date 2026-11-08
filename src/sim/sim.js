@@ -145,7 +145,11 @@ const GORGE_SECS = 2.5, GORGE_HP = 1.3;   // food piles: time spent eating, and 
 const DANGER_KILL = 3, DANGER_SCOUT = 4, DANGER_CAP = 10, DANGER_MAX = 30, DANGER_DECAY = 0.965, DANGER_REPATH = 12;
 const FIRE_AVOID = 6;            // extra path cost near ovens: mice go round fires if they can
 const CRATE_COST = 15, CRATE_HP = 90, CRATE_H = 1.6;   // crate stacks: cheap enough to smash through for a real shortcut
-const CLIMB_SECS = 0.9;          // time to scramble up (or down) a table leg
+const CLIMB_SECS = 0.9;
+// A shut door: mice wait at it rather than turning round, unless the way round is shorter
+// than this wait (per cell; doors are 2 cells thick). Without it, slow mice flip-flopped
+// between routes every time a door swung and could get stuck between two doors forever.
+const DOOR_WAIT_COST = 30;          // time to scramble up (or down) a table leg
 // Default element for each damage source (a call can name its own instead).
 // 'dot' = a status ticking (burning, poison): resistances apply, but it doesn't re-apply itself.
 const SRC_EL = { cat: 'physical', bleed: 'physical', trap: 'physical', splat: 'physics', poison: 'poison', fire: 'fire', chain: 'electric' };
@@ -331,8 +335,9 @@ export class Sim {
   }
   extraOf = (i) => (this.extraArr ? this.extraArr[i] : 0);   // per-cell step cost (traps, gate) for nextCell
   passSmall = (i) => miceWalkable(this.map.type[i]);
-  passBig = (i) => (this.map.bigOk[i] === 1 && this.map.type[i] !== T.SOLID) || this.map.type[i] === T.HOLE || this.map.type[i] === T.GATE;   // SOLID: a shut door
-  isBlocker = (i) => (this.map.type[i] === T.GATE && this.gate.up) || this.occBarricade(i) || !!this.crateUp(i);
+  passBig = (i) => (this.map.bigOk[i] === 1 && this.map.type[i] !== T.SOLID) || this.map.type[i] === T.HOLE || this.map.type[i] === T.GATE;   // (shut doors are blockers, see doorShut)
+  isBlocker = (i) => (this.map.type[i] === T.GATE && this.gate.up) || this.occBarricade(i) || !!this.crateUp(i) || this.doorShut(i);
+  doorShut(i) { const d = this.map.door[i]; return d >= 0 && !this.doors[d].open; }
   extraOfBig = (i) => (this.extraBig ? this.extraBig[i] : 0);   // bosses: no danger memory (fearless)
   occBarricade(i) { const id = this.occ.floor[i]; return id ? this.traps.get(id).kind === 'barricade' : false; }
   updateFlow() {
@@ -345,6 +350,7 @@ export class Sim {
     }
     if (this.gate.up) for (let i = 0; i < N; i++) if (this.map.type[i] === T.GATE) { extra[i] += 10 + this.gate.hp / 4; blk[i] = 1; }
     for (const c of this.crates) if (c.up) for (const i of c.cells) { extra[i] += CRATE_COST; blk[i] = 1; }
+    if (this.doors.length) for (let i = 0; i < N; i++) if (this.doorShut(i)) { extra[i] += DOOR_WAIT_COST; blk[i] = 1; }
     for (let i = 0; i < N; i++) if (this.fireCost[i]) extra[i] += this.fireCost[i];
     // Small mice also weigh the danger they remember; bosses don't care.
     const extraS = Float32Array.from(extra), DB = this.DB;
@@ -377,12 +383,17 @@ export class Sim {
   }
   // Path of least resistance, but not single file: packs split across routes that cost
   // about the same; a lane made expensive (barricades, the gate) loses its share.
+  // The direct (cheapest) route is a candidate too (-1), so the arrows on the floor are
+  // all routes mice really take, and the shortest one gets the biggest share.
   chooseVia(door) {
     const costs = VIAS.map((_, k) => this.viaCost(k, door));
-    const min = Math.min(...costs);
+    const direct = this.flow[this.spawnCells[door % this.spawnCells.length]];
+    const min = Math.min(direct, ...costs);
     if (!(min < Infinity)) return -1;
     const w = costs.map((c, k) => (c < Infinity && c <= min * 1.6 + 30) ? VIAS[k].weight * Math.exp(-(c - min) / 40) : 0);
-    let r = this.rng() * w.reduce((a, b) => a + b, 0);
+    const wd = direct < Infinity ? Math.exp(-(direct - min) / 40) : 0;
+    let r = this.rng() * (wd + w.reduce((a, b) => a + b, 0));
+    if ((r -= wd) <= 0) return -1;
     for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) return k; }
     return -1;
   }
@@ -1237,7 +1248,7 @@ export class Sim {
       const [x0, z0, x1, z1] = d.rect, inside = (b) => b.x > x0 - 0.6 && b.x < x1 + 0.6 && b.z > z0 - 0.6 && b.z < z1 + 0.6;
       if (!want && (this.mice.some(m => !m.dead && inside(m)) || [...this.cats.values()].some(c => c.alive && inside(c)))) continue;
       d.open = want;
-      for (let i = 0; i < this.map.door.length; i++) if (this.map.door[i] === di) { this.map.type[i] = want ? T.FLOOR : T.SOLID; this.map.solid[i] = want ? 0 : 6; }
+      for (let i = 0; i < this.map.door.length; i++) if (this.map.door[i] === di) this.map.solid[i] = want ? 0 : 6;   // shut: a wall to bodies; still floor to the pathing (they wait)
       this.flowDirty = true; this.routeCache = null; this.layoutVer++;
       this.emit({ t: 'door', i: di, open: want });
     }
@@ -1762,6 +1773,8 @@ export class Sim {
           if (this.map.type[n] === T.GATE && this.gate.up) {
             this.gate.hp -= d.gateDmg; this.emit({ t: 'gateHit' });
             if (this.gate.hp <= 0) this.breakGate();
+          } else if (this.doorShut(n)) {
+            // A shut door: wait for the servants to open it again.
           } else if (this.crateUp(n)) {
             // Smashing through a crate stack to open the shortcut.
             const c = this.crateUp(n); c.hp -= d.gateDmg; this.emit({ t: 'crateHit', id: c.id, x: m.x, z: m.z });

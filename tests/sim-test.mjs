@@ -567,4 +567,23 @@ for (const id of MAP_ORDER) {
   const bytes = JSON.stringify({ s: C.snapshot(host) }).length;
   ok(bytes < 20000, `a snapshot is small enough to send 15 times a second (${(bytes / 1024).toFixed(1)} KB)`);
 }
+// 36. Regressions found in the 24-wave soak runs.
+{
+  // A slow fat rat between the passages' timed doors used to turn round every time a door
+  // swung and never arrive. Now mice wait at a shut door instead.
+  const ps = new Sim({ map: 'passages', seed: 700 }); ps.addPlayer('p1'); ps.lives = 100; ps.step();
+  const f = ps.spawnAt('fatty', 6, 86, 9999); f.via = -1; let leak = false;
+  for (let t = 0; t < 30 * 200 && !leak; t++) { ps.step(); if (ps.events.some(e => e.t === 'leak')) leak = true; ps.events.length = 0; f.hp = f.maxHp; }
+  ok(leak, 'a slow fat rat gets through the swinging doors (no dithering)');
+  // Path search with huge costs (Poison Box maze + danger) used to take up to 30 s once.
+  const mz = new Sim({ seed: 701 }); mz.addPlayer('p1'); mz.sardines = 1e6; mz.step();
+  for (const r of mz.routes()) for (let j = 10; j < r.length - 10; j += 9) mz.placeTrap(mz.cats.get('p1'), 'barricade', Math.floor(r[j][0] / CELL) - 2, Math.floor(r[j][1] / CELL) - 2, 0, -1);
+  for (let k = 0; k < 400; k++) mz.addDanger(10 + (k * 7) % 80, 10 + (k * 13) % 100, 3);
+  const t0 = performance.now(); mz.updateFlow(); for (let v = 0; v < mz.viaFlow.length; v++) mz.viaField(v);
+  const ms = performance.now() - t0; ok(ms < 300, `re-pathing a maze with heavy danger stays quick (${ms.toFixed(0)} ms for every field)`);
+  // Packs take the direct route too, so every arrow on the floor is a route mice really use.
+  const dr = new Sim({ seed: 702 }); dr.addPlayer('p1'); dr.step();
+  const picks = new Set(); for (let k = 0; k < 60; k++) picks.add(dr.chooseVia(0));
+  ok(picks.has(-1) && picks.size >= 2, `the direct route gets a share of the packs (${[...picks].join(',')})`);
+}
 process.exit(fails ? 1 : 0);

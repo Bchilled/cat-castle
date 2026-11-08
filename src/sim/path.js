@@ -72,7 +72,10 @@ export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]
       const n = nz * W + nx;
       if (!okA[n]) continue;
       if (k >= 4 && (!openA[z * W + nx] || !openA[nz * W + x])) continue;   // no corner cutting
-      const nd = d + stepCost * NMUL[k];
+      // Round to float32 before comparing: dist is a Float32Array, and comparing a double
+      // against its own rounded copy re-pushed "equal" paths over and over (a 30-second
+      // re-path once costs got big with Poison Box mazes and danger).
+      const nd = Math.fround(d + stepCost * NMUL[k]);
       if (nd < dist[n]) { dist[n] = nd; heap.push(n, nd); }
     }
   }

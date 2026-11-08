@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.1 — 2026-11-07
+Fixed: found by soak runs (every map, all 24 waves, with traps and a fighting cat, headless)
+- A freeze of up to 30 seconds. When path costs got big (Poison Box mazes plus danger memory), one route search could re-check "equal" paths millions of times, because of a rounding mismatch. Worst sim step on every map is now under 40 ms. `src/sim/path.js` computeFlow (lines 75–78).
+- A slow Fat Rat in the servants' passages could get stuck forever. It turned round every time a door swung and never got anywhere. Mice now wait at a shut door (a wait costs about as much as a short detour) instead of flip-flopping; mice further back still re-route. Shut doors are a wall to bodies but not to the pathing. `src/sim/sim.js` doorShut, DOOR_WAIT_COST, updateFlow, stepMapFeatures, the blocker branch in stepMouse; `src/net/coop.js` mirrorDoor.
+- The floor arrows showed a "direct" route no pack ever took (packs only picked side lanes). The direct, cheapest route is now one of the choices and gets the biggest share, so every arrow is a route mice really use. `src/sim/sim.js` chooseVia (386–396).
+
+Tests: 170 checks, all passing (plus the three regressions above).
+
 ## 0.13.0 — 2026-11-07
 Online co-op (two players)
 - On the menu, one player presses Host a game and gets a 4-letter room code; the other types it in and presses Join. The host picks the map and presses Play; both start together.

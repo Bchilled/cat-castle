@@ -159,7 +159,7 @@ export function applySnapshot(sim, s) {
 }
 function mirrorDoor(sim, di, open) {
   const d = sim.doors[di]; d.open = open;
-  for (let i = 0; i < sim.map.door.length; i++) if (sim.map.door[i] === di) { sim.map.type[i] = open ? T.FLOOR : T.SOLID; sim.map.solid[i] = open ? 0 : 6; }
+  for (let i = 0; i < sim.map.door.length; i++) if (sim.map.door[i] === di) { sim.map.solid[i] = open ? 0 : 6; }
   sim.flowDirty = true;
 }
 // Events that change the mirror's layout (so routes, placement previews and the radar match).
