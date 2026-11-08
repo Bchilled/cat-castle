@@ -796,3 +796,57 @@ export function makeProp(kind) {
   }
   return g;
 }
+
+// ---------- things that fall over (0.17) ----------
+// A tall shelf, built so it falls toward local +x: the group's origin is the front-bottom
+// edge it tips over on. Body spans x -thick..0, y 0..h, z -len/2..len/2. The scene turns
+// the group to face the shelf's fall direction and tilts the inner group about z.
+export function makeShelf(sh) {
+  const outer = new THREE.Group(), tilt = new THREE.Group(); outer.add(tilt);
+  const along = sh.dir[0] !== 0, [x0, z0, x1, z1] = sh.rect;
+  const thick = along ? x1 - x0 : z1 - z0, len = along ? z1 - z0 : x1 - x0, h = sh.h;
+  const wood = 0x8a5a34, dark = 0x5e3c22, cx = -thick / 2;
+  tilt.add(box(wood, cx, h / 2, -len / 2 + 0.08, thick, h, 0.16));             // side panels
+  tilt.add(box(wood, cx, h / 2, len / 2 - 0.08, thick, h, 0.16));
+  tilt.add(box(dark, -thick + 0.05, h / 2, 0, 0.1, h, len, false));             // back
+  tilt.add(box(wood, cx, h - 0.08, 0, thick, 0.16, len));                       // top
+  tilt.add(box(dark, cx, 0.15, 0, thick, 0.3, len));                            // plinth
+  const boards = h >= 7 ? 4 : 3, kind = /linen/i.test(sh.name) ? 'linen' : /boot/i.test(sh.name) ? 'boot' : 'jar';
+  for (let b = 1; b <= boards; b++) {
+    const y = 0.3 + (h - 0.6) * b / (boards + 1);
+    tilt.add(box(wood, cx, y, 0, thick * 0.95, 0.1, len - 0.3, false));
+    // What's on it: folded linen, jars or boots (rattles about when hit; spills when it falls).
+    const n = Math.max(2, Math.floor((len - 0.6) / 1.1));
+    for (let k = 0; k < n; k++) {
+      const z = -len / 2 + 0.6 + (len - 1.2) * (k + 0.5) / n, s = 0.85 + ((b * 7 + k * 3) % 5) * 0.06;
+      if (kind === 'linen') {
+        const col = [0xe8e0d0, 0xb8c8e0, 0xe0b8b8, 0xd0e0c0][(b + k) % 4];
+        tilt.add(box(col, cx + 0.05, y + 0.18, z, thick * 0.7, 0.26, 0.9 * s));
+        tilt.add(box(col, cx + 0.05, y + 0.44, z, thick * 0.66, 0.24, 0.86 * s));
+      } else if (kind === 'boot') {
+        const col = [0x4a3424, 0x2e2a28, 0x6a4a2a][(b + k) % 3];
+        tilt.add(box(col, cx + 0.05, y + 0.32, z - 0.15, thick * 0.35, 0.55 * s, 0.24));
+        tilt.add(box(col, cx + 0.12, y + 0.12, z - 0.15, thick * 0.6, 0.2, 0.26));
+        tilt.add(box(col, cx + 0.05, y + 0.32, z + 0.18, thick * 0.35, 0.55 * s, 0.24));
+        tilt.add(box(col, cx + 0.12, y + 0.12, z + 0.18, thick * 0.6, 0.2, 0.26));
+      } else {
+        const col = [0xd8a030, 0x6a8a3a, 0xa02a3a, 0xc87a3a][(b + k) % 4];
+        tilt.add(part(cyl(0.24 * s, 0.24 * s, 0.55 * s, 10), col, cx + 0.05, y + 0.05 + 0.28 * s, z));
+        tilt.add(part(cyl(0.2 * s, 0.2 * s, 0.08, 10), 0xc8b890, cx + 0.05, y + 0.1 + 0.55 * s, z, 1, 1, 1, false));
+      }
+    }
+  }
+  outer.userData = { tilt, thick, len };
+  return outer;
+}
+// A barrel standing upright (centre 1.1 up). The scene lays it on its side to roll it.
+const BARREL_GEO = new THREE.LatheGeometry([[0.001, -1.1], [0.72, -1.1], [0.88, -0.55], [0.92, 0], [0.88, 0.55], [0.72, 1.1], [0.001, 1.1]].map(([x, y]) => new THREE.Vector2(x, y)), 14);
+export function makeBarrel() {
+  const g = new THREE.Group();
+  g.add(outline(new THREE.Mesh(BARREL_GEO, mat(0x9a6a3a)), 1.05));
+  for (const y of [-0.8, -0.3, 0.3, 0.8]) {
+    const r = 0.92 - Math.abs(y) * 0.2, hoop = new THREE.Mesh(new THREE.TorusGeometry(r, 0.05, 5, 16), mat(0x3a3836)); hoop.rotation.x = Math.PI / 2; hoop.position.y = y; g.add(hoop);
+  }
+  for (const y of [-1.105, 1.105]) { const lid = new THREE.Mesh(new THREE.CircleGeometry(0.7, 12), mat(0x6a4426)); lid.rotation.x = y > 0 ? -Math.PI / 2 : Math.PI / 2; lid.position.y = y; g.add(lid); }
+  return g;
+}

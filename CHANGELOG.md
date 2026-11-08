@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.17.0 — 2026-11-07
+Things that fall over
+- Tall shelves in the servants' passages (linen shelf, boot rack, pantry shelf) and the cellar (two jar shelves). Hit one four times and it topples:
+  - it counts claws, bites, whips, pounces, and pellets or darts that hit it; a barrel rolled into it counts double
+  - anything under it is flattened (120 damage, half for bosses); a cat under it takes a knock and is shoved out the nearest open side
+  - in the passages it falls right across the corridor and leans on the far wall, so the lane is blocked until the mice chew through it (150 health), or they go another way; in the wider cellar aisles it lies flat and narrows the aisle
+  - servants stand it back up at the start of the next wave
+  - traps can't go on a shelf's spot or hang on it; its fall area is fine while it stands (a trap it lands on is just covered until the mice chew it away)
+- Barrels on the entrance, market, stables, kitchen and cellar maps. Run into one, or hit it (claws, bites, whips, pounces), and it rolls off the way you were going:
+  - it flattens each mouse in its path once (30 damage plus more the faster it goes) and flings small survivors aside
+  - it bounces off walls, crates and water, then slows to a stop on its side
+  - mice walk round a barrel that's standing still; barrels go home at the start of each wave
+- Radar: standing shelves in dark brown, barrels as brown dots. Sounds for the knock, the crash with breaking jars, the roll and the bump. The passages description mentions the shelves, and two new menu tips.
+- Co-op: shelf states and barrel positions are in the snapshot; the guest's mirror opens a shelf's spot when it falls.
+- `src/sim/map.js` SHELVES, BARRELS (241–256, 268), passages twist (177); `src/sim/sim.js` constants (151–153), constructor shelves/barrels/shelfAt (200–211), noBuild and placement (305–307, 494–506), wave-start reset (646–648), hitWorld, meleeWorld, rollBarrel, standShelf, stepFallers (1340–1433), hooks in claw/whip/bite/missiles/pounceLand, breakCrate (2115); `src/render/models.js` makeShelf, makeBarrel (799–852); `src/render/scene.js` shelfFx, barrelFx, drawFallers (304–349), events (636–639); `src/ui/hud.js` radar (143–145); `src/audio/sfx.js` shelfHit, shelfFall, shelfUp, shelfBreak, barrelRoll, barrelHit (245–251); `src/net/coop.js` snapshot and mirrorShelf (141, 184–194); `src/main.js` tips (56–57).
+
+Tests: 192 checks, all passing (toppling by bites and pellets, crushing, blocking, chewing through, standing back up, barrels rolling through a pack and going home, the co-op mirror).
+
 ## 0.16.0 — 2026-11-07
 Humans (scenery only, out of zone)
 - Market, stables and kitchen: the east wall is now a low curb. It still can't be crossed (its collider stays full height). Beyond it is the lit human space, with people walking up and down at full size, about 1.8 m to your cat's 30 cm:

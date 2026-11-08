@@ -140,6 +140,9 @@ export class Hud {
     c.fillStyle = '#e8c040'; for (const f of sim.foods) if (f.left > 0) { c.beginPath(); c.arc(this.rx(f.x), this.rz(f.z), 2.5, 0, 7); c.fill(); }
     // Food up on furniture: yellow ring. Crate stacks: brown while standing.
     c.strokeStyle = '#e8c040'; c.lineWidth = 1.5; for (const f of sim.tops) if (f.left > 0) { c.beginPath(); c.arc(this.rx(f.x), this.rz(f.z), 3, 0, 7); c.stroke(); }
+    // Shelves: dark brown while standing; once down their spot is open floor (the fallen shelf shows as a crate stack).
+    for (const sh of sim.shelves || []) { const [x0, z0, x1, z1] = sh.rect; c.fillStyle = sh.state === 'up' || sh.state === 'falling' ? '#6a3e22' : sim.map.covered[sh.cells[0]] ? '#3a342c' : TYPE_RGB[T.FLOOR]; c.fillRect(this.rx(x0), this.rz(z0), Math.max(2, this.rx(x1) - this.rx(x0)), Math.max(2, this.rz(z1) - this.rz(z0))); }
+    c.fillStyle = '#b07a44'; for (const b of sim.barrels || []) { c.beginPath(); c.arc(this.rx(b.x), this.rz(b.z), 2.2, 0, 7); c.fill(); }
     c.fillStyle = '#9a6a3a'; for (const cr of sim.crates) if (cr.up) { const [x0, z0, x1, z1] = cr.rect; c.fillRect(this.rx(x0), this.rz(z0), Math.max(2, this.rx(x1) - this.rx(x0)), Math.max(2, this.rz(z1) - this.rz(z0))); }
     // Where the mice are scared of (danger memory): faint red patches.
     for (const [x, z, k] of sim.dangerSpots) { c.fillStyle = `rgba(220,40,30,${0.12 + 0.35 * k})`; const r = 4 / CELL * this.rs; c.fillRect(this.rx(x) - r / 2, this.rz(z) - r / 2, r, r); }

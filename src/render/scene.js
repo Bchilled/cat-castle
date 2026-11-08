@@ -9,7 +9,7 @@ import {
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
 import { ROT_DIR } from '../sim/sim.js';
-import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp, makeHuman } from './models.js';
+import { mat, outline, OUTLINE, makeCat, makeTrap, makeTrinket, makeFurniture, makeBird, makeProp, makeHuman, makeShelf, makeBarrel } from './models.js';
 import { tmat } from './textures.js';
 
 const MAX_MICE = 800;
@@ -292,6 +292,7 @@ export class Scene {
     // Crate stacks mice smash through (servants restack them each wave).
     this.crateMeshes = this.sim.crates.map(c => {
       const [x0, z0, x1, z1] = c.rect, g = new THREE.Group(); s.add(g);
+      if (c.shelf !== undefined) return g;   // a fallen shelf: the shelf model itself shows it
       const w = x1 - x0, d = z1 - z0, n = Math.max(1, Math.round(Math.max(w, d) / 1.6));
       for (let k = 0; k < n; k++) {
         const along = w >= d, bw = along ? w / n : w, bd = along ? d : d / n;
@@ -300,9 +301,52 @@ export class Scene {
       }
       return g;
     });
+    // Tall shelves (they topple) and barrels (they roll). Shelves turn to face their fall
+    // direction and tip over their front-bottom edge; if the far wall is closer than the
+    // shelf is tall it ends up leaning on it, otherwise it lies flat.
+    this.shelfFx = this.sim.shelves.map(sh => {
+      const g = makeShelf(sh), [x0, z0, x1, z1] = sh.rect, [dx, dz] = sh.dir, { thick } = g.userData;
+      g.position.set(dx > 0 ? x1 : dx < 0 ? x0 : (x0 + x1) / 2, 0, dz > 0 ? z1 : dz < 0 ? z0 : (z0 + z1) / 2);
+      g.rotation.y = dx > 0 ? 0 : dx < 0 ? Math.PI : dz > 0 ? -Math.PI / 2 : Math.PI / 2;
+      const [fx0, fz0, fx1, fz1] = sh.fall, L = (dx ? fx1 - fx0 : fz1 - fz0) - thick;
+      s.add(g); return { g, sh, theta: L < sh.h - 0.3 ? Math.asin(L / sh.h) : Math.PI / 2, fallAt: null, wob: 0 };
+    });
+    this.barrelFx = this.sim.barrels.map(b => {
+      const outer = new THREE.Group(), rollG = new THREE.Group(), body = makeBarrel();
+      outer.add(rollG); rollG.add(body); outer.position.set(b.x, 1.1, b.z); s.add(outer);
+      return { b, outer, rollG, body, lie: 0, yaw: null, roll: 0 };
+    });
+  }
+  // Shelves: wobble when hit, fall with gravity (accelerating), vanish once chewed away.
+  // Barrels: follow the sim, tip on their side when knocked, roll by how far they moved.
+  drawFallers(dt, now) {
+    for (const f of this.shelfFx) {
+      const { sh, g } = f, tilt = g.userData.tilt;
+      g.visible = sh.state !== 'broken';
+      let a = 0;
+      if (sh.state === 'up') f.fallAt = null;
+      else { if (f.fallAt === null) f.fallAt = sh.state === 'falling' ? now : now - 1000; a = f.theta * Math.min(1, ((now - f.fallAt) / 600) ** 2); }
+      f.wob = Math.max(0, f.wob - dt * 2);
+      tilt.rotation.z = -a + (sh.state === 'up' ? Math.sin(now / 35) * 0.05 * f.wob : 0);
+    }
+    for (const f of this.barrelFx) {
+      const { b, outer } = f, px = outer.position.x, pz = outer.position.z;
+      if (Math.hypot(b.x - px, b.z - pz) > 4 || !b.lying) { outer.position.x = b.x; outer.position.z = b.z; }   // back home: no slide
+      else { const k = Math.min(1, dt * 20); outer.position.x += (b.x - px) * k; outer.position.z += (b.z - pz) * k; }
+      const mx = outer.position.x - px, mz = outer.position.z - pz;
+      if (!b.lying) { f.lie = 0; f.yaw = null; f.roll = 0; }
+      else {
+        if (f.yaw === null && Math.hypot(mx, mz) > 1e-3) f.yaw = Math.atan2(mx, mz);   // axis set by the first push
+        if (f.yaw !== null) f.roll += (mx * Math.sin(f.yaw) + mz * Math.cos(f.yaw)) / 0.92;
+        f.lie = Math.min(1, f.lie + dt * 6);
+      }
+      outer.rotation.y = f.yaw || 0; f.rollG.rotation.x = f.roll; f.body.rotation.z = f.lie * Math.PI / 2;
+      outer.position.y = 1.1 - 0.18 * f.lie;
+    }
   }
   drawMapFeatures(dt, now) {
     if (!this.doorMeshes) this.buildMapFeatures();
+    this.drawFallers(dt, now);
     // Doors slide up when open (tucked above the passage ceiling) and drop to the floor when shut.
     this.sim.doors.forEach((d, k) => { const m = this.doorMeshes[k]; const ty = d.open ? 9.3 : 3; m.position.y += (ty - m.position.y) * Math.min(1, dt * 6); });
     for (const { g } of this.fireFx) g.children.forEach((c, k) => { if (c.geometry && c.geometry.type === 'ConeGeometry') c.scale.y = 0.8 + Math.sin(now / 70 + k * 1.9) * 0.3; });
@@ -589,6 +633,10 @@ export class Scene {
       case 'smash': this.spawnParticles(e.x, e.y + 0.3, e.z, 0xb86a3a, 16, 4, 0.08); this.shake = Math.max(this.shake, 0.15); break;
       case 'crateBreak': this.spawnParticles(e.x, 1, e.z, 0xb89068, 40, 6, 0.14); this.shake = Math.max(this.shake, 0.25); break;
       case 'crateHit': if (Math.random() < 0.3) this.spawnParticles(e.x, 0.6, e.z, 0xb89068, 2, 2, 0.06); break;
+      case 'shelfHit': { const f = this.shelfFx && this.shelfFx.find(o => o.sh.id === e.id); if (f) f.wob = 1; this.spawnParticles(e.x, 3, e.z, 0xc8b8a0, 4, 1.5, 0.05); break; }
+      case 'shelfFall': this.spawnParticles(e.x, 0.4, e.z, 0xc8b8a0, 50, 7, 0.16); this.spawnParticles(e.x, 0.6, e.z, 0x8a5a34, 16, 5, 0.1); this.shake = Math.max(this.shake, 0.6); break;
+      case 'shelfBreak': this.spawnParticles(e.x, 1, e.z, 0x8a5a34, 50, 6, 0.14); this.shake = Math.max(this.shake, 0.3); break;
+      case 'barrelHit': this.spawnParticles(e.x, 0.4, e.z, 0xc8b8a0, 6, 2, 0.08); break;
       case 'gorged': this.spawnParticles(e.x, (e.y || 0) + 0.6, e.z, 0xe8c040, 4, 1.5, 0.05); break;
       case 'dash': { const cat = this.sim.cats.get(e.id); if (cat) this.spawnParticles(cat.x, cat.y + 0.2, cat.z, 0xd8d0c0, 10, 3); break; }
       case 'sit': this.ring(e.x, e.z, e.r, 0xd8d0c0, 0.4, false, true); this.spawnParticles(e.x, 0.2, e.z, 0xd8d0c0, 20, 5, 0.1); this.shake = Math.max(this.shake, 0.3); break;

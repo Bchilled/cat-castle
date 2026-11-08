@@ -53,6 +53,8 @@ const TIPS = [
   'Win a map to move onward: entrance, market, stables, cellar, passages, kitchen.',
   'Mice climb over fences, crates and buckets when it beats going round. Box both sides, or trap the top.',
   'Co-op: up to four cats. The host picks the map; when you win, the host takes everyone onward.',
+  'Hit a tall shelf a few times and it topples across the corridor, flattening mice and blocking the way.',
+  'Run into a barrel (or pounce near it) to send it rolling through a pack of mice.',
 ];
 { let k = Math.floor(Math.random() * TIPS.length); const show = () => { const el = document.getElementById('tip'); if (el) el.textContent = 'Tip: ' + TIPS[k++ % TIPS.length]; }; show(); setInterval(show, 6000); }
 const showWallet = () => { document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn${SANDBOX ? ' · sandbox (nothing saved)' : ''}`; };

@@ -610,4 +610,49 @@ for (const id of MAP_ORDER) {
   const w = P.runReward(P.freshProfile(), { won: true, waves: 24, rating: { total: 6 }, map: 'entrance', difficulty: 'brutal' });
   ok(w.paws === Math.round((8 + 6 + P.FIRST_WIN_BONUS) * 1.5), `Brutal pays 50% more paw prints (${w.paws})`);
 }
+// 39. Things that fall over: shelves topple across a corridor (crush, block, chewable, back up
+// next wave), barrels roll through packs. Co-op mirrors both.
+{
+  const ps = new Sim({ map: 'passages', seed: 1000 }); ps.addPlayer('p1', 'puddin'); ps.sardines = 1e5; ps.step();
+  const sh = ps.shelves[0], st = sh.cells[0], [fx0, fz0, fx1, fz1] = sh.fall, mid = cellOf((fx0 + fx1) / 2, (fz0 + fz1) / 2);
+  ok(ps.shelves.length === 3 && sh.state === 'up' && ps.map.solid[st] === sh.h, `the passages have 3 standing shelves (solid, ${sh.h} tall)`);
+  ok(!ps.canPlace('mousetrap', st % W, Math.floor(st / W)) && ps.canPlace('mousetrap', q(4), q(48)), 'no trap on a shelf spot; its fall area is fine while it stands');
+  // Puddin bites at it until it goes over; she's in the way, so she gets clipped and shoved clear.
+  const cat = ps.cats.get('p1'); cat.x = 6.2; cat.z = 48.5; cat.y = 0; cat.hp = cat.def.maxHp;
+  const mice = [3, 4, 5].map(x => { const m = ps.spawnAt('mouse', x, 48.5, 100); m.stunT = 5; return m; });
+  const ev = run(ps, 6, () => inp(ps, 'p1', { yaw: Math.PI / 2, primary: true }));
+  ok(sh.state === 'down' && ev.some(e => e.t === 'shelfFall'), `biting a shelf knocks it over (${ev.filter(e => e.t === 'shelfHit').length} hits)`);
+  ok(mice.every(m => m.dead), 'the falling shelf flattens the mice under it');
+  ok(cat.hp < cat.def.maxHp && !(cat.x < fx1 && cat.x > fx0 && cat.z > fz0 && cat.z < fz1), 'a cat under it gets clipped and pushed clear');
+  ps.updateFlow();
+  ok(ps.isBlocker(mid) && ps.map.type[st] === 0 && ps.map.solid[st] === 0, 'once down it blocks the corridor like a crate stack (its old spot is floor)');
+  ok(!ps.canPlace('mousetrap', q(4), q(48)), 'no traps on a fallen shelf');
+  ps.breakCrate(sh.crate); ps.updateFlow();
+  ok(sh.state === 'broken' && !ps.isBlocker(mid), 'mice chew through it and the corridor opens');
+  ps.phase = 'build'; ps.phaseTimer = 0; ps.mice = []; cat.x = 4; cat.z = 48.5; ps.step();
+  ok(sh.state === 'up' && ps.map.solid[st] === sh.h && !sh.crate.up && sh.hp > 0, 'servants stand it back up next wave');
+  // Darts and pellets knock it too (Fred shooting at it from across the corridor).
+  const fs = new Sim({ map: 'passages', seed: 1001 }); fs.addPlayer('p1', 'fred'); fs.step();
+  const fc = fs.cats.get('p1'); fc.x = 3; fc.z = 48.5; fc.y = 0;
+  run(fs, 8, () => inp(fs, 'p1', { yaw: Math.PI / 2, primary: true, aim: { x: 7, y: 0.6, z: 48.5 } }));
+  ok(fs.shelves[0].state !== 'up', `Fred's pellets bring a shelf down too (${fs.shelves[0].state})`);
+  // Barrels: a cat running into one sends it rolling; it flattens the pack in its way and stops.
+  const bs = new Sim({ seed: 1002 }); bs.addPlayer('p1', 'fred'); bs.step();
+  const b = bs.barrels[0], [hx, hz] = b.home, bc = bs.cats.get('p1');
+  const pack = [3, 5, 7].map(d => { const m = bs.spawnAt('mouse', hx + d, hz, 60); m.stunT = 5; return m; });
+  bc.x = hx - 2.5; bc.z = hz; bc.y = 0;
+  const bev = run(bs, 6, (t) => inp(bs, 'p1', t < 15 ? { mx: 1, mz: 0, yaw: Math.PI / 2 } : {}));
+  ok(bev.some(e => e.t === 'barrelRoll') && b.x > hx + 6, `running into a barrel rolls it (${(b.x - hx).toFixed(1)} units)`);
+  ok(pack.filter(m => m.dead || m.hp < m.maxHp).length === 3, 'it runs over the whole pack');
+  ok(Math.hypot(b.vx, b.vz) < 0.3 && b.lying && bs.map.type[cellOf(b.x, b.z)] !== 4, 'it comes to rest on open floor, on its side');
+  bs.phase = 'build'; bs.phaseTimer = 0; bs.step();
+  ok(b.x === hx && b.z === hz && !b.lying, 'barrels go home next wave');
+  // Co-op: the guest's mirror sees the shelf go down (its spot turns to floor) and the barrels move.
+  const C = await import('../src/net/coop.js');
+  const host = new Sim({ map: 'passages', seed: 1003 }); host.addPlayer('p1'); host.step();
+  const mirror = new Sim({ map: 'passages', seed: 1003 }); mirror.addPlayer('p1');
+  for (let k = 0; k < 4; k++) host.hitWorld(7.5, 48.5, 1); run(host, 1);
+  C.applySnapshot(mirror, JSON.parse(JSON.stringify(C.snapshot(host))));
+  ok(mirror.shelves[0].state === 'down' && mirror.map.solid[mirror.shelves[0].cells[0]] === 0 && mirror.crates[mirror.shelves[0].crate.shelf + host.crates.length - host.shelves.length].up, 'co-op guests see the shelf fall');
+}
 process.exit(fails ? 1 : 0);

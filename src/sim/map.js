@@ -174,7 +174,7 @@ export const MAPS = {
   passages: {
     id: 'passages', name: "Servants' Passages", order: 5, w: 80, h: 100, floor: 'planks', birds: false,
     blurb: 'A maze of narrow passages inside the walls. Ceilings everywhere.',
-    twist: 'Servants open and shut the doors on a timer. Mice queue at a shut door, or take another way if it is shorter.',
+    twist: 'Servants open and shut the doors on a timer. Mice queue at a shut door, or take another way if it is shorter. Hit a tall shelf until it topples across the corridor.',
     furniture: [
       ...shell(80, 100, 14, 'plaster', [5, 75]),
       roof('Ceiling', [2, 2, 78, 98], 6, 7, 'beams'),
@@ -238,6 +238,22 @@ const LINKS = {
   cellar: [{ name: 'Cheese wheel', a: [42, 69.5], b: [42, 58.5], y: 3, path: [[42, 67.6], [42, 60.4]] },
            { name: 'Cheese wheel', a: [36.5, 64], b: [47.5, 64], y: 3, path: [[38.4, 64], [45.6, 64]] }],
 };
+// Things that fall over (v0.17). Shelves stand against a wall; knock one over (hit it a few
+// times) and it falls across the corridor, crushing what's under it and blocking the way
+// (mice chew through, like crates). Servants stand them back up between waves.
+// rect = where it stands (1 unit thick), fall = where it lies once down, h = height.
+const SHELVES = {
+  passages: [{ name: 'Linen shelf', rect: [7, 46, 8, 51], fall: [2, 46, 8, 51], h: 7, dir: [-1, 0] },
+             { name: 'Pantry shelf', rect: [72, 52, 73, 57], fall: [72, 52, 78, 57], h: 7, dir: [1, 0] },
+             { name: 'Boot rack', rect: [34, 44, 35, 49], fall: [34, 44, 40, 49], h: 6, dir: [1, 0] }],
+  cellar: [{ name: 'Jar shelf', rect: [16, 24, 17, 30], fall: [16, 24, 24, 30], h: 7, dir: [1, 0] },
+           { name: 'Jar shelf', rect: [67, 60, 68, 66], fall: [60, 60, 68, 66], h: 7, dir: [-1, 0] }],
+};
+// Big barrels: a cat brushing or hitting one sends it rolling the way the cat faces, flattening
+// mice in its path until it hits a wall. Rolled home between waves. [x, z]
+const BARRELS = {
+  entrance: [[30, 50], [66, 52]], market: [[10, 70], [78, 20]], stables: [[60, 50], [80, 40]], kitchen: [[30, 84], [66, 30]], cellar: [[42, 80]],
+};
 // Humans (v0.16, scenery only). 'side': that outer wall is drawn as a low curb (its collider
 // stays full height) and the lit human space lies beyond it, with people walking about.
 // 'wallWalk': guards patrol along the top of walls (x0, x1, z, y).
@@ -249,6 +265,7 @@ const HUMANS = {
 };
 for (const k of MAP_ORDER) {
   const M = MAPS[k]; M.tops = TOPS[k] || []; M.crates = CRATES[k] || []; M.links = LINKS[k] || []; M.humans = HUMANS[k] || null;
+  M.shelves = SHELVES[k] || []; M.barrels = BARRELS[k] || [];
   if (M.humans && M.humans.side === 'east') for (const f of M.furniture) if (f.name === 'East wall') f.visH = 1.4;
 }
 

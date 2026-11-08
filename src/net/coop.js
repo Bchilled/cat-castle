@@ -138,6 +138,7 @@ export function snapshot(sim) {
     decoys: sim.decoys.map(d => ({ id: d.id, x: r2(d.x), z: r2(d.z), hp: d.hp })),
     props: sim.props.map(p => [r2(p.x), r2(p.y), r2(p.z), p.state, r2(p.tilt)]),
     doors: sim.doors.map(d => d.open), foods: sim.foods.map(f => f.left), tops: sim.tops.map(f => f.left), crates: sim.crates.map(c => [c.up, c.hp]),
+    shelves: sim.shelves.map(sh => SHELF_STATES.indexOf(sh.state)), barrels: sim.barrels.map(b => [r2(b.x), r2(b.z), b.lying ? 1 : 0]),
     loot: sim.loot.map(l => ({ id: l.id, x: r2(l.x), y: r2(l.y), z: r2(l.z), key: l.key })), danger: sim.dangerSpots,
   };
 }
@@ -180,7 +181,16 @@ export function applySnapshot(sim, s, localId = null) {
   s.foods.forEach((n, k) => { if (sim.foods[k]) sim.foods[k].left = n; });
   s.tops.forEach((n, k) => { if (sim.tops[k]) sim.tops[k].left = n; });
   s.crates.forEach(([up, hp], k) => { const c = sim.crates[k]; if (!c) return; if (c.up !== up) { c.up = up; sim.flowDirty = true; } c.hp = hp; });
+  (s.shelves || []).forEach((k, j) => { const sh = sim.shelves[j]; if (sh && sh.state !== SHELF_STATES[k]) mirrorShelf(sim, sh, SHELF_STATES[k]); });
+  (s.barrels || []).forEach(([x, z, lying], j) => { const b = sim.barrels[j]; if (b) Object.assign(b, { x, z, lying: !!lying }); });
   sim.loot = s.loot; sim.dangerSpots = s.danger || [];
+}
+// A shelf is solid while standing (or toppling); its spot is floor once it's down.
+const SHELF_STATES = ['up', 'falling', 'down', 'broken'];
+function mirrorShelf(sim, sh, state) {
+  const solid = state === 'up' || state === 'falling';
+  for (const i of sh.cells) { sim.map.type[i] = solid ? T.SOLID : T.FLOOR; sim.map.solid[i] = solid ? sh.h : 0; }
+  sh.state = state; sim.flowDirty = true; sim.layoutVer++;
 }
 function mirrorDoor(sim, di, open) {
   const d = sim.doors[di]; d.open = open;
