@@ -836,6 +836,25 @@ export function makeFurniture(f) {
       g.add(part(cyl(r * 0.75, r * 0.75, 0.05, 16), 0x1a2a2a, 0, f.h + 0.01, 0, 1, 1, 1, false));   // dark water inside
       break;
     }
+    case 'stairs': {
+      // Treads 1 unit deep (30 cm), each half a unit higher (15 cm), on a solid stone or plank base.
+      const { axis, from, to } = f.stairs, run = axis === 'x' ? w : d, n = Math.max(1, Math.round(run)), wood = f.tex === 'planks';
+      for (let k = 0; k < n; k++) {
+        const top = from + (to - from) * (k + 1) / n, a = -run / 2 + (k + 0.5) * run / n;
+        const [px, pz, sx, sz] = axis === 'x' ? [a, 0, run / n, d] : [0, a, w, run / n];
+        TB(wood ? 'planks' : 'stone', wood ? 2 : 4, wood ? 0xa07c58 : 0xc8beb0, px, top / 2, pz, sx, Math.max(0.05, top), sz, k === 0 || k === n - 1);
+        B(0x3e3a34, px, top - 0.03, pz, axis === 'x' ? 0.08 : w, 0.06, axis === 'x' ? d : 0.08, false);   // tread edge
+      }
+      break;
+    }
+    case 'tower': {
+      // A squat stone watchtower: platform at f.h with merlons round the edge (scenery: no collision).
+      TB('stone', 6, 0xd0c8bc, 0, f.h / 2, 0, w, f.h, d);
+      TB('planks', 2, 0x9a7a58, 0, f.h + 0.03, 0, w - 0.2, 0.06, d - 0.2, false);
+      for (let x = -w / 2 + 0.6; x <= w / 2 - 0.5; x += 2) for (const sz of [-1, 1]) B(0xc0b8aa, x, f.h + 0.6, sz * (d / 2 - 0.35), 1, 1.2, 0.7);
+      for (let z = -d / 2 + 2.6; z <= d / 2 - 2.5; z += 2) for (const sx of [-1, 1]) B(0xc0b8aa, sx * (w / 2 - 0.35), f.h + 0.6, z, 0.7, 1.2, 1);
+      break;
+    }
     case 'walkway': {
       TB('stone', 6, 0xc0b8aa, 0, f.h / 2, 0, w, f.h, d);
       TB('planks', 2, 0x9a7a58, 0, f.h + 0.03, 0, w, 0.06, d, false);    // plank deck, flush on top

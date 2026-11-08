@@ -170,7 +170,10 @@ export class Scene {
       const fg = makeFurniture(f); s.add(fg); this.furnMesh.push(fg);
       if (f.kind !== 'solid') this.roofs.push({ f, g: fg });
       const [x0, z0, x1, z1] = f.rect;
-      if (f.kind === 'solid') this.proxy(x0, 0, z0, x1, f.h, z1);
+      if (f.stairs) {   // one aim box per tread, so the crosshair lands on the step you look at
+        const { axis, from, to } = f.stairs, run = axis === 'x' ? x1 - x0 : z1 - z0, n = Math.max(1, Math.round(run));
+        for (let k = 0; k < n; k++) { const top = from + (to - from) * (k + 1) / n, a = (axis === 'x' ? x0 : z0) + k * run / n, b = a + run / n; if (axis === 'x') this.proxy(a, 0, z0, b, top, z1); else this.proxy(x0, 0, a, x1, top, b); }
+      } else if (f.kind === 'solid') this.proxy(x0, 0, z0, x1, f.h, z1);
       else this.proxy(x0, f.bot, z0, x1, f.top, z1);
     }
     // Forest walls for the crosshair too (so traps can mount on the hedge).

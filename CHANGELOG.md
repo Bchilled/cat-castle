@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.28.0 — 2026-11-08
+Stairs: ways up for the cats.
+- Stairs are built like real ones: 30 cm treads with 15 cm rises. Cats just walk up them, no jumping. Mice can't use them.
+- **Castle Entrance:**
+  - stairs from the courtyard up to each walkway
+  - from each walkway, stairs on up to a new watchtower in the courtyard corner, 2.4 m up, looking over the courtyard and the gate passage
+- **Market:** the Fish and Cheese counters reach one tile out over the side alleys, with steps up onto them.
+- **Stables:** a stair from the yard up through the middle doorway onto the hay loft.
+- **Kitchen:** steps up onto both worktops.
+- A jug and a basket on the entrance walkways moved off the new stairs. The walkway torches moved with them.
+- `src/sim/map.js` stair() (53–57), stair heights in buildMap (367–373), entrance stairs and towers (81–86), market counters and steps (112–114, 234), stables loft stairs (128–131), kitchen steps (156), props and torches (256); `src/render/models.js` stairs and tower models (839–857); `src/render/scene.js` one aim box per step (173–176); `src/config.js` VERSION (8); `README.md` (51); `ROADMAP.md` (12).
+
+Tests: 263 checks, all passing (a cat walks up to the walkway and on up to the watchtower; Puddin walks up the loft stairs; mice can't use the stairs).
+
 ## 0.27.0 — 2026-11-08
 The Traps & Items screen: one place to choose, swap and unlock your traps.
 - On the main menu, under the maps, are your 8 trap slots (keys 1–8) and your item (Q). Click any of them, or **Traps & items**, to open the screen.

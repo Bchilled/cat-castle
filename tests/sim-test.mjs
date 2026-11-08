@@ -2,7 +2,7 @@
 // Run: node tests/sim-test.mjs
 import { TRAPS, CATS, ITEMS } from '../src/config.js';
 import { Sim } from '../src/sim/sim.js';
-import { W, CELL, idx, MAP_ORDER, MAPS, cellOf } from '../src/sim/map.js';
+import { W, CELL, idx, MAP_ORDER, MAPS, cellOf, T } from '../src/sim/map.js';
 import { nextCell } from '../src/sim/path.js';
 import { TICK_HZ } from '../src/config.js';
 import { buildWave } from '../src/sim/waves.js';
@@ -738,7 +738,7 @@ let findSpot, setup;
   const placed = ms.traps.size, pts = ms.sardines;
   const prop = ms.props.find(p => p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1);
   const under = [24, 28, 32].map(x => { const m = ms.spawnAt('mouse', x, 43, 100); m.stunT = 9; return m; }), tank = ms.spawnAt('tank', 26, 44, 600); tank.stunT = 9;
-  const cat = ms.cats.get('p1'); cat.x = 11.4; cat.z = 41.3; cat.y = 0;
+  const cat = ms.cats.get('p1'); cat.x = 9.4; cat.z = 41.3; cat.y = 0;
   const ev = run(ms, 7, () => inp(ms, 'p1', { yaw: Math.PI / 2, primary: true }));
   ok(st.state === 'down' && ev.some(e => e.t === 'stallFall'), `biting a stall leg brings the counter down (${ev.filter(e => e.t === 'stallHit').length} hits)`);
   ok(under.every(m => m.dead) && !tank.dead && !(tank.z > z0 && tank.z < z1 && tank.x > x0 && tank.x < x1), 'it flattens the mice under it; a survivor is shoved out');
@@ -949,5 +949,20 @@ let findSpot, setup;
     const up = m.y, floating = m.bubbleT > 0; run(t, 2);
     ok(floating && up > 1.5 && m.y < 0.5 && m.wetT > 0 && m.oilT > 0, `Soap Bubbles float a mouse up (${up.toFixed(1)} high), drop it soaked; Soap Suds oils it`);
   }
+}
+// 46. Ways up (0.28): a cat walks up the courtyard stairs onto the walkway and on up to the
+// watchtower; Puddin (the heaviest) walks up the stables loft stairs; mice can't use stairs.
+{
+  const walk = (sim, c, mx, mz, secs) => run(sim, secs, () => inp(sim, c.id, { mx, mz, yaw: Math.atan2(mx, mz) }));
+  const tw = new Sim({ seed: 1400 }); const c = tw.addPlayer('p1', 'nebbie'); tw.step();
+  c.x = 9; c.z = 40; c.y = 0;
+  walk(tw, c, 0, -1, 0.75); const onStairs = c.y;                // north up the courtyard stairs
+  walk(tw, c, -1, 0, 0.5); const onWalk = c.y;                   // west onto the walkway
+  walk(tw, c, 0, 1, 2.5);                                         // south up the tower stairs
+  ok(onStairs > 2.5 && onWalk > 2.9 && c.y > 7.9 && c.z > 48, `a cat walks up to the walkway (${onWalk.toFixed(1)}) and on up to the watchtower (${c.y.toFixed(1)} high)`);
+  const st = new Sim({ map: 'stables', seed: 1401 }); const p = st.addPlayer('p1', 'puddin'); st.step();
+  p.x = 42; p.z = 55; p.y = 0; walk(st, p, -1, 0, 4.5);   // (slow: mud, and he is Puddin)
+  ok(p.y > 6 && p.x < 28, `Puddin walks up the loft stairs onto the hay loft (${p.y.toFixed(1)} high)`);
+  ok(st.map.type[cellOf(34, 55)] === T.SOLID && !(st.flow[cellOf(34, 55)] < Infinity), 'mice can not use the stairs');
 }
 process.exit(fails ? 1 : 0);

@@ -50,6 +50,11 @@ function shell(w, h, ht, look, spawnXs) {
 const blk = (name, rect, h, look, extra = {}) => ({ name, kind: 'solid', rect, h, look, ...extra });
 const over = (name, rect, bot, top, look, legs = 'corners') => ({ name, kind: 'over', legs, rect, bot, top, look });
 const roof = (name, rect, bot, top, look) => ({ name, kind: 'roof', rect, bot, top, look });
+// Stairs (v0.28): a solid flight that rises along one axis, from height `from` at one end to
+// `to` at the other (axis 'z': from at z0, to at z1; 'x': from at x0, to at x1). Built at
+// half a unit of rise per unit of run (15 cm steps, 30 cm treads), so every half-unit cell
+// rises at most 0.26 and the cats simply walk up. Mice can't use them (they're solid).
+const stair = (name, rect, axis, from, to, look = 'stairs') => ({ name, kind: 'solid', rect, h: Math.max(from, to), look, stairs: { axis, from, to } });
 
 export const MAPS = {
   // 1. Castle Entrance — the original map (moat, gate, courtyard, three lanes north).
@@ -73,8 +78,12 @@ export const MAPS = {
       { name: 'Well', kind: 'solid', rect: [44, 38, 52, 46], h: 3.2, look: 'well' },
       { name: 'West walkway', kind: 'solid', rect: [2, 30, 8, 56], h: 3, look: 'walkway' },
       { name: 'East walkway', kind: 'solid', rect: [88, 30, 94, 56], h: 3, look: 'walkway' },
-      { name: 'Crate', kind: 'solid', rect: [8, 50, 10, 52], h: 1.4, look: 'crate' },
-      { name: 'Crate', kind: 'solid', rect: [86, 50, 88, 52], h: 1.4, look: 'crate' },
+      // Ways up for the cats (v0.28): stairs from the courtyard to each walkway, then up the
+      // walkway to a watchtower in the corner (2.4 m up), looking over the courtyard and the gate.
+      stair('Walkway stairs', [8, 32, 10, 38], 'z', 3, 0), stair('Walkway stairs', [86, 32, 88, 38], 'z', 3, 0),
+      stair('Tower stairs', [2, 38, 8, 48], 'z', 3, 8), stair('Tower stairs', [88, 38, 94, 48], 'z', 3, 8),
+      { name: 'West tower', kind: 'solid', rect: [2, 48, 10, 58], h: 8, look: 'tower' },
+      { name: 'East tower', kind: 'solid', rect: [86, 48, 94, 58], h: 8, look: 'tower' },
       { name: 'Crate', kind: 'solid', rect: [52, 44, 54, 46], h: 1.4, look: 'crate' },
       { name: 'Guardhouse W', kind: 'solid', rect: [30, 10, 44, 30], h: 16, look: 'guardhouse' },
       { name: 'Guardhouse E', kind: 'solid', rect: [52, 10, 66, 30], h: 16, look: 'guardhouse' },
@@ -100,9 +109,9 @@ export const MAPS = {
     roads: [[[20, 120], [20, 98], [30, 98]], [[76, 120], [76, 98], [66, 98]]],
     spawns: [{ x: 20, z: 118.8 }, { x: 76, z: 118.8 }], catSpawn: { x: 48, z: 8 },
     vias: [{ name: 'Colonnade', x: 26, z: 20, weight: 1 }, { name: 'Guard passage', x: 48, z: 20, weight: 1 }, { name: 'East lane', x: 70, z: 20, weight: 1 }],
-    torches: [[2, 40, 1, 0], [94, 40, -1, 0], [44, 66, 1, 0], [52, 66, -1, 0], [42, 2, 0, 1], [54, 2, 0, 1], [30, 20, -1, 0], [66, 20, 1, 0]],
+    torches: [[2, 34, 1, 0], [94, 34, -1, 0], [44, 66, 1, 0], [52, 66, -1, 0], [42, 2, 0, 1], [54, 2, 0, 1], [30, 20, -1, 0], [66, 20, 1, 0]],
     // Knock-over props near the edges of the table, bench and walkways (x, surface height, z).
-    props: [['pot', 63, 2.9, 40], ['jug', 70, 2.9, 37], ['basket', 20, 1.9, 42.5], ['pot', 26, 1.9, 40.5], ['jug', 7, 3, 40], ['basket', 89, 3, 44]],
+    props: [['pot', 63, 2.9, 40], ['jug', 70, 2.9, 37], ['basket', 20, 1.9, 42.5], ['pot', 26, 1.9, 40.5], ['jug', 7, 3, 34], ['basket', 89, 3, 34]],
   },
   // 2. Market Back Alleys — behind the stalls. Three alleys, crossings under the stall
   // counters (ceilings for zappers, pots to knock off onto them). Twist: food piles.
@@ -116,8 +125,10 @@ export const MAPS = {
       // Alleys on the grid: west 5 tiles, centre 4, east 5; crossings under the counters 3.
       blk('Stall block', [12, 22, 40, 40], 20, 'house'), blk('Stall block', [12, 46, 40, 62], 20, 'house'), blk('Stall block', [12, 68, 40, 84], 20, 'house'),
       blk('Stall block', [48, 22, 76, 40], 20, 'house'), blk('Stall block', [48, 46, 76, 62], 20, 'house'), blk('Stall block', [48, 68, 76, 84], 20, 'house'),
-      over('Fish stall', [12, 40, 40, 46], 2.6, 3.0, 'stall'), over('Veg stall', [12, 62, 40, 68], 2.6, 3.0, 'stall'),
-      over('Bread stall', [48, 40, 76, 46], 2.6, 3.0, 'stall'), over('Cheese stall', [48, 62, 76, 68], 2.6, 3.0, 'stall'),
+      // The Fish and Cheese counters reach a tile out over the side alleys, with steps up to them.
+      over('Fish stall', [10, 40, 40, 46], 2.6, 3.0, 'stall'), over('Veg stall', [12, 62, 40, 68], 2.6, 3.0, 'stall'),
+      over('Bread stall', [48, 40, 76, 46], 2.6, 3.0, 'stall'), over('Cheese stall', [48, 62, 78, 68], 2.6, 3.0, 'stall'),
+      stair('Counter steps', [10, 46, 12, 52], 'z', 3, 0), stair('Counter steps', [76, 68, 78, 74], 'z', 3, 0),
       blk('Crates', [8, 88, 12, 92], 1.6, 'crate'), blk('Barrels', [74, 88, 82, 92], 3, 'barrels'), blk('Cart', [40, 90, 46, 98], 3.6, 'cart'),
       blk('Crates', [10, 8, 16, 12], 1.6, 'crate'), blk('Crates', [72, 6, 78, 10], 1.6, 'crate'),
       blk('Apple sacks', [2, 52, 5, 56], 0.8, 'sacks'), blk('Bread sacks', [83, 30, 86, 34], 0.8, 'sacks'), blk('Cabbages', [40, 72, 43, 75], 0.8, 'sacks'),
@@ -142,6 +153,7 @@ export const MAPS = {
       // The aisle is 5 tiles wide under the loft, horse pens off its west side, three
       // 3-tile doorways into the yard. A paddock wall splits the yard, two 4-tile gaps in it.
       { name: 'Hay loft', kind: 'over', rect: [18, 14, 28, 86], bot: 5.5, top: 6.2, look: 'loft' },
+      stair('Loft stairs', [28, 54, 40, 56], 'x', 6.2, 0),                        // from the yard through the middle doorway up onto the loft (mice use the ladders)
       ...[24, 36, 48, 60, 72].map(z => blk('Pen wall', [2, z, 18, z + 1], 4, 'partition')),
       blk('Stable wall', [28, 14, 30, 28], 10, 'house'), blk('Stable wall', [28, 34, 30, 50], 10, 'house'),
       blk('Stable wall', [28, 56, 30, 72], 10, 'house'), blk('Stable wall', [28, 78, 30, 86], 10, 'house'),
@@ -219,6 +231,7 @@ export const MAPS = {
       blk('Kitchen wall', [52, 64, 76, 66], 12, 'plaster'), blk('Kitchen wall', [84, 64, 94, 66], 12, 'plaster'),
       blk('Scullery wall', [32, 66, 34, 98], 12, 'plaster'), blk('Bakehouse wall', [62, 66, 64, 98], 12, 'plaster'),
       over('West worktop', [2, 14, 6, 58], 3, 3.4, 'counter'), over('East worktop', [90, 14, 94, 58], 3, 3.4, 'counter'),
+      stair('Steps', [6, 50, 8, 57], 'z', 3.4, 0), stair('Steps', [88, 50, 90, 57], 'z', 3.4, 0),   // up onto the worktops
       over('Kitchen table', [36, 26, 60, 34], 3, 3.4, 'counter'), over('Butcher block', [64, 44, 70, 48], 2.8, 3.2, 'table'),
       blk('Oven', [36, 2, 52, 8], 9, 'oven'), blk('Hearth', [86, 86, 94, 96], 8, 'oven'),
       blk('Flour sacks', [18, 4, 26, 8], 2.6, 'sacks'), blk('Crates', [56, 90, 62, 96], 1.6, 'crate'),
@@ -240,7 +253,7 @@ export const MAP_ORDER = ['entrance', 'market', 'stables', 'cellar', 'passages',
 // Floor traps can go on furniture tops too, so you can trap the feast.
 const TOPS = {
   entrance: [{ name: 'Meat pie', x: 68, z: 41.5, y: 2.9, r: 1.2, amount: 20, climb: [68, 45] }, { name: 'Cheese rind', x: 21, z: 41.5, y: 1.9, r: 1, amount: 15, climb: [21, 44] }],
-  market: [{ name: 'Fish', x: 28, z: 43, y: 3, r: 1.2, amount: 20, climb: [10.5, 43] }, { name: 'Cheese', x: 60, z: 65, y: 3, r: 1.2, amount: 20, climb: [77.5, 65] }],
+  market: [{ name: 'Fish', x: 28, z: 43, y: 3, r: 1.2, amount: 20, climb: [9, 43] }, { name: 'Cheese', x: 60, z: 65, y: 3, r: 1.2, amount: 20, climb: [79, 65] }],
   stables: [{ name: 'Oat bucket', x: 92, z: 9, y: 2.6, r: 1.2, amount: 20, climb: [84.5, 9] }],
   cellar: [{ name: 'Cheese wheel top', x: 42, z: 64, y: 3, r: 1.5, amount: 30, climb: [42, 69] }],
   passages: [{ name: 'Crumbs', x: 74, z: 21.5, y: 1.4, r: 1, amount: 15, climb: [75, 24.5] }],
@@ -351,7 +364,13 @@ export function buildMap() {
   for (const mr of MAP.muds || []) eachCell([mr.x0, mr.z0, mr.x1, mr.z1], i => { mud[i] = 1; });
 
   FURNITURE.forEach((f, fi) => {
-    if (f.kind === 'solid') {
+    if (f.kind === 'solid' && f.stairs) {
+      // Each cell's height follows the slope (cell centres), so the first and last cells are
+      // half a cell's rise off the floor and the landing: a cat steps on and off.
+      const { axis, from, to } = f.stairs, [x0, z0, x1, z1] = f.rect;
+      const n = Math.round((axis === 'x' ? x1 - x0 : z1 - z0) / CELL), a0 = Math.round((axis === 'x' ? x0 : z0) / CELL);
+      eachCell(f.rect, (i, x, z) => { const k = (axis === 'x' ? x : z) - a0; type[i] = T.SOLID; solid[i] = Math.max(solid[i], from + (to - from) * (k + 0.5) / n); furn[i] = fi; forest[i] = 0; });
+    } else if (f.kind === 'solid') {
       eachCell(f.rect, i => { type[i] = T.SOLID; solid[i] = Math.max(solid[i], f.h); furn[i] = fi; forest[i] = 0; });
     } else {
       const [x0, z0, x1, z1] = f.rect;
