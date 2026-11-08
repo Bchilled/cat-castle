@@ -101,9 +101,40 @@
   .catpick b { display: block; font-size: 17px; margin-top: 4px; } .catpick small { display: block; color: var(--dim); font-size: 11px; }
   .detail { width: 330px; text-align: left; padding: 12px; background: var(--bg); border: 2px solid #0e0b09; border-radius: 8px; }
   .detail canvas { display: block; margin: 0 auto; }
-  #loadout { max-width: 820px; margin: 10px auto 0; text-align: center; }
+  #loadout { max-width: 1000px; margin: 10px auto 0; text-align: center; }
   #loadout .lh { display: inline-block; margin: 0 6px 0 12px; color: var(--accent); font-weight: bold; font-size: 13px; }
   .lt { font-size: 12px; padding: 4px 8px; margin: 2px; opacity: .55; } .lt.on { opacity: 1; outline: 2px solid var(--accent); }
+  /* Menu: your 8 trap slots + item (click to open Traps & Items) */
+  .ls { position: relative; width: 84px; font-size: 11px; padding: 3px 2px 4px; margin: 2px; vertical-align: top; white-space: nowrap; overflow: hidden; }
+  .ls img { display: block; width: 56px; height: 42px; margin: 0 auto -2px; } .ls .nm { display: block; text-overflow: ellipsis; overflow: hidden; }
+  .ls .key, .tslot .key { position: absolute; top: 1px; left: 5px; font-size: 14px; font-weight: bold; color: var(--accent); text-shadow: 0 1px 2px #000; }
+  .ls.empty { opacity: .55; border-style: dashed; } .ls.empty .nm { padding-top: 26px; } .ls.item { width: 96px; } .ls.item .nm { padding-top: 26px; }
+  /* Traps & Items screen (src/ui/traps.js) */
+  #traps { justify-content: flex-start; }
+  #traps .wallet { font-size: 18px; color: var(--ink); margin: 0; } #traps .wallet b { color: var(--accent); }
+  #traps .note { min-height: 18px; color: var(--accent); margin: 2px; }
+  .tslots { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+  .tslot { position: relative; width: 96px; margin: 0; padding: 3px 2px 4px; font-size: 11.5px; white-space: nowrap; overflow: hidden; }
+  .tslot img { display: block; width: 64px; height: 48px; margin: 0 auto -2px; } .tslot .nm { display: block; text-overflow: ellipsis; overflow: hidden; }
+  .tslot.empty { border-style: dashed; opacity: .7; } .tslot.empty .nm { padding-top: 34px; } .tslot.item { margin-left: 14px; } .tslot.item .nm { padding-top: 34px; }
+  .tslot.sel { border-color: var(--accent); background: #7a5630; box-shadow: 0 0 0 2px var(--accent); }
+  .tslot .x { position: absolute; top: 0; right: 4px; font-style: normal; font-size: 16px; color: var(--dim); } .tslot .x:hover { color: var(--bad); }
+  .tbody { display: flex; gap: 12px; width: min(1200px, 96vw); align-items: flex-start; text-align: left; }
+  .tlist { flex: 1; min-width: 0; } .tlist h4 { margin: 8px 0 4px; color: var(--accent); } .tlist h4 small { color: var(--dim); font-weight: normal; }
+  .tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 4px; }
+  .tt { position: relative; margin: 0; padding: 3px 2px 4px; font-size: 11px; text-align: center; white-space: nowrap; overflow: hidden; }
+  .tt img { display: block; width: 56px; height: 42px; margin: 0 auto -2px; } .tt .nm { display: block; text-overflow: ellipsis; overflow: hidden; }
+  .tt.item .nm { padding: 10px 0; } .tt.on { border-color: var(--accent); background: #7a5630; }
+  .tt.locked { background: #2e241b; color: var(--dim); } .tt.locked img { opacity: .45; filter: grayscale(.7); }
+  .tt .lock { display: block; font-size: 10.5px; color: var(--accent); } .tt .in { position: absolute; top: 1px; left: 4px; font-weight: bold; color: var(--accent); font-size: 13px; }
+  .tdetail { width: 340px; flex: none; position: sticky; top: 0; background: var(--bg); border: 2px solid #0e0b09; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .tdetail h3 { margin: 0; font-size: 19px; } .tdetail p { margin: 6px 0; max-width: none; color: var(--ink); } .tdetail .stat { color: var(--accent); font-size: 12px; }
+  .tdetail .dim, .tdetail small.dim { color: var(--dim); } .tdetail .ok { color: #8fd27a; } .tdetail button { font-size: 14px; padding: 6px 14px; margin: 4px 4px 4px 0; }
+  .tdetail .dh { display: flex; gap: 10px; align-items: center; } .tdetail .dh img { width: 96px; height: 72px; }
+  .tdetail .tier { margin-top: 8px; } .tdetail .tier i { font-style: normal; color: #4a3d30; font-size: 18px; } .tdetail .tier i.on { color: var(--accent); }
+  .tdetail .sp { margin-top: 6px; padding: 6px 8px; border: 1px solid #3a2e22; border-radius: 6px; } .tdetail .sp.on { border-color: var(--accent); } .tdetail .sp button { font-size: 12px; padding: 3px 10px; }
+  .tdetail em { color: var(--dim); font-size: 12px; }
+  @media (max-width: 760px) { .tbody { flex-direction: column-reverse; } .tdetail { width: 100%; position: static; } }
   #loadhint { font-size: 12px; margin: 4px 0 0; }
   #maps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; max-width: 1040px; margin: 12px auto 0; }
   .mp { text-align: left; padding: 6px 8px; opacity: .6; font-size: 12px; } .mp b { display: block; font-size: 13px; color: var(--accent); }
@@ -210,6 +241,7 @@
 </div>
 <div id="end" class="screen"></div>
 <div id="shop" class="screen"></div>
+<div id="traps" class="screen"></div>
 
 <script type="module" src="./src/main.js"></script>
 </body>

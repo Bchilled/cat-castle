@@ -140,7 +140,8 @@ const FIRE_DPS = 20;        // kitchen: ovens and hearth burn mice (cats take 3/
 const GORGE_SECS = 2.5, GORGE_HP = 1.3;   // food piles: time spent eating, and how much tougher they come out
 // Smarter mice (v0.12; v0.14.1: lanes only).
 // Danger memory: every death leaves "danger" on the floor around it. When a pack picks its lane
-// it adds up the danger along each lane, so a lane they keep dying in loses its share of packs.
+// it adds up the danger along each lane, so a lane they keep dying in loses its share of packs
+// (only while LANE_SPLIT is on; since v0.26 every pack takes its hole's cheapest route).
 // It does NOT change their step-by-step path: within the lane they chose, they still walk
 // straight into your traps (otherwise they just skirted every kill zone in the open yards).
 // It fades over ~20 s. Scouts dying count four times.
@@ -430,7 +431,7 @@ export class Sim {
     const vf = this.viaField(k), c = cellOf(VIAS[k].x, VIAS[k].z);
     return vf[this.spawnCells[door % this.spawnCells.length]] + this.flow[c];
   }
-  // Path of least resistance, but not single file: packs split across routes that cost
+  // (Only with LANE_SPLIT on.) Packs split across routes that cost
   // about the same; a lane made expensive (barricades, the gate) loses its share.
   // The direct (cheapest) route is a candidate too (-1), so the arrows on the floor are
   // all routes mice really take, and the shortest one gets the biggest share.

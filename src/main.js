@@ -1,6 +1,6 @@
 // main.js — wires input -> commands -> sim (fixed tick) -> renderer + HUD.
 
-import { DT, TRAPS, TRAP_ORDER, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE, RULES, COMBOS, DIFFICULTY, DIFFICULTY_ORDER } from './config.js';
+import { DT, TRAPS, TRAP_ORDER, STARTER_TRAPS, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE, RULES, COMBOS, DIFFICULTY, DIFFICULTY_ORDER } from './config.js';
 import { CAT_INFO, abilityRows, elTag } from './ui/catinfo.js';
 import { portraitURL } from './ui/portraits.js';
 import { Sfx } from './audio/sfx.js';
@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { makeCat } from './render/models.js';
 import { loadProfile, saveProfile, sandboxProfile, unlockedTraps, unlockedItems, upgradesFor, runReward, applyReward } from './meta/profile.js';
 import { openShop } from './ui/shop.js';
+import { openTraps } from './ui/traps.js';
 import { trapIcons } from './ui/icons.js';
 import { Coach } from './ui/coach.js';
 
@@ -42,9 +43,9 @@ const TIPS = [
   'Stunned mice see stars. The circle of stars shrinks as the stun wears off.',
   'Trap lamps: green = ready, red = resetting.',
   'Bug Zappers hang under anything with a roof: passages, tables, benches, stall counters, the cellar vault.',
-  'Packs of mice split between routes that cost about the same. Make one dearer and they take another.',
+  'Every mouse from a hole takes the same route, the cheapest one. Close a lane with a few Poison Boxes and they all go the other way.',
   'Every kill pays Paw Points on the spot. Kill plenty, build more.',
-  'Bring 8 traps and 1 item. Pick them under the cats on this screen.',
+  'Bring 8 traps and 1 item. Click a slot under the maps to swap them, unlock more and upgrade them.',
   'Q uses your item. E is your second ability. Hold F to sniff out where the mice are going.',
   'Fred can kick off walls twice before he has to land.',
   'Brush past a pot on a table edge and it falls. Time it right and it lands on a pack of mice.',
@@ -102,25 +103,24 @@ pickCat(chosenCat);
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
 // Only traps and items you've unlocked (shop) can be brought.
-let loadout = load('catcastle.loadout', TRAP_ORDER.slice(0, LOADOUT_SIZE)).filter(k => TRAPS[k] && unlockedTraps(profile).includes(k));
+let loadout = load('catcastle.loadout', STARTER_TRAPS.slice(0, LOADOUT_SIZE)).filter(k => TRAPS[k] && unlockedTraps(profile).includes(k));
 let chosenItem = unlockedItems(profile).includes(load('catcastle.item', 'laser')) ? load('catcastle.item', 'laser') : 'laser';
+// The menu shows your 8 trap slots and your item; click any of them (or the button) to open
+// the Traps & Items screen, where you unlock, upgrade and swap (src/ui/traps.js).
+const kit = { get loadout() { return loadout; }, set loadout(v) { loadout = v; }, get item() { return chosenItem; }, set item(v) { chosenItem = v; } };
+const saveKit = () => { save('catcastle.loadout', loadout); save('catcastle.item', chosenItem); };
 function drawLoadout() {
-  const traps = unlockedTraps(profile), items = unlockedItems(profile), icons = trapIcons(traps);
+  const traps = unlockedTraps(profile), icons = trapIcons(loadout);
   loadout = loadout.filter(k => traps.includes(k));
-  const more = TRAP_ORDER.length - traps.length, moreI = ITEM_ORDER.length - items.length;
-  document.getElementById('loadout').innerHTML = `<div class="lh">Traps <b>${loadout.length}/${LOADOUT_SIZE}</b></div>` +
-    traps.map(k => `<button class="lt ${loadout.includes(k) ? 'on' : ''}" data-trap="${k}" title="${TRAPS[k].desc}">${icons[k] ? `<img src="${icons[k]}" alt="">` : ''}${TRAPS[k].name}</button>`).join('') +
-    (more ? `<span class="dim"> +${more} more in the shop</span>` : '') +
-    `<div><div class="lh">Item (Q)</div>` + items.map(k => `<button class="lt ${chosenItem === k ? 'on' : ''}" data-item="${k}" title="${ITEMS[k].desc}">${ITEMS[k].name}</button>`).join('') +
-    (moreI ? `<span class="dim"> +${moreI} more in the shop</span>` : '') + `</div><p class="dim" id="loadhint">${ITEMS[chosenItem].desc}</p>`;
-  document.querySelectorAll('[data-trap]').forEach(b => b.onclick = () => {
-    const k = b.dataset.trap;
-    if (loadout.includes(k)) loadout = loadout.filter(x => x !== k);
-    else if (loadout.length < LOADOUT_SIZE) loadout = TRAP_ORDER.filter(x => loadout.includes(x) || x === k);
-    else { sfx.play('deny'); return; }
-    save('catcastle.loadout', loadout); sfx.play('click'); drawLoadout();
-  });
-  document.querySelectorAll('[data-item]').forEach(b => b.onclick = () => { chosenItem = b.dataset.item; save('catcastle.item', chosenItem); sfx.play('click'); drawLoadout(); });
+  const locked = TRAP_ORDER.length - traps.length + ITEM_ORDER.length - unlockedItems(profile).length;
+  let h = '<div class="lh">Your traps</div>';
+  for (let i = 0; i < LOADOUT_SIZE; i++) { const k = loadout[i]; h += `<button class="ls ${k ? '' : 'empty'}" data-lslot="${i}" title="${k ? TRAPS[k].desc : 'Empty: click to choose a trap'}"><span class="key">${i + 1}</span>${k && icons[k] ? `<img src="${icons[k]}" alt="">` : ''}<span class="nm">${k ? TRAPS[k].name : 'empty'}</span></button>`; }
+  h += `<button class="ls item" data-lslot="item" title="${ITEMS[chosenItem].desc}"><span class="key">Q</span><span class="nm">${ITEMS[chosenItem].name}</span></button>`;
+  h += `<div><button id="trapsbtn">Traps &amp; items${locked ? ` <small>(${locked} to unlock)</small>` : ''}</button></div>`;
+  document.getElementById('loadout').innerHTML = h;
+  const open = (slot) => { sfx.unlock(); sfx.play('click'); openTraps(profile, { sfx, state: kit, save: saveKit, slot, onChange: () => { showWallet(); drawLoadout(); pickCat(chosenCat); } }); };
+  document.querySelectorAll('[data-lslot]').forEach(b => b.onclick = () => open(b.dataset.lslot === 'item' ? null : +b.dataset.lslot));
+  document.getElementById('trapsbtn').onclick = () => open(null);
 }
 drawLoadout();
 // Shop (between runs). Also opens straight away from the end screen's Shop button (?shop=1).

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.27.0 — 2026-11-08
+The Traps & Items screen: one place to choose, swap and unlock your traps.
+- On the main menu, under the maps, are your 8 trap slots (keys 1–8) and your item (Q). Click any of them, or **Traps & items**, to open the screen.
+- The top of the screen shows your slots. Click a slot to pick it; × empties it.
+- Below are all 39 traps grouped by where they go (Floor, Wall, Ceiling, Table tops), then the 10 items. Locked ones are greyed out with their price. Traps you're bringing show their key number.
+- Click a trap to see it on the right:
+  - what it does, its size in tiles, what it costs to build, and its numbers
+  - **Unlock** if it's locked
+  - **Put in slot N**, or swap it to another slot, or **Take it out**
+  - tier upgrades, then the two specials
+- Double-click an owned trap to drop it straight into the picked slot. Items work the same way: **Take this item**.
+- The slots keep the order you put them in, and that's the order on keys 1–8 in the game.
+- A new player now brings all 8 starter traps (the Cheese Chunk was left out before).
+- Tips updated: one route per hole; where to swap traps.
+- `src/ui/traps.js` the screen (1–144); `src/main.js` menu slots and opening it (106–123), starter loadout (3, 106), tips (46–48); `index.html` styles (104–137) and the screen (244); `src/sim/sim.js` comments (143–144, 434); `src/config.js` VERSION (8); `README.md` (60–62); `ROADMAP.md` (30).
+
+Tests: 260 sim checks pass. In the browser: unlock Honey Drip with paw prints, put it in slot 5, take the Snapper out and back in, change the item; the in-game trap bar matches the slots.
+
 ## 0.26.0 — 2026-11-08
 The trap grid, like Orcs Must Die, and every map rebuilt on it.
 - **Trap grid.** One tile is 2×2 units (60 cm). Every trap snaps to whole tiles, and while you hold a trap the grid shows on the floor round the crosshair.

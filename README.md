@@ -57,7 +57,9 @@ Kills pay Paw Points, which buy traps in the game. Every attack and trap has an 
 - **Wind** spreads fire and poison.
 - **Dirty + physics** knocks mice flat.
 
-Paw prints and yarn are kept between runs, and spent in the shop:
+**Traps & Items** (click your trap slots on the main menu): every trap grouped by where it goes (floor, wall, ceiling, table tops) and every item. Click one to see what it does, unlock it, upgrade it, and put it in one of your 8 slots (keys 1–8) or take it out.
+
+Paw prints and yarn are kept between runs, and spent there or in the shop:
 - unlock traps and items
 - upgrade traps (tier 2 and 3, then one of two specials)
 - buy hats

@@ -27,7 +27,7 @@ In from v0.10.0: all six maps, mazing with Poison Boxes, knock-over props, food 
 In from v0.11.0: Hot Plate, Ice Tray, Oil Slick, Rolling Pin, Mouse Skull, Fork Darts, Bellows, Candle Torch, Hypno Wheel, Flower Pot, Leaky Bucket, Salt Shaker, Flypaper (22 traps in all). In from v0.19.0: Trapdoor, Magnifying Glass, Knife Block (table tops only), Honey Drip (26 in all). In from v0.21.0: Cuckoo Clock, Chandelier, Kettle and Spice Jar (table tops only) (30 in all). In from v0.24.0: Sticky Jam, Pin Cushion, Spoon Catapult, Dropping Pans (34 in all); the original idea list is all built. In from v0.25.0: Firecracker, Hamster Wheel, Frayed Cord, Clothes Peg, Soap Bubbles (39 in all).
 
 ## C. Out-of-game progression (like Orcs Must Die 2's spellbook)
-In from v0.11.0: the shop (unlocks, tier 2 and 3, a choice of two specials per trap, hats for yarn).
+In from v0.11.0: the shop (unlocks, tier 2 and 3, a choice of two specials per trap, hats for yarn). In from v0.27.0: the Traps & Items screen (all traps by surface, unlock, upgrade, swap into the 8 slots, pick the item).
 - Currencies kept between runs: paw prints (rating) and yarn (from bosses).
 - Shop: buy and unlock traps, cats, items and hats.
 - Upgrades: each trap has upgrade tiers, then a choice between 2 special abilities. For example, a Snapper that either chains to the next mouse or leaves them bleeding.
