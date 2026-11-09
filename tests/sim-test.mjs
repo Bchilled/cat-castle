@@ -22,7 +22,7 @@ const s = new Sim({ seed: 7 });
 ok(s.flow[s.spawnCell] < Infinity, `spawn reaches exit (cost ${s.flow[s.spawnCell].toFixed(1)})`);
 ok(s.flowBig[s.spawnCell] < Infinity, 'big bosses also have a route');
 // v0.30: the gate is jammed, so both packs come through the breach in the west curtain wall.
-ok(s.routes().slice(0, 2).every(r => r.some(([x, z]) => x > 16 && x < 24 && z > 76 && z < 84)), 'with the gate jammed, both roads route through the breach');
+ok(s.routes().slice(0, 1).every(r => r.some(([x, z]) => x > 16 && x < 24 && z > 76 && z < 84)), 'with the gate jammed, the west road routes through the breach');   // (0.32: the east road opens on wave 8, after the gate is down anyway)
 ok(new Set(s.routes().map(r => r[0].join())).size === 3, 'three entrances (two roads and the courtyard drain)');
 {
   // Path of least resistance: one route per entrance, and every pack takes it.
@@ -525,9 +525,10 @@ for (const id of MAP_ORDER) {
   for (let k = 0; k < 120; k++) { dg.dangerT = 0; dg.stepDanger(); }
   ok(Math.max(...dg.danger) < 1, 'and forget it after a while');
   ok(buildWave(9, () => 0.5, false).queue.some(e => e.type === 'scout'), 'scouts lead the packs');
-  // Crates: the guard passage is a shortcut worth smashing; mice chew through and it opens.
-  const cr = new Sim({ seed: 501 }); cr.addPlayer('p1'); cr.gate.up = false; cr.flowDirty = true; cr.step();
-  const crate = cr.crates[0]; for (let k = 0; k < 6; k++) { const m = cr.spawnAt('tank', 48 + (k % 3 - 1), 23 + (k >> 1) * 0.3, 999); m.via = -1; }
+  // Crates: the market's tavern arch is a shortcut worth smashing (for mice too big to climb
+  // over on the plank); they chew through and it opens. (0.32: the entrance's guard passage is open now.)
+  const cr = new Sim({ map: 'market', seed: 501 }); cr.addPlayer('p1'); cr.flowDirty = true; cr.step();
+  const crate = cr.crates.find(c => c.rect[0] === 30 && c.rect[1] === 30); for (let k = 0; k < 6; k++) { const m = cr.spawnAt('tank', 33 + (k % 3 - 1), 35 + (k >> 1) * 0.3, 999); m.via = -1; }
   const evc = run(cr, 30, () => { for (const m of cr.mice) m.hp = m.maxHp; });
   ok(evc.some(e => e.t === 'crateHit') && !crate.up, 'mice smash through a crate stack to take the shortcut');
   cr.phase = 'build'; cr.phaseTimer = 0; cr.mice = []; cr.step(); ok(crate.up, 'servants stack the crates back each wave');
@@ -964,9 +965,9 @@ let findSpot, setup;
 {
   const walk = (sim, c, mx, mz, secs) => run(sim, secs, () => inp(sim, c.id, { mx, mz, yaw: Math.atan2(mx, mz) }));
   const tw = new Sim({ seed: 1400 }); const c = tw.addPlayer('p1', 'nebbie'); tw.step();
-  c.x = 9; c.z = 40; c.y = 0;
-  walk(tw, c, 0, -1, 0.75); const onStairs = c.y;                // north up the courtyard stairs
-  walk(tw, c, -1, 0, 0.5); const onWalk = c.y;                   // west onto the walkway
+  c.x = 15; c.z = 34; c.y = 0;
+  walk(tw, c, -1, 0, 0.65); const onStairs = c.y;                // west up the courtyard stairs (0.32: they climb straight onto the walkway)
+  walk(tw, c, -1, 0, 0.35); const onWalk = c.y;                  // onto the walkway
   walk(tw, c, 0, 1, 2.5);                                         // south up the tower stairs
   ok(onStairs > 2.5 && onWalk > 2.9 && c.y > 7.9 && c.z > 48, `a cat walks up to the walkway (${onWalk.toFixed(1)}) and on up to the watchtower (${c.y.toFixed(1)} high)`);
   const st = new Sim({ map: 'stables', seed: 1401 }); const p = st.addPlayer('p1', 'puddin'); st.step();
