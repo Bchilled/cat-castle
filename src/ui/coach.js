@@ -13,7 +13,7 @@ export const STEPS = [
   { text: "Press <b>G</b> when you're ready to let the mice in.", done: (s) => s.phase === 'wave' },
   { text: 'Hold <b>left click</b> to attack. <b>Right click</b> is your ability, <b>E</b> your second one.', done: (s) => s.kills >= 5 },
   { text: 'Hold <b>F</b> to sniff out where the mice are going. <b>Q</b> uses your item.', done: (s) => s.sniffed || s.t > 15 },
-  { text: 'Kills pay <b>Paw Points</b>: build more between waves. Winning earns paw prints for the shop.', done: (s) => s.t > 9 },
+  { text: 'Kills pay <b>Paw Points</b>: build more between waves. Every run earns paw prints for trap upgrades.', done: (s) => s.t > 9 },
 ];
 
 const read = () => { try { const v = localStorage.getItem(KEY); return v === null ? 0 : +v; } catch { return 0; } };

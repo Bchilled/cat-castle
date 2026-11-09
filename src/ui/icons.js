@@ -23,7 +23,7 @@ export function trapIcons(kinds) {
           // (v0.31) Ceiling traps are built at full size (up to 4x4 units, hanging below y 0):
           // frame the whole thing, seen from a little below, like you see it in the game.
           const bx = new THREE.Box3().setFromObject(m), c = bx.getCenter(new THREE.Vector3()), r = bx.getSize(new THREE.Vector3()).length() / 2;
-          m.position.sub(c); cam.position.set(r * 1.1, -r * 0.35, r * 1.5); cam.lookAt(0, 0, 0);
+          m.position.sub(c); cam.position.set(1.1, -0.35, 1.5).setLength(r * 3.1); cam.lookAt(0, 0, 0);   // (v0.32) far enough back that it all fits (it was cropped)
         }
         else if (def.surface === 'wall') { cam.position.set(2.6, 2.4, 3.6); cam.lookAt(0, 0.45, 0.4); }
         else { cam.position.set(2.4, 3.0, 3.4); cam.lookAt(0, k === 'barricade' ? 0.6 : 0.1, 0); }

@@ -116,13 +116,16 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   ok(ev.some(e => e.t === 'eat') && p.hp > 100, `bite eats the mouse and heals (hp ${p.hp.toFixed(0)})`);
 }
 
-// 10. Hairball fires even with no aim point, splashes and slows; pounce stuns.
+// 10. Fred's Hack-up (0.32): the furball rolls along the floor, bowls over the mice in its way
+// (hurt, slowed, knocked flat), leaves a wet trail, and has a real cooldown. Pounce stuns.
 {
   const s11 = new Sim({ seed: 2 }); const c = s11.addPlayer('p1', 'fred'); c.x = 60; c.z = 40; c.yaw = 0;
   for (let k = 0; k < 3; k++) s11.spawnMouse('mouse', 1);
-  s11.mice.forEach((m, k) => { m.x = 60 + k * 0.3; m.z = 45; m.state = 'stuck'; m.stuckT = 99; });
-  run(s11, 2, (t) => inp(s11, 'p1', { secondary: t === 0, aim: { x: 60.3, y: 0, z: 45 } }));
-  ok(s11.mice.filter(m => m.hp < m.maxHp && m.slowT > 0).length >= 2, 'hairball splash hits and slows several mice');
+  s11.mice.forEach((m, k) => { m.x = 60 + (k - 1) * 0.3; m.z = 44 + k * 1.5; m.state = 'stuck'; m.stuckT = 99; });
+  const evs = run(s11, 1.5, (t) => inp(s11, 'p1', { secondary: t === 0, aim: { x: 60, y: 0, z: 50 } }));
+  ok(s11.mice.filter(m => m.hp < m.maxHp && m.slowT > 0).length === 3, 'the furball rolls through a line of mice and hits all of them');
+  ok(evs.some(e => e.t === 'hairBowl') && s11.zones.some(z => z.kind === 'hairtrail'), 'it knocks them over and leaves a wet trail');
+  ok(c.secT > 4, `a real cooldown (${c.secT.toFixed(1)}s left)`);
   const s12 = new Sim({ seed: 2 }); const p = s12.addPlayer('p1', 'puddin'); p.x = 60; p.z = 40;
   s12.spawnMouse('tank', 1); const m = s12.mice[0]; m.x = 60; m.z = 44; m.state = 'stuck'; m.stuckT = 99;
   run(s12, 1.5, (t) => inp(s12, 'p1', { secondary: t === 0, aim: { x: 60, y: 0, z: 44 } }));

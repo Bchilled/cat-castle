@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.31.1';
+export const VERSION = '0.32.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -96,14 +96,21 @@ export const CAT = {
   pelletInterval: 0.18,
   pelletSpeed: 26,
   pelletDamage: 4,
-  // Fred, right click: big hairball — arcs to the crosshair, splash + slow.
+  // Fred, right click (v0.32 rework): the Hack-up. He coughs up a big soggy ginger furball that
+  // rolls along the floor the way he's aiming, bowls over every mouse it rolls through (hit,
+  // knocked flat, soaked) and leaves a wet trail that slows whatever walks through it. A real
+  // cooldown now (it was a 1.2 s green splash you could spam).
   hairballCost: 35,
-  hairballCooldown: 1.2,
-  hairballSpeed: 16,
-  hairballDamage: 12,
-  hairballRadius: 1.0,
+  hairballCooldown: 7,
+  hairballSpeed: 11,         // rolling speed (units a second), slowing as it goes
+  hairballRange: 16,         // how far it rolls at most
+  hairballDamage: 18,        // to each mouse it rolls through
+  hairballRadius: 0.55,      // how wide it bowls
+  hairballMaxHits: 10,
+  hairballKnockSecs: 1.2,    // how long the mice it bowls over lie flat (bosses aren't knocked over)
   hairballSlow: 0.45,        // speed multiplier while slowed
-  hairballSlowSecs: 2.5,
+  hairballSlowSecs: 2.5,     // slowed this long by the roll
+  hairballTrailSecs: 5,      // the wet trail lasts this long
   // Puddin, left click: heavy bite. Killing with a bite eats the mouse: heal, no tail.
   biteInterval: 0.55,
   biteDamage: 34,

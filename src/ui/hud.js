@@ -185,7 +185,6 @@ export class Hud {
   bark(who, text, kind) { $('sub').innerHTML = `<img class="face" src="${portraitURL(kind)}" alt=""><b style="color:${(CATS[kind] || CATS.fred).collar}">${who}:</b> ${text}`; $('sub').classList.add('show'); this.subT = 3.2; }
   flashHurt() { const v = $('hurt'); v.classList.remove('go'); void v.offsetWidth; v.classList.add('go'); }
 
-  // End of a map: the result, your cat's last word, what you earned (paw prints, yarn) and the way to the shop.
   // End of a run (v0.32): what happened, what it paid, what it unlocked, and buttons for what's
   // next ({ label, onClick, big }). endless = this was the endless part after a win.
   showEnd(won, rating, sim, profile, reward, kind = 'fred', { unlocked = null, buttons = [], endless = false, guest = false } = {}) {

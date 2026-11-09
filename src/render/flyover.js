@@ -6,11 +6,13 @@
 // Any key or click skips it.
 
 import * as THREE from 'three';
-import { HOLE, SPAWNS, MAP } from '../sim/map.js';
+import { HOLE, SPAWNS, MAP, FURNITURE } from '../sim/map.js';
 
 const SPEED = 14;            // units a second along the route
-const UP = 7.5;              // camera height while following the route
-const BACK = 7;              // how far behind the point it's looking at
+const UP = 10;               // camera height over the route (roofs fade during the flyover)
+const BACK = 8;              // how far behind the point it's looking at
+// Never inside a building: the top of any solid block under (x, z), plus a bit.
+const clearOf = (x, z) => 2.5 + Math.max(0, ...FURNITURE.filter(f => f.kind === 'solid' && x > f.rect[0] - 1 && x < f.rect[2] + 1 && z > f.rect[1] - 1 && z < f.rect[3] + 1).map(f => f.h || 0));
 
 // sim: the game; caption(html|null): shows a caption card; localId: your cat. Returns { drive, skip, faceYaw }.
 // drive(camera, dt) is the scene's camDriver (false = finished). faceYaw = the yaw that points
@@ -29,12 +31,15 @@ export function makeFlyover(sim, caption, localId = 'p1') {
     looks.push(p.clone().setY(p.y + 0.4));
     cams.push(p.clone().addScaledVector(dir, -BACK).setY(p.y + UP));
   }
-  // Opening shot: high above and outside the first hole, looking in across the map.
-  const first = cams[0].clone(), inDir = looks[Math.min(3, n)].clone().sub(looks[0]).setY(0).normalize();
-  cams.unshift(first.clone().addScaledVector(inDir, -10).setY(24));
-  looks.unshift(looks[0].clone().addScaledVector(inDir, 22));
+  // Opening shot: high over the first hole (just inside the wall, so the woods outside don't
+  // block the view), looking in along the route.
+  const inDir = looks[Math.min(3, n)].clone().sub(looks[0]).setY(0).normalize();
+  cams.unshift(new THREE.Vector3(sp.x, 0, sp.z).addScaledVector(inDir, 3).setY(17));
+  looks.unshift(looks[0].clone().addScaledVector(inDir, 20));
+  // Never outside the castle walls (the woods and the outer walls would fill the screen).
+  for (const c of cams) { c.x = Math.min(MAP.w - 3, Math.max(3, c.x)); c.z = Math.min(MAP.h - 3, Math.max(3, c.z)); c.y = Math.max(c.y, clearOf(c.x, c.z)); }
   // Closing shot: over the mouse hole, looking down at it.
-  cams.push(new THREE.Vector3(hx, 4.5, hz + 8)); looks.push(new THREE.Vector3(hx, 0.3, hz));
+  cams.push(new THREE.Vector3(hx, 5, hz + 9)); looks.push(new THREE.Vector3(hx, 0.3, hz));
   const camC = new THREE.CatmullRomCurve3(cams, false, 'centripetal'), lookC = new THREE.CatmullRomCurve3(looks, false, 'centripetal');
   const dur = Math.max(9, Math.min(17, len / SPEED + 4));
 
@@ -62,5 +67,5 @@ export function makeFlyover(sim, caption, localId = 'p1') {
     if (u >= 1) { done = true; caption(null); return false; }
     return true;
   };
-  return { drive, skip: () => { done = true; }, faceYaw, dur };
+  return { drive, skip: () => { done = true; }, seek: (u) => { t = u * dur; }, faceYaw, dur };   // seek: for the screenshot tests
 }

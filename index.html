@@ -49,7 +49,7 @@
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
   /* ---------- in-game HUD (only while a game is running: body.ingame) ---------- */
-  body:not(.ingame) .panel, body:not(.ingame) #abilities, body:not(.ingame) #trapbar, body:not(.ingame) #crosshair, body:not(.ingame) #coach, body:not(.ingame) #prompt, body:not(.ingame) #msg, body:not(.ingame) #sub, body:not(.ingame) #muted { display: none; }
+  body:not(.ingame) .panel, body:not(.ingame) #abilities, body:not(.ingame) #trapbar, body:not(.ingame) #crosshair, body:not(.ingame) #coach, body:not(.ingame) #prompt, body:not(.ingame) #msg, body:not(.ingame) #sub, body:not(.ingame) #muted { display: none !important; }
   .panel { position: fixed; background: rgba(27,33,64,.9); border: var(--line); border-radius: 14px; box-shadow: 0 4px 0 var(--ink); padding: 6px 12px; }
   #top { top: 10px; left: 10px; display: flex; gap: 16px; align-items: baseline; font-size: 15px; font-weight: 800; }
   #top b { color: var(--cheese); font-family: var(--display); font-weight: 400; font-size: 20px; }
@@ -129,15 +129,15 @@
   #cineskip { position: fixed; right: 18px; top: calc(11vh + 12px); font-size: 13px; font-weight: 800; color: var(--milk); text-shadow: 0 2px 0 var(--ink); }
 
   /* ---------- screens (menus, pause, end) ---------- */
-  .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: safe center; padding: 74px 24px 24px; overflow-y: auto; text-align: center; background: var(--night); }
+  .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: safe center; padding: 62px 24px 20px; overflow-y: auto; text-align: center; background: var(--night); }
   .screen.show { display: flex; }
   .screen.see-through { background: rgba(27,33,64,.72); }
   #title.see-through { background: linear-gradient(90deg, rgba(20,24,48,.9) 0%, rgba(20,24,48,.55) 45%, rgba(20,24,48,0) 75%); }
   .screen h1 { font-size: 52px; color: var(--cheese); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); }
   .screen h2 { font-size: 42px; color: var(--milk); text-shadow: 0 4px 0 var(--ink); }
   .screen p { color: var(--dim); max-width: 620px; }
-  .scr-sub { margin: 4px 0 18px; font-size: 16px; font-weight: 800; }
-  .scr-foot { display: flex; justify-content: space-between; align-items: center; width: min(1180px, 100%); margin-top: 22px; gap: 12px; }
+  .scr-sub { margin: 2px 0 14px; font-size: 16px; font-weight: 800; }
+  .scr-foot { display: flex; justify-content: space-between; align-items: center; width: min(1180px, 100%); margin-top: 18px; gap: 12px; }
 
   /* The wallet: always in the top-right corner of every menu screen. */
   #wallet { position: fixed; top: 14px; right: 14px; z-index: 20; display: none; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
@@ -178,9 +178,9 @@
   /* Choose your cat: the roster on the left, the picked cat big on the right. */
   .cat-layout { display: grid; grid-template-columns: 250px 1fr; gap: 22px; width: min(1180px, 100%); align-items: start; text-align: left; }
   .roster { display: flex; flex-direction: column; gap: 8px; }
-  .who { display: grid; grid-template-columns: 58px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; margin: 0; padding: 6px 10px 6px 14px; background: var(--milk); border-radius: 16px; font-size: 20px; text-align: left; position: relative; overflow: hidden; box-shadow: 0 4px 0 var(--ink); }
+  .who { display: grid; grid-template-columns: 50px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; margin: 0; padding: 4px 10px 4px 14px; background: var(--milk); border-radius: 16px; font-size: 20px; text-align: left; position: relative; overflow: hidden; box-shadow: 0 4px 0 var(--ink); }
   .who::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px; background: var(--collar); border-right: 3px solid var(--ink); }
-  .who img { grid-row: span 2; width: 58px; height: 58px; border-radius: 12px; }
+  .who img { grid-row: span 2; width: 50px; height: 50px; border-radius: 10px; }
   .who span { align-self: end; line-height: 1; }
   .who small { align-self: start; font-family: var(--body); font-size: 12px; font-weight: 800; color: var(--inkdim); }
   .who:hover { background: #fff8ea; } .who.on { background: var(--cheese); transform: translateX(6px); }

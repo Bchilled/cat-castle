@@ -246,7 +246,7 @@ export class Sim {
     this.viaFlow = VIAS.map(() => null); // flow fields to each route choice (see VIAS in map.js)
     this.viaDirty = VIAS.map(() => true);
     this.packVia = -1;                 // route the current pack is using
-    this.missiles = [];                // cat projectiles: pellets + hairballs
+    this.missiles = [];                // cat projectiles: pellets, darts, Fred's rolling furball
     this.events = [];
     this.stats = { trapsPlaced: 0, damageTaken: 0, kills: 0, abilitiesUsed: 0, energyUsed: 0 };
     this.nextId = 1;
@@ -276,7 +276,7 @@ export class Sim {
   }
 
   // ---------- players ----------
-  // opts.loadout = the 8 traps this player brought; opts.item = their one equipped item.
+  // opts.loadout = the traps this player brought (4 in v0.32); opts.item = their one equipped item.
   addPlayer(id, kind = 'fred', opts = {}) {
     const def = CATS[kind];
     const cat = { id, kind, def, name: def.name, x: CAT_SPAWN.x, y: 0, z: CAT_SPAWN.z, vx: 0, vy: 0, vz: 0, yaw: Math.PI, pitch: 0,
@@ -1632,6 +1632,11 @@ export class Sim {
         m.slowT = Math.max(m.slowT, 0.4);
         if (zn.bees) this.damageMouse(m, 4 * DT, 'poison');
       }
+      // (v0.32) The wet trail behind Fred's furball: slows and soaks whatever walks through.
+      if (zn.kind === 'hairtrail') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) {
+        if (m.dead || m.y > 1 || Math.hypot(m.x - zn.x, m.z - zn.z) > zn.r) continue;
+        m.slowT = Math.max(m.slowT, 0.5); m.wetT = Math.max(m.wetT || 0, 1); m.burnT = 0;
+      }
       // Spills: water from pots and buckets soaks mice, oil from jugs makes them oily, grain from baskets makes them dirty.
       if (zn.kind === 'spill') for (const m of this.nearMice(zn.x, zn.z, zn.r + 0.5)) {
         if (m.dead || Math.hypot(m.x - zn.x, m.z - zn.z) > zn.r) continue;
@@ -1678,16 +1683,48 @@ export class Sim {
     this.missiles.push({ id: this.nextId++, kind: 'pellet', x: sx, y: sy, z: sz, vx: dx / d * CAT.pelletSpeed, vy: dy / d * CAT.pelletSpeed, vz: dz / d * CAT.pelletSpeed, life: 0.9, g: 2, mul: this.dmgMul(cat) });
     this.emit({ t: 'spit', id: cat.id });
   }
+  // Fred's Hack-up (v0.32): a soggy furball rolled along the floor toward the crosshair
+  // (see rollHairball). It used to be lobbed through the air.
   fireHairball(cat, inp) {
     if (cat.secT > 0 || cat.energy < CAT.hairballCost) return;
     const a = this.aimFrom(cat, inp);
-    const sx = cat.x, sy = cat.y + cat.def.height * 0.8, sz = cat.z;
-    const dx = a.x - sx, dz = a.z - sz, dy = a.y - sy, dh = Math.hypot(dx, dz) || 0.01;
-    const t = Math.max(0.15, dh / CAT.hairballSpeed), g = GRAVITY * 0.6;
-    this.missiles.push({ id: this.nextId++, kind: 'hairball', x: sx, y: sy, z: sz, vx: dx / t, vz: dz / t, vy: (dy + 0.5 * g * t * t) / t, life: 4, g });
+    let dx = a.x - cat.x, dz = a.z - cat.z, d = Math.hypot(dx, dz);
+    if (d < 0.3) { dx = Math.sin(cat.yaw); dz = Math.cos(cat.yaw); d = 1; }
+    dx /= d; dz /= d;
+    const x = cat.x + dx * (cat.def.radius + 0.35), z = cat.z + dz * (cat.def.radius + 0.35);
+    this.missiles.push({ id: this.nextId++, kind: 'hairball', x, y: cat.y, z, vx: dx * CAT.hairballSpeed, vy: 0, vz: dz * CAT.hairballSpeed, life: CAT.hairballRange / CAT.hairballSpeed * 1.3, g: 0, hit: [], trailD: 0, rolled: 0 });
     cat.energy -= CAT.hairballCost; cat.secT = CAT.hairballCooldown * this.mods.abilityCd;
     this.stats.abilitiesUsed++; this.stats.energyUsed += CAT.hairballCost;
     this.emit({ t: 'hairball', id: cat.id });
+  }
+  // The furball rolling: follows the floor (up kerbs and steps it can climb), stops against a
+  // wall or when it has rolled its range. Every mouse it touches (once each, up to
+  // hairballMaxHits) takes damage, is soaked and slowed, and if it isn't a boss is knocked flat.
+  // Every unit or so it leaves a wet patch (a 'hairtrail' zone) that slows mice walking through.
+  rollHairball(b) {
+    const sp = Math.hypot(b.vx, b.vz), n = Math.max(1, Math.ceil(sp * DT / 0.2));
+    for (let k = 0; k < n && !b.done; k++) {
+      const nx = b.x + b.vx * DT / n, nz = b.z + b.vz * DT / n, i = cellOf(nx, nz);
+      const g = i < 0 ? 99 : this.groundAt(i, b.y + 0.45, 0.45, true);
+      if (i < 0 || g - b.y > 0.45 || this.blocks(i, g + 0.05, 0.4, 0, true)) { b.done = true; break; }   // a wall, or too high to roll up
+      b.x = nx; b.z = nz; b.y = g < b.y - 0.05 ? Math.max(g, b.y - 9 * DT / n) : g;                        // rolls off ledges, settling down
+      b.rolled += sp * DT / n; b.trailD += sp * DT / n;
+      if (b.trailD >= 1) { b.trailD = 0; this.zones.push({ id: this.nextId++, kind: 'hairtrail', x: b.x, z: b.z, r: 0.75, t: CAT.hairballTrailSecs }); this.emit({ t: 'hairTrail', x: b.x, y: b.y, z: b.z }); }
+      for (const m of this.nearMice(b.x, b.z, CAT.hairballRadius + 0.6)) {
+        if (m.dead || b.hit.includes(m.id) || b.hit.length >= CAT.hairballMaxHits || Math.abs(m.y - b.y) > 0.8) continue;
+        if (Math.hypot(m.x - b.x, m.z - b.z) > CAT.hairballRadius + MICE[m.type].size * 0.35) continue;
+        b.hit.push(m.id);
+        m.slowT = Math.max(m.slowT, CAT.hairballSlowSecs);
+        if (!MICE[m.type].boss) { m.stunT = m.stunMax = Math.max(m.stunT, CAT.hairballKnockSecs); m.windT = 0; }
+        this.damageMouse(m, CAT.hairballDamage, 'cat', this.rng() < this.mods.crit, ATTACK_EL.hairball);
+        this.emit({ t: 'hairBowl', x: m.x, y: m.y, z: m.z });
+      }
+    }
+    // Rolls to a stop over its range.
+    const f = Math.max(0.35, 1 - b.rolled / CAT.hairballRange * 0.6);
+    const d = Math.hypot(b.vx, b.vz) || 1; b.vx = b.vx / d * CAT.hairballSpeed * f; b.vz = b.vz / d * CAT.hairballSpeed * f;
+    if (b.rolled >= CAT.hairballRange || b.life <= 0) b.done = true;
+    if (b.done) { this.zones.push({ id: this.nextId++, kind: 'hairtrail', x: b.x, z: b.z, r: 1.1, t: CAT.hairballTrailSecs }); this.emit({ t: 'hairSplat', x: b.x, y: b.y, z: b.z }); }
   }
   bite(cat) {
     cat.attackT = CAT.biteInterval * this.mods.attackCd;
@@ -2317,9 +2354,10 @@ export class Sim {
     if (this.shots.some(s => s.done)) this.shots = this.shots.filter(s => !s.done);
   }
 
-  // Cat projectiles: pellets (fast, single target, bleed) and hairballs (arc, splash, slow).
+  // Cat projectiles: pellets (fast, single target, bleed) and Fred's rolling furball (rollHairball).
   stepMissiles() {
     for (const b of this.missiles) {
+      if (b.kind === 'hairball') { b.life -= DT; this.rollHairball(b); continue; }   // (v0.32) rolls along the floor
       b.vy -= b.g * DT; b.life -= DT;
       // Move in short sub-steps so fast darts can't skip over a mouse between ticks.
       const n = Math.max(1, Math.ceil(Math.hypot(b.vx, b.vy, b.vz) * DT / 0.3));
@@ -2393,13 +2431,6 @@ export class Sim {
           this.damageMouse(hitMouse, CAT.pelletDamage * (b.mul || 1) * (crit ? 2 : 1), 'cat', crit);
         }
         this.emit({ t: 'pelletHit', x: b.x, y: Math.max(0, b.y), z: b.z, mouse: !!hitMouse });
-      } else {
-        this.emit({ t: 'hairSplat', x: b.x, y: Math.max(0, b.y), z: b.z });
-        for (const m of this.nearMice(b.x, b.z, CAT.hairballRadius + 0.5)) {
-          if (m.dead || Math.hypot(m.x - b.x, m.z - b.z) > CAT.hairballRadius || Math.abs(m.y - b.y) > 1.5) continue;
-          m.slowT = CAT.hairballSlowSecs;
-          this.damageMouse(m, CAT.hairballDamage, 'cat', this.rng() < this.mods.crit, ATTACK_EL.hairball);
-        }
       }
     }
     if (this.missiles.some(b => b.done)) this.missiles = this.missiles.filter(b => !b.done);

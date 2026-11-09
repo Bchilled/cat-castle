@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.32.0 — 2026-11-09
+New menus from the intro film to Play, a cartoon look, unlocks you earn (nothing locked is shown), four trap slots, endless after the win, a flyover at the start of each map, mice that keep off the walls, and Fred's Hack-up.
+- **Menus, in order:**
+  - **Intro film** (Kanye's, 14 s) when the game opens, once per visit. Skip button or any key.
+  - **Title:** Continue (only if you have progress), New game (asks before wiping your progress), Multiplayer. Your next map plays live behind it, mice streaming in, the camera slowly circling.
+  - **Multiplayer:** host (you get a code) or join with a code. The room and who's in it show in the corner on every screen after.
+  - **Choose your cat:** the seven cats down the left with Kanye's portraits; the picked one big on the right in Kanye's full-body art. Bars for health, speed, jumping and energy. Their moves as cards by what they are (attack, special, jump, always on), no button names. Hats show only once you have yarn.
+  - **Choose a map:** only maps you've opened, with your best wave. Skipped while you only have the one.
+  - **Your traps:** four slots, one each of floor, ceiling, wall and barricade (keys 1 to 4), plus your item. Click a slot to see only the traps you've unlocked for it, pick one, and buy its upgrades with paw prints right there. Difficulty and Play at the bottom.
+  - **The wallet** (paw prints, yarn) stays in the top-right corner on every menu screen.
+- **The look:** night-blue background, milk-white cards and ginger buttons with thick cocoa outlines and hard shadows, cheese yellow for money and picks. Fonts: Lilita One and Nunito (bundled in `assets/fonts`, SIL Open Font License). The HUD, pause and end screens use the same look. The HUD only shows in a game.
+- **Unlocks are earned, never bought, and you never see what you haven't got:**
+  - A new game starts with four traps: Snapper (floor), Meat Tenderizer (ceiling), Fork Darts (wall), Poison Box (barricade). One item: the Laser Pointer. One map: the entrance.
+  - The first time you clear wave 4, 8, 12, 16, 20 and 24 on a map, you unlock that map's next trap. Waves 12 and 24 also give an item, and a win opens the next map. Six traps per map, all 36 by the end of the kitchen.
+  - An unlock is saved the moment you clear the wave, even if you then quit. A message tells you in the game, and the end screen lists it.
+  - Paw prints now only buy upgrades. Yarn buys hats.
+  - Saves from before keep everything they had: the old eight starter traps and three items, anything bought, upgrades. A map they'd won opens the next one.
+- **Endless is no longer a menu choice.** When you win wave 24, the end screen offers Keep going: the same run carries on from wave 25 with your traps still standing. It pays for the extra waves when it ends. In co-op the host decides for everyone.
+- **Level start:** a flyover instead of starting you staring at a door. The camera starts high over the hole the mice break in through, follows their route to the mouse hole they're after, then glides down to your cat. Captions say where they come in, what opens later and where they're going. Your cat ends up facing back down the route. Any key or click skips it.
+- **Mice keep off the walls.** Walking right beside a wall now costs them a bit more, so their route runs down the middle of a lane and swings wide round corners. They also spread less across a lane and keep at least 0.6 from the wall. The share of route that ran right beside a wall:
+  - Entrance: 60% → 0%
+  - Passages: 60% → 2%
+  - Market: 38% → 1%
+  - Stables: 13% → 1%
+  - Kitchen: 8% → 1%
+  - Cellar: 2% → 1%
+- **Fred's Hack-up** (replaces the Hairball). He coughs up a soggy ginger furball that rolls along the floor where he aims, up to 16 units.
+  - Every mouse it rolls through (up to 10) takes 18 damage, is soaked and slowed, and is knocked flat for 1.2 s (bosses aren't).
+  - It leaves a wet trail that slows and soaks mice for 5 s.
+  - 7 s cooldown (was 1.2 s).
+  - It looks like a lumpy ginger furball, not a green ball, and fur flies when it hits.
+- **Carts:** the farm carts (entrance, market, stables) stand on their wheels; mice run under them and a ceiling trap fits under the bed.
+- **Entrance walkway stairs** now climb straight onto the walkway instead of running alongside it and ending in mid-air.
+- **Kanye's art in the game:** web-sized copies (`assets/portraits/web/*.webp`, 256 px portraits and full-body art) for the menus, the HUD badge and the cats' lines. The original PNGs stay as the source.
+- Ceiling trap icons are no longer cropped.
+- **Removed:**
+  - the old all-in-one menu
+  - the Endless button
+  - the Shop and the Traps & Items screens (upgrades are in Your traps, hats on the cat screen)
+  - buying traps and items
+  - the tips line under the menu
+- **Known:** the market's back-alley drain now takes the back alley rather than passing under the high run over the crates, because keeping off the walls tipped a near tie. That comes back with the market re-layout.
+- **Files** (lines in this version):
+  - `VERSION`: 1
+  - `assets/fonts/LICENSE-lilita-one.txt`: 1-93
+  - `assets/fonts/LICENSE-nunito.txt`: 1-93
+  - `index.html`: 11-74, 86-271, 297, 307-396
+  - `src/audio/sfx.js`: 220-221
+  - `src/config.js`: 8, 99-113, 243, 383, 450-477
+  - `src/main.js`: 3, 12-141, 152-160, 185-189, 396-427, 452-459, 486-499
+  - `src/meta/profile.js`: 1-17, 34-102, 112, 136-175
+  - `src/render/flyover.js`: 1-71
+  - `src/render/scene.js`: 906-910, 1129-1141, 1272-1274, 1287-1293, 1310-1315
+  - `src/sim/map.js`: 60-62, 101-103, 123, 181, 220
+  - `src/sim/sim.js`: 138-139, 249, 279, 392-415, 766-774, 785-791, 1635-1639, 1686-1728, 2200-2201, 2357-2360
+  - `src/ui/catinfo.js`: 10
+  - `src/ui/coach.js`: 16
+  - `src/ui/hud.js`: 7, 188-213
+  - `src/ui/icons.js`: 26
+  - `src/ui/menus.js`: 1-270
+  - `src/ui/portraits.js`: 173-178
+  - `tests/sim-test.mjs`: 25, 119-128, 194-211, 495-515, 524-535, 563-566, 1003-1005, 1057-1059, 1103-1116
+  - `src/ui/shop.js`: removed
+  - `src/ui/traps.js`: removed
+  - `assets/portraits/web/`: new, 14 files (web-sized copies of Kanye's art)
+  - `assets/fonts/`: new, 4 font files
+
 ## 0.31.1 — 2026-11-09
 Real cartoon art for the seven cats, plus the intro cinematic (art by Kanye, requested by Claude by email).
 - **Portraits** (`assets/portraits/<key>.png`, 1024×1024): Fred, Puddin, Scary Cat, Nebbie, Casper, Meow Meow and Mimo — head-and-shoulders, bold-outline cartoon style, dark warm vignette background, each cat in its own collar colour.

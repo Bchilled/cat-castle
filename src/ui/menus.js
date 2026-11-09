@@ -6,10 +6,10 @@
 // The rules (what's unlocked, prices) are in meta/profile.js; this file is only the screens.
 
 import * as THREE from 'three';
-import { TRAPS, ITEMS, CATS, CAT_ORDER, SLOTS, SPECIALS, DIFFICULTY, DIFFICULTY_ORDER, RULES, trapParams, ATTACK_EL } from '../config.js';
+import { TRAPS, ITEMS, CATS, CAT_ORDER, SLOTS, STARTER_TRAPS, SPECIALS, DIFFICULTY, DIFFICULTY_ORDER, RULES, trapParams, ATTACK_EL } from '../config.js';
 import { MAPS } from '../sim/map.js';
 import { CAT_INFO, elTag } from './catinfo.js';
-import { portraitURL } from './portraits.js';
+import { portraitURL, svgPortraitURL, fullArtURL } from './portraits.js';
 import { trapIcons } from './icons.js';
 import { makeCat } from '../render/models.js';
 import { unlockedTraps, unlockedItems, unlockedMaps, trapState, price, buy, saveProfile, HATS, HAT_ORDER, hasProgress } from '../meta/profile.js';
@@ -66,7 +66,7 @@ export function initMenus(ctx) {
     state.slots = SLOTS.map((sl, i) => {
       const fits = (k) => k && TRAPS[k] && have.includes(k) && sl.fits(TRAPS[k], k);
       if (fits(old[i])) return old[i];
-      return old.find(fits) || have.find(fits) || null;
+      return old.find(fits) || have.find(k => STARTER_TRAPS.includes(k) && fits(k)) || have.find(fits) || null;   // nothing saved: the starter
     });
     if (!unlockedItems(P()).includes(state.item)) state.item = unlockedItems(P())[0];
     if (!unlockedMaps(P()).includes(state.map)) state.map = unlockedMaps(P()).slice(-1)[0];
@@ -105,8 +105,8 @@ export function initMenus(ctx) {
   $('mp-next').onclick = () => { click(); go('pickcat'); };
 
   // ----- choose your cat -----
-  // The big picture: Kanye's full-body art if it's there (assets/portraits/<cat>-full.png),
-  // otherwise the cat's 3D model turning.
+  // The big picture: Kanye's full-body art (assets/portraits/web/<cat>-full.webp); until it has
+  // loaded (or if it's missing), the cat's 3D model turning.
   const preview = (() => {
     const cv = $('catview');
     let r = null, sc, cam, model = null, live = false, raf = 0;
@@ -134,7 +134,7 @@ export function initMenus(ctx) {
       dispose() { live = false; cancelAnimationFrame(raf); if (r) r.dispose(); r = null; },
     };
   })();
-  // Art from Kanye if it's there: assets/portraits/<cat>.png (card) and <cat>-full.png (big).
+  // Roster cards: Kanye's portraits, the old drawn ones if an image is missing.
   const tryImg = (img, src, fallback) => { img.onerror = () => { img.onerror = null; fallback(); }; img.src = src; };
   function drawCats() {
     const ro = $('roster');
@@ -142,7 +142,7 @@ export function initMenus(ctx) {
       ro.innerHTML = CAT_ORDER.map(k => `<button class="who" data-cat="${k}" style="--collar:${CATS[k].collar}"><img alt=""><span>${CATS[k].name}</span><small>${CAT_INFO[k].role.split(' · ')[0]}</small></button>`).join('');
       ro.querySelectorAll('[data-cat]').forEach(b => {
         const img = b.querySelector('img'), k = b.dataset.cat;
-        tryImg(img, `assets/portraits/${k}.png`, () => { img.src = portraitURL(k); });
+        tryImg(img, portraitURL(k), () => { img.src = svgPortraitURL(k); });
         b.onclick = () => { click(); pickCat(k); };
       });
     }
@@ -157,7 +157,7 @@ export function initMenus(ctx) {
     const img = $('heroimg'), cv = $('catview');
     img.hidden = true; cv.hidden = false; preview.show(k);
     img.onload = () => { if (state.cat === k) { img.hidden = false; cv.hidden = true; } };
-    img.onerror = () => {}; img.src = `assets/portraits/${k}-full.png`;
+    img.onerror = () => {}; img.src = fullArtURL(k);
     // Moves, by what they are (not which button: the game shows that).
     const moves = [['Attack', info.pri, el(d.primary)], ['Special', info.sec, el(d.secondary)], ['Special', info.e, el(d.ability2)], ['Jump', info.jump, ''], ...(info.passive ? [['Always on', info.passive, '', 'passive']] : [])];
     let h = `<h3>${d.name}</h3><p class="role">${info.role.replace(/ · /g, ', ')}</p><p class="blurb">${info.blurb}</p>`;

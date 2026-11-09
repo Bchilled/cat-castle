@@ -1,6 +1,6 @@
 // main.js — wires input -> commands -> sim (fixed tick) -> renderer + HUD.
 
-import { DT, TRAPS, MICE, CATS, ITEMS, RULES, COMBOS } from './config.js';
+import { DT, TRAPS, MICE, CATS, ITEMS, RULES, COMBOS, VERSION, GAME_TITLE } from './config.js';
 import { Sfx } from './audio/sfx.js';
 import { Sim } from './sim/sim.js';
 import { MAPS, MAP_ORDER } from './sim/map.js';
@@ -28,12 +28,10 @@ const relaunch = (flag) => { location.href = location.pathname + '?' + [SANDBOX 
 const dropFlags = () => history.replaceState(null, '', location.pathname + (SANDBOX ? '?sandbox' : ''));
 window.__relaunch = relaunch;
 let profile = SANDBOX ? sandboxProfile() : loadProfile();
-// The game's name lives here only (a working title until Brent picks one).
-const GAME_NAME = 'Nine Lives Keep', VERSION = '0.32.0';
 const $ = (id) => document.getElementById(id);
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
-document.title = GAME_NAME; $('logo').textContent = GAME_NAME; $('version').textContent = `v${VERSION}`;
+document.title = GAME_TITLE; $('logo').textContent = GAME_TITLE; $('version').textContent = `v${VERSION}`;   // (a working title until Brent picks the name)
 if (SANDBOX) document.body.classList.add('sandbox');
 let coop = null;   // co-op session (see the co-op section below); null = playing alone
 // Sound: needs a click before the browser allows it, so unlock on the first one.
@@ -59,7 +57,7 @@ const menus = initMenus({
 // circling high over it. Starts once the castle models have loaded; stops when a game starts.
 let backdrop = null;
 kitLoad.then(() => {
-  if (game || !document.getElementById('game')) return;
+  if (game || FLAGS.has('go') || !document.getElementById('game')) return;   // straight into a game: no backdrop
   const map = menus.state.map || 'entrance';
   const bs = new Sim({ map, seed: 7, allDoors: true }); bs.lives = 1e9; bs.phaseTimer = 2;
   const sc = new Scene(document.getElementById('game'), bs);
@@ -497,7 +495,7 @@ async function start(mode, co = null) {
     const skip = () => fly.skip();
     addEventListener('keydown', skip, sig); addEventListener('pointerdown', skip, sig);
     scene.camDriver = (cam, dt) => { const r = fly.drive(cam, dt); if (r === false) document.body.classList.remove('cine'); return r; };
-    window.__skipFlyover = skip;   // used by the screenshot tests
+    window.__skipFlyover = skip; window.__fly = fly;   // used by the screenshot tests
   }
   requestAnimationFrame(frame);
   window.__sim = sim; window.__scene = scene;   // handy for debugging in the browser console
