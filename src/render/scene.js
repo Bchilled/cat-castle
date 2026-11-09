@@ -1269,8 +1269,13 @@ export class Scene {
     // way a person does and it all looked normal-sized. Down here, 50–70 cm behind and
     // just above the cat's head, the walls, table legs and people tower over you.
     // The cat is centred, just below the crosshair (no shoulder offset).
+    // (v0.32) Something else can fly the camera for a while (the level-start flyover,
+    // render/flyover.js): camDriver(camera, dt) moves it and returns false when it's done.
+    // Then the normal camera eases back in over a second instead of jumping.
     const me = this.localCat;
-    if (me) {
+    if (this.camDriver) {
+      if (this.camDriver(this.camera, dt) === false) { this.camDriver = null; this.easeIn = { t: 1, p: this.camera.position.clone(), q: this.camera.quaternion.clone() }; }
+    } else if (me) {
       if (this.camDist == null) this.camDist = me.kind === 'puddin' ? 2.8 : 2.3;
       const p = me.mesh.position, catH = me.kind === 'puddin' ? 1.25 : 0.95;
       const target = new THREE.Vector3(p.x, p.y + catH * 1.25, p.z);
@@ -1287,6 +1292,12 @@ export class Scene {
       this.camera.position.copy(target).addScaledVector(back, d).addScaledVector(right, sh);
       if (this.shake > 0) { this.shake = Math.max(0, this.shake - dt); const a = this.shake * 0.35; this.camera.position.x += (Math.random() - 0.5) * a; this.camera.position.y += (Math.random() - 0.5) * a; }
       this.camera.lookAt(target.clone().addScaledVector(back, -14).addScaledVector(right, sh));
+      if (this.easeIn) {   // (v0.32) gliding down from the flyover into the cat's camera
+        this.easeIn.t = Math.max(0, this.easeIn.t - dt / 1.1);
+        const e = this.easeIn.t * this.easeIn.t * (3 - 2 * this.easeIn.t);
+        this.camera.position.lerp(this.easeIn.p, e); this.camera.quaternion.slerp(this.easeIn.q, e);
+        if (this.easeIn.t <= 0) this.easeIn = null;
+      }
       // Fade the cat when the camera is squeezed right up against it.
       const close = d < 1.0;
       if (me.close !== close) { me.close = close; me.mesh.userData.body.traverse(o => { if (o.isMesh && o.material !== OUTLINE) { o.material = o.material.clone(); o.material.transparent = close; o.material.opacity = close ? 0.35 : 1; } }); }

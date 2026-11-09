@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { TRAPS, TRAP_ORDER, RULES, TRINKETS, CAT, MICE, CATS, ITEMS } from '../config.js';
-import { W, H, CELL, T, HOLE, SPAWNS, GATE } from '../sim/map.js';
+import { W, H, CELL, T, HOLE, SPAWNS, GATE, MAPS } from '../sim/map.js';
 import { previewWave } from '../sim/waves.js';
 import { trapIcons } from './icons.js';
 import { BARKS } from '../sim/sim.js';
@@ -186,21 +186,32 @@ export class Hud {
   flashHurt() { const v = $('hurt'); v.classList.remove('go'); void v.offsetWidth; v.classList.add('go'); }
 
   // End of a map: the result, your cat's last word, what you earned (paw prints, yarn) and the way to the shop.
-  showEnd(won, rating, sim, profile, reward, kind = 'fred') {
+  // End of a run (v0.32): what happened, what it paid, what it unlocked, and buttons for what's
+  // next ({ label, onClick, big }). endless = this was the endless part after a win.
+  showEnd(won, rating, sim, profile, reward, kind = 'fred', { unlocked = null, buttons = [], endless = false, guest = false } = {}) {
     const el = $('end'); el.classList.add('show');
     const lines = (BARKS[kind] || BARKS.fred)[won ? 'clear' : 'death'];
-    let html = `<h1>${won ? 'The hall holds' : 'They got through'}</h1><p class="quip">${CATS[kind] ? CATS[kind].name : 'Fred'}: ${lines[Math.floor(Math.random() * lines.length)]}</p>`;
-    html += `<p>${won ? `All ${RULES.winWave} waves cleared` : `Fell on wave ${sim.wave}`} · ${sim.stats.kills} mice killed · ${sim.stats.combos || 0} combos</p>`;
+    let html = `<h1>${won ? 'They held!' : endless ? `Held to wave ${sim.wave}` : 'They got through'}</h1><div class="card">`;
+    html += `<p class="quip">${CATS[kind] ? CATS[kind].name : 'Fred'}: ${lines[Math.floor(Math.random() * lines.length)]}</p>`;
+    html += `<p>${won ? `All ${RULES.winWave} waves cleared` : endless ? `${sim.wave - 1} waves cleared in all` : `Fell on wave ${sim.wave}`}, ${sim.stats.kills} mice killed, ${sim.stats.combos || 0} combos</p>`;
     if (won && rating) {
       html += `<div class="paws">${Array.from({ length: 5 }, (_, i) => PAW(i < rating.base)).join('')}</div>`;
       html += '<ul class="bonus">' + rating.bonus.map(b => `<li class="${b.got ? 'got' : ''}">${PAW(b.got)} ${b.name}</li>`).join('') + '</ul>';
     }
     if (reward) {
-      html += '<ul class="bonus">' + reward.lines.map(([t, n]) => `<li class="got">${n < 0 ? '' : '+'}${n} paw prints · ${t}</li>`).join('') + (reward.yarn ? `<li class="got">+${reward.yarn} yarn · bosses</li>` : '') + '</ul>';
+      html += '<ul class="bonus">' + reward.lines.map(([t, n]) => `<li class="got">${n < 0 ? '' : '+'}${n} paw prints: ${t}</li>`).join('') + (reward.yarn ? `<li class="got">+${reward.yarn} yarn from bosses</li>` : '') + '</ul>';
     }
-    html += `<p class="dim">You have ${profile.paws} paw prints · ${profile.yarn} yarn${profile.sandbox ? ' (sandbox: not saved)' : ''}. Spend them in the shop.</p>`;
-    html += `<button onclick="window.__relaunch('shop')">Shop</button><button onclick="window.__relaunch('')">Back to menu</button>`;
+    const u = unlocked || { traps: [], items: [], maps: [] };
+    if (u.traps.length || u.items.length || u.maps.length) {
+      html += '<div class="unlocked"><h3>Unlocked</h3>' +
+        u.traps.map(k => `<div>Trap: ${TRAPS[k].name}</div>`).join('') + u.items.map(k => `<div>Item: ${ITEMS[k].name}</div>`).join('') +
+        u.maps.map(k => `<div>Map: ${MAPS[k].name}</div>`).join('') + '</div>';
+    }
+    html += `<p>You have ${profile.paws} paw prints${profile.yarn ? ` and ${profile.yarn} yarn` : ''}${profile.sandbox ? ' (sandbox: not saved)' : ''}. Spend paw prints on trap upgrades in Your traps.</p>`;
+    if (guest) html += '<p>The host decides what happens next.</p>';
+    html += '<div class="end-btns">' + buttons.map((b, i) => `<button class="${b.big ? 'big' : 'quiet'}" data-end="${i}">${b.label}</button>`).join('') + '</div></div>';
     el.innerHTML = html;
+    el.querySelectorAll('[data-end]').forEach(b => b.onclick = () => buttons[+b.dataset.end].onClick());
   }
 }
 

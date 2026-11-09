@@ -135,6 +135,8 @@ const CEILING_Y = 13;   // nothing climbs out over the walls
 // Poison Boxes cost this much to path through, per cell: mice will walk any zig-zag maze
 // you build rather than chew (they only chew if every way is blocked, which placement prevents).
 const BARRICADE_COST = 5000;
+// Extra cost of walking 1, 2 and 3 cells from a wall (v0.32: see wallClearance).
+const WALL_CLEAR = [1.0, 0.5, 0.2];
 const MUD_SLOW = 0.55;      // stables: mud slows mice and cats
 const FIRE_DPS = 20;        // kitchen: ovens and hearth burn mice (cats take 3/4)
 const GORGE_SECS = 2.5, GORGE_HP = 1.3;   // food piles: time spent eating, and how much tougher they come out
@@ -387,10 +389,30 @@ export class Sim {
   doorShut(i) { const d = this.map.door[i]; return d >= 0 && !this.doors[d].open; }
   extraOfBig = (i) => (this.extraBig ? this.extraBig[i] : 0);   // bosses: no danger memory (fearless)
   occBarricade(i) { const id = this.occ.floor[i]; return id ? this.traps.get(id).kind === 'barricade' : false; }
+  // (v0.32) Mice keep off the walls. Cells close to a wall (or anything else mice can't walk
+  // through) cost a bit more to cross, so the cheapest route runs down the middle of a lane and
+  // swings wide round corners instead of scraping along the stonework. Half a unit from a wall
+  // +1.2, one unit +0.6, one and a half +0.25 (an open cell costs 1). The walls never move, so
+  // this is worked out once per game.
+  wallClearance() {
+    if (this.clearCost) return this.clearCost;
+    const N = W * H, d = new Uint8Array(N).fill(255), q = new Int32Array(N); let qh = 0, qt = 0;
+    for (let i = 0; i < N; i++) if (!this.passSmall(i)) { d[i] = 0; q[qt++] = i; }
+    while (qh < qt) {                                   // spread outwards from the walls, 3 cells deep
+      const i = q[qh++], x = i % W, z = (i / W) | 0, nd = d[i] + 1; if (nd > 3) continue;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, nz = z + dz; if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
+        const n = nz * W + nx; if (d[n] > nd) { d[n] = nd; q[qt++] = n; }
+      }
+    }
+    const C = [0, WALL_CLEAR[0], WALL_CLEAR[1], WALL_CLEAR[2]], out = new Float32Array(N);
+    for (let i = 0; i < N; i++) if (d[i] >= 1 && d[i] <= 3 && this.map.type[i] !== T.HOLE) out[i] = C[d[i]];
+    return (this.clearCost = out);
+  }
   updateFlow() {
     // Precompute per-cell trap cost + blocker flags once (much faster than
-    // looking traps up inside the pathfinder for 46k cells).
-    const N = W * H, extra = new Float32Array(N), blk = new Uint8Array(N);
+    // looking traps up inside the pathfinder for 46k cells). Starts from the wall clearance.
+    const N = W * H, extra = new Float32Array(this.wallClearance()), blk = new Uint8Array(N);
     for (const tr of this.traps.values()) if (tr.layer !== 'top') for (const i of tr.cells) {
       extra[i] += tr.kind === 'barricade' ? BARRICADE_COST : (TRAPS[tr.kind].pathCost || 0);
       if (tr.kind === 'barricade') blk[i] = 1;
@@ -741,6 +763,15 @@ export class Sim {
     }
   }
 
+  // (v0.32) Endless isn't picked on the menu any more: after the wave-24 win you can keep
+  // going, and the same run carries on from wave 25 until the mice get through.
+  continueEndless() {
+    if (this.phase !== 'won') return false;
+    this.mode = 'endless'; this.phase = 'build'; this.phaseTimer = RULES.buildPhaseSeconds; this.routeCache = null;
+    this.emit({ t: 'msg', text: 'Endless: hold them as long as you can' });
+    return true;
+  }
+
   spawnMouse(type, hpMul, packSize = 1, door = 0, via = -1) {
     const SPAWN = SPAWNS[door % SPAWNS.length];
     const hp = Math.max(1, Math.round(MICE[type].hp * (MICE[type].boss ? 1 + (hpMul - 1) * 0.5 : hpMul)));   // bosses only get half the per-wave toughening
@@ -751,13 +782,13 @@ export class Sim {
     return m;
   }
   // Put one mouse in the world. lane: where across the corridor it likes to run
-  // (-1 left wall .. +1 right wall) so a mob fills the lane instead of a single file.
+  // (-1 left wall .. +1 right wall; v0.32: spread ±0.65, was ±0.9, so none hug the walls) so a mob fills the lane instead of a single file.
   spawnAt(type, x, z, hp, via = -1) {
     const m = { id: this.nextId++, type, x, y: 0, z,
       vx: 0, vy: 0, vz: 0, yaw: Math.PI, hp, maxHp: hp, state: 'walk', bleed: [], biteT: 0, attackT: 0,
       lobbed: false, lobT: 0, dead: false, flash: 0, slowT: 0, stuckT: 0, stunT: 0, stunMax: 1, glueId: 0, tackT: 0, onGround: true,
       scale: 0.88 + this.rng() * 0.24, shade: (this.rng() - 0.5) * 0.25, wander: this.rng() * 6.28, packed: false,
-      lane: (this.rng() * 2 - 1) * 0.9, via, spitT: 1 + this.rng() * 2, stompT: 1.5, windT: 0,
+      lane: (this.rng() * 2 - 1) * 0.65, via, spitT: 1 + this.rng() * 2, stompT: 1.5, windT: 0,
       climber: !MICE[type].big && !MICE[type].bird && MICE[type].size < 0.7 && this.rng() < 0.3 };   // about 1 in 3 small mice go for food up on the furniture
     this.mice.push(m);
     return m;
@@ -2129,7 +2160,8 @@ export class Sim {
       for (let k = 1; k <= 8; k++) { if (ok(m.x + px * k * 0.5, m.z + pz * k * 0.5)) dp = k * 0.5; else break; }
       for (let k = 1; k <= 8; k++) { if (ok(m.x - px * k * 0.5, m.z - pz * k * 0.5)) dn = k * 0.5; else break; }
       const half = (dp + dn) / 2, pos = (dn - dp) / 2;           // where we are across the corridor (+ = toward +perp)
-      const want = m.lane * Math.max(0, Math.min(half - r - 0.25, 3.5));
+      // (v0.32) at least 0.6 between a mouse and the wall (was 0.25: they scraped along it).
+      const want = m.lane * Math.max(0, Math.min(half - r - 0.6, 3.5));
       const lat = Math.max(-0.7, Math.min(0.7, (want - pos) * 1.2));
       m.wander += DT * 2;
       const wob = Math.sin(m.wander) * 0.12;
