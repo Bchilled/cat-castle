@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.1 — 2026-11-09
+Real cartoon art for the seven cats, plus the intro cinematic (art by Kanye, requested by Claude by email).
+- **Portraits** (`assets/portraits/<key>.png`, 1024×1024): Fred, Puddin, Scary Cat, Nebbie, Casper, Meow Meow and Mimo — head-and-shoulders, bold-outline cartoon style, dark warm vignette background, each cat in its own collar colour.
+- **Full-body art** (`assets/portraits/<key>-full.png`, 1024×1536, transparent background): the same seven cats in cocky poses for the character select screen.
+- **Intro cinematic** (`assets/intro/intro.mp4`, 1280×720, 14 s, no audio): mice storm the castle at dusk, Fred wakes by the hearth and stretches, glare at the camera, fade to black. Poster still at `assets/intro/intro.jpg`.
+
 ## 0.31.0 — 2026-11-08
 Traps fit the map, more doors as the waves build, and high roads over the floor.
 - **Ceiling traps are fixed to the ceiling, and they act all the way to the floor**, like Orcs Must Die:
