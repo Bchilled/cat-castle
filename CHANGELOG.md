@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.32.1 — 2026-11-09
+Kanye's UI art kit in the game (requested by Claude by email, delivered to `assets/ui`).
+- **Title:** his key art (Fred, Puddin, Scary Cat and Casper on crates by the kitchen door, mice pouring out of a burrow with stolen cheese) is the title screen's background, darkened on the left behind the logo and buttons. It replaces the live 3D castle behind the title.
+- **Big buttons** (Continue, New game, Play, Next, Keep going, Try again) are his cheese planks, with a hover and a pressed look.
+- **Cards** (the cat panel, Your traps, multiplayer, pause, end of a run) have his nailed wooden board as a frame, plain milk inside so the text stays readable.
+- **Icons:** paw print and yarn on the wallet; heart, paw, yarn and mouse on the in-game top bar (lives, Paw Points, yarn, kills); floor, ceiling, wall and barricade on the trap slots.
+- Web-sized copies: `assets/ui/web/` (icons at 96 px, the button and board art cropped to their edges). His originals stay in `assets/ui`. The burrow sketch is kept for the burrow the mice will come out of in the map rework.
+- Your traps fits a 768-pixel-tall screen again; "1 paw print" instead of "1 paw prints".
+- **Files** (lines in this version):
+  - `VERSION`: 1
+  - `index.html`: 221-222, 272-292, 328-329, 381
+  - `src/config.js`: 8
+  - `src/main.js`: 56, 130
+  - `src/ui/hud.js`: 201-209
+  - `src/ui/menus.js`: 204
+  - `assets/ui/web/`: new, 13 files
+
 ## 0.32.0 — 2026-11-09
 New menus from the intro film to Play, a cartoon look, unlocks you earn (nothing locked is shown), four trap slots, endless after the win, a flyover at the start of each map, mice that keep off the walls, and Fred's Hack-up.
 - **Menus, in order:**

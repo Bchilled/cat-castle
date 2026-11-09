@@ -198,7 +198,7 @@ export class Hud {
       html += '<ul class="bonus">' + rating.bonus.map(b => `<li class="${b.got ? 'got' : ''}">${PAW(b.got)} ${b.name}</li>`).join('') + '</ul>';
     }
     if (reward) {
-      html += '<ul class="bonus">' + reward.lines.map(([t, n]) => `<li class="got">${n < 0 ? '' : '+'}${n} paw prints: ${t}</li>`).join('') + (reward.yarn ? `<li class="got">+${reward.yarn} yarn from bosses</li>` : '') + '</ul>';
+      html += '<ul class="bonus">' + reward.lines.map(([t, n]) => `<li class="got">${n < 0 ? '' : '+'}${n} paw print${Math.abs(n) === 1 ? '' : 's'}: ${t}</li>`).join('') + (reward.yarn ? `<li class="got">+${reward.yarn} yarn from bosses</li>` : '') + '</ul>';
     }
     const u = unlocked || { traps: [], items: [], maps: [] };
     if (u.traps.length || u.items.length || u.maps.length) {
@@ -206,7 +206,7 @@ export class Hud {
         u.traps.map(k => `<div>Trap: ${TRAPS[k].name}</div>`).join('') + u.items.map(k => `<div>Item: ${ITEMS[k].name}</div>`).join('') +
         u.maps.map(k => `<div>Map: ${MAPS[k].name}</div>`).join('') + '</div>';
     }
-    html += `<p>You have ${profile.paws} paw prints${profile.yarn ? ` and ${profile.yarn} yarn` : ''}${profile.sandbox ? ' (sandbox: not saved)' : ''}. Spend paw prints on trap upgrades in Your traps.</p>`;
+    html += `<p>You have ${profile.paws} paw print${profile.paws === 1 ? '' : 's'}${profile.yarn ? ` and ${profile.yarn} yarn` : ''}${profile.sandbox ? ' (sandbox: not saved)' : ''}. Spend paw prints on trap upgrades in Your traps.</p>`;
     if (guest) html += '<p>The host decides what happens next.</p>';
     html += '<div class="end-btns">' + buttons.map((b, i) => `<button class="${b.big ? 'big' : 'quiet'}" data-end="${i}">${b.label}</button>`).join('') + '</div></div>';
     el.innerHTML = html;

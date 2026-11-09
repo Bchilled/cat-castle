@@ -201,7 +201,7 @@ export function initMenus(ctx) {
     let h = '';
     SLOTS.forEach((sl, i) => {
       const k = state.slots[i];
-      h += `<button class="kslot ${open === i ? 'on' : ''}" data-slot="${i}"><span class="key">${i + 1}</span><span class="kind">${sl.name}</span>${k && icons[k] ? `<img src="${icons[k]}" alt="">` : EMPTY}${k ? TRAPS[k].name : 'Nothing yet'}</button>`;
+      h += `<button class="kslot ${open === i ? 'on' : ''}" data-slot="${i}"><span class="key">${i + 1}</span><span class="kind"><img src="assets/ui/web/${sl.id}.webp" alt="">${sl.name}</span>${k && icons[k] ? `<img src="${icons[k]}" alt="">` : EMPTY}${k ? TRAPS[k].name : 'Nothing yet'}</button>`;
     });
     h += `<button class="kslot ${open === 4 ? 'on' : ''}" data-slot="4"><span class="key">Q</span><span class="kind">Item</span>${EMPTY}${ITEMS[state.item] ? ITEMS[state.item].name : 'None'}</button>`;
     $('kslots').innerHTML = h;

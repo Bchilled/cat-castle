@@ -53,29 +53,7 @@ const menus = initMenus({
   },
 });
 
-// The title's backdrop: your next map, live, with mice streaming in, the camera slowly
-// circling high over it. Starts once the castle models have loaded; stops when a game starts.
-let backdrop = null;
-kitLoad.then(() => {
-  if (game || FLAGS.has('go') || !document.getElementById('game')) return;   // straight into a game: no backdrop
-  const map = menus.state.map || 'entrance';
-  const bs = new Sim({ map, seed: 7, allDoors: true }); bs.lives = 1e9; bs.phaseTimer = 2;
-  const sc = new Scene(document.getElementById('game'), bs);
-  const cx = MAPS[map].w / 2, cz = MAPS[map].h / 2, R = Math.max(MAPS[map].w, MAPS[map].h) * 0.3;
-  let last = performance.now(), acc = 0, live = true;
-  const tick = (now) => {
-    if (!live) return;
-    const dt = Math.min(0.1, (now - last) / 1000); last = now; acc += dt;
-    while (acc >= DT) { if (bs.phase === 'build') bs.phaseTimer = Math.min(bs.phaseTimer, 3); bs.step(); bs.events.length = 0; acc -= DT; }
-    const a = now / 1000 * (Math.PI * 2 / 150) + 2.2;   // once round every two and a half minutes
-    sc.camera.position.set(cx + Math.sin(a) * R, 34, cz + Math.cos(a) * R); sc.camera.lookAt(cx + Math.sin(a) * R * 0.2, 0, cz + Math.cos(a) * R * 0.2);
-    sc.render(dt, 0, 0, null);
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
-  backdrop = { stop() { live = false; sc.dispose(); const c = document.getElementById('game'); c.replaceWith(c.cloneNode(false)); } };
-});
-const stopBackdrop = () => { if (backdrop) { backdrop.stop(); backdrop = null; } };
+// (v0.32.1) The title shows Kanye's key art (assets/ui/title.jpg) instead of the live castle.
 
 // First screen: the intro film (once per visit; it plays muted, Skip or any key skips it),
 // then the title. ?go starts a game straight away (Try again, Onward), ?kit opens Your traps.
@@ -149,7 +127,7 @@ let game = null;
 async function start(mode, co = null) {
   await kitLoad;
   if (game) game.stop();
-  stopBackdrop(); menus.preview.dispose(); menus.go(null);   // menus away (and the wallet with them)
+  menus.preview.dispose(); menus.go(null);   // menus away (and the wallet with them)
   document.body.classList.add('ingame');                       // the HUD shows only in a game
   sfx.unlock(); sfx.setMusic('build');
   if (co) { co.started = true; coop = co; }
