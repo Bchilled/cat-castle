@@ -8,7 +8,7 @@ import {
   W, H, CELL, T, FURNITURE, DRAIN, BRIDGE, GATE, HOLE, SPAWNS, cellOf, WORLD_W, WORLD_H, MAP,
 } from '../sim/map.js';
 import { MICE, TRAPS, TRINKETS, CAT } from '../config.js';
-import { ROT_DIR, CEIL_HANG } from '../sim/sim.js';
+import { ROT_DIR } from '../sim/sim.js';
 import { Life } from './life.js';
 import { dressMap } from './dress.js';
 import { kitReady } from './kit.js';
@@ -28,7 +28,7 @@ const JAM_TINT = new THREE.Color(0x8a1830);
 // Model sizes as drawn (cells); a trap whose footprint differs gets stretched to fit, except the
 // hanging ones that cover 2x2 tiles: they stay lamp-sized in the middle of the area they hit
 // (the floor marks show that area).
-const AUTHORED = { cord: [6, 2], chandelier: [6, 6], zapper: [8, 8], bucket: [8, 8], salt: [8, 8], flypaper: [8, 8], honey: [8, 8], bubbles: [8, 8] };   // footprint (cells) a model was made for, where not one tile
+const AUTHORED = { cord: [6, 2], chandelier: [6, 6], zapper: [8, 8], bucket: [8, 8], salt: [8, 8], flypaper: [8, 8], honey: [8, 8], bubbles: [8, 8], tenderizer: [8, 8], pans: [8, 4] };   // (ceiling traps are built at their real footprint, v0.31)   // footprint (cells) a model was made for, where not one tile
 const BEAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);   // Magnifying Glass sunbeam (scaled per beam)
 
 export class Scene {
@@ -48,7 +48,10 @@ export class Scene {
     this.scene.background = new THREE.Color(sky);
     this.scene.fog = new THREE.Fog(sky, dark ? 12 : indoor ? 35 : 50, dark ? 48 : indoor ? 120 : 170);
     this.camera = new THREE.PerspectiveCamera(65, 1, 0.05, 250);
-    this.scene.add(new THREE.HemisphereLight(0xc8d4e0, 0x3a2e22, dark ? 0.3 : indoor ? 0.75 : 1.0));
+    this.scene.add(new THREE.HemisphereLight(0xc8d4e0, 0x6a5a48, dark ? 0.3 : indoor ? 0.75 : 1.0));
+    // (v0.31) Bounce light: the lit floor throws warm light back up, so ceilings, roof
+    // undersides and the ceiling traps on them read instead of going black. No shadows (cheap).
+    const bounce = new THREE.DirectionalLight(0xe8d0b0, dark ? 0.45 : indoor ? 1.1 : 1.3); bounce.position.set(12, -30, -8); this.scene.add(bounce);
     // The sun (outdoors) or the light through high windows (indoors): low and from one side, so
     // walls, tables and cats throw long shadows. Its shadow box follows your cat (see render).
     const sun = this.sun = new THREE.DirectionalLight(indoor ? 0xffe2b8 : 0xfff0d8, dark ? 0.25 : indoor ? 1.3 : 2.4);
@@ -59,7 +62,7 @@ export class Scene {
     this.camDist = null;                                            // set per cat on first frame; wheel zooms
 
     this.cats = new Map(); this.trapMeshes = new Map(); this.tailMeshes = new Map(); this.lootMeshes = new Map();
-    this.shotMeshes = new Map(); this.globMeshes = new Map(); this.birdMeshes = new Map(); this.zoneMeshes = new Map(); this.decoyMeshes = new Map(); this.rings = []; this.shake = 0; this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map(); this.knives = []; this.pans = [];
+    this.shotMeshes = new Map(); this.globMeshes = new Map(); this.birdMeshes = new Map(); this.zoneMeshes = new Map(); this.decoyMeshes = new Map(); this.rings = []; this.shake = 0; this.missileMeshes = new Map(); this.bossBars = new Map(); this.mouseLerp = new Map(); this.knives = []; this.pans = []; this.pours = [];
     this.particles = []; this.decals = [];
     this.aimProxies = new THREE.Group();
     this.buildWorld();
@@ -173,8 +176,49 @@ export class Scene {
         const stump = outline(new THREE.Mesh(new THREE.CylinderGeometry(7, 7.5, 7, 16), tmat('bark', 4, 0xc0a890)), 1.01);
         stump.position.set(sp.x, 3.5, WORLD_H + 7); s.add(stump);
       }
-      this.archHole(sp.x, WORLD_H, Math.PI, 1.6, 0x050403);
+      if (!sp.grate) this.archHole(sp.x, WORLD_H, Math.PI, 1.6, 0x050403);
     }
+    // (v0.31) Late doors. A way in that isn't open yet is boarded up (a hole in the wall) or its
+    // drain grate is chained down; the wave before it opens the boards rattle and dust falls;
+    // on its wave the boards burst off / the grate is flung back. State comes from
+    // sim.doorsOpen, so co-op guests see the same.
+    const plankM = tmat('planks', 2, 0xa88a62), ironM = mat(0x2a2826), pitM = new THREE.MeshBasicMaterial({ color: 0x050403 });
+    this.doorFx = SPAWNS.map((sp, k) => {
+      const g = new THREE.Group(); s.add(g); const d = { k, sp, g, open: null, burst: 0 };
+      if (sp.grate) {
+        g.position.set(sp.x, 0.02, sp.z);
+        const pit = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), pitM); pit.rotation.x = -Math.PI / 2; g.add(pit);
+        for (const [x, z, w, dd] of [[0, -1.4, 3, 0.2], [0, 1.4, 3, 0.2], [-1.4, 0, 0.2, 3], [1.4, 0, 0.2, 3]]) { const f = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, dd), ironM); f.position.set(x, 0.04, z); g.add(f); }
+        const hinge = new THREE.Group(); hinge.position.x = -1.3; g.add(hinge); d.grate = hinge;   // the grate swings up on its west edge
+        for (let i = 0; i < 7; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 2.6), ironM); b.position.set(0.25 + i * 0.37, 0.07, 0); hinge.add(b); }
+        for (const z of [-0.9, 0.9]) { const b = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, 0.12), ironM); b.position.set(1.3, 0.07, z); hinge.add(b); }
+        const chain = new THREE.Group(); g.add(chain); d.lock = chain;
+        for (const r of [0.7, -0.7]) { const c = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.07, 0.07), mat(0x5a5650)); c.rotation.y = r; c.position.y = 0.16; chain.add(c); }
+        const lock = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.36, 0.14), mat(0xb08a30)); lock.position.y = 0.3; chain.add(lock);
+      } else if (MAP.roads) {
+        // Out in the forest: a mouse hole in the map edge, a few boards nailed across it.
+        g.position.set(sp.x, 0, WORLD_H - 0.12); g.rotation.y = Math.PI;
+        const boards = new THREE.Group(); g.add(boards); d.boards = boards;
+        for (const [y, r] of [[0.45, 0.12], [1.15, -0.08], [1.85, 0.15], [2.4, -0.05]]) {
+          const b = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.42, 0.12), plankM); b.position.set(0, y, 0); b.rotation.z = r; b.castShadow = true; boards.add(b);
+          for (const x of [-1.6, 1.6]) { const n = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.04), ironM); n.position.set(x * Math.cos(r), y + x * Math.sin(r), -0.08); boards.add(n); }
+        }
+      } else {
+        // A doorway in the south wall (the 4-unit gap the map leaves): a lintel and posts make
+        // it a door 2.1 m high; shut, it's boarded up floor to lintel with a brace across.
+        const wallH = (FURNITURE.find(f => f.name === 'South wall') || { h: 14 }).h, top = Math.min(7, wallH - 1);
+        g.position.set(sp.x, 0, WORLD_H - 1);
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(4.6, wallH - top, 2.1), tmat('stone', 4, 0xb8b0a4)); lintel.position.y = (top + wallH) / 2; g.add(lintel);
+        for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.4, top, 2.1), mat(0x4a3424)); p.position.set(sx * 2.0, top / 2, 0); g.add(p); }
+        const beam = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.4, 2.15), mat(0x4a3424)); beam.position.y = top - 0.2; g.add(beam);
+        const boards = new THREE.Group(); boards.position.z = -0.9; g.add(boards); d.boards = boards;   // on the inside face
+        const n = Math.floor((top - 0.4) / 0.72);
+        for (let k = 0; k < n; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.66, 0.14), plankM); b.position.set(0, 0.36 + k * 0.72, 0); b.rotation.z = (k % 3 - 1) * 0.02; b.castShadow = true; boards.add(b); }
+        for (const sx of [-1, 1]) { const bat = new THREE.Mesh(new THREE.BoxGeometry(0.3, top - 0.6, 0.12), plankM); bat.position.set(sx * 1.3, top / 2, -0.12); boards.add(bat); }
+        const brace = new THREE.Mesh(new THREE.BoxGeometry(0.3, Math.hypot(2.6, top - 1.2), 0.12), plankM); brace.position.set(0, top / 2, -0.12); brace.rotation.z = Math.atan2(2.6, top - 1.2); boards.add(brace);
+      }
+      return d;
+    });
 
     // Furniture, walls, guardhouse, tunnel.
     this.roofs = []; this.furnMesh = [];
@@ -230,6 +274,7 @@ export class Scene {
     // Everything solid in the world throws and catches shadows (not the black outline shells,
     // see-through things or glowing bits).
     s.traverse(o => { if (o.isMesh && o.material !== OUTLINE && !o.material.transparent && !o.material.isMeshBasicMaterial && !o.material.isShaderMaterial) { o.castShadow = true; o.receiveShadow = true; } });
+    for (const fg of this.furnMesh) if (fg && fg.userData.noCast) fg.traverse(o => { if (o.isMesh) o.castShadow = false; });
     this.aimProxies.updateMatrixWorld(true);
   }
 
@@ -348,6 +393,41 @@ export class Scene {
       for (const x of [-0.45, 0.45]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.12, len, 0.12), wood); r.position.set(x, len / 2, 0); lean.add(r); }
       for (let y = 0.5; y < len; y += 0.7) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.1), wood); r.position.set(0, y, 0); lean.add(r); }
     }
+    // (v0.31) The layered runs: each stretch is drawn as what it says it is: a broom leant up
+    // against the furniture, a ladder, a sloping plank, or a rope. (Stretches with no look run
+    // along furniture that's already drawn.)
+    const UP = new THREE.Vector3(0, 1, 0), straw = mat(0xc8a858), stick = mat(0x8a6a40), iron = mat(0x2a2826), hemp = mat(0x9a8a68);
+    const along = (p0, p1) => {   // a group at p0 whose +y points at p1; returns [group, length]
+      const a = new THREE.Vector3(...p0), b = new THREE.Vector3(...p1), dir = b.clone().sub(a), len = dir.length(), g = new THREE.Group();
+      g.position.copy(a); g.quaternion.setFromUnitVectors(UP, dir.normalize()); s.add(g); return [g, len];
+    };
+    for (const L of this.sim.map.links || []) {
+      if (!L.pts || !L.pts.some(p => p[3])) continue;
+      let prev = [L.a[0], 0, L.a[1]];
+      for (const q of [...L.pts, [L.b[0], L.b[1], 0, null]]) {
+        const cur = [q[0], q[2], q[1]], look = q[3];
+        // A climb's foot is on the floor; lean it from a touch out from the furniture edge.
+        const lo = prev[1] <= cur[1] ? prev : cur, hi = lo === prev ? cur : prev;
+        if (look === 'ladder') {
+          const [g, len] = along([lo[0], 0, lo[2]], hi);
+          for (const x of [-0.42, 0.42]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.11, len, 0.11), wood); r.position.set(x, len / 2, 0); r.castShadow = true; g.add(r); }
+          for (let y = 0.45; y < len; y += 0.6) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.07, 0.09), wood); r.position.set(0, y, 0); g.add(r); }
+        } else if (look === 'broom') {
+          // Bristles on the floor, handle up against the top: the rats run up the handle.
+          const [g, len] = along([lo[0], 0.05, lo[2]], [hi[0], hi[1] + 0.3, hi[2]]);
+          const h = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, len, 8), stick); h.position.y = len / 2; h.castShadow = true; g.add(h);
+          const head = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.55, 1.1, 10), straw); head.position.y = 0.45; head.castShadow = true; g.add(head);
+          const band = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 10), iron); band.position.y = 1.0; g.add(band);
+        } else if (look === 'plank') {
+          const [g, len] = along(prev, cur);
+          const b = new THREE.Mesh(new THREE.BoxGeometry(1.0, len, 0.12), tmat('planks', 2, 0xa88a62)); b.position.y = len / 2; b.castShadow = b.receiveShadow = true; g.add(b);
+        } else if (look === 'rope') {
+          const a = new THREE.Vector3(...prev), b = new THREE.Vector3(...cur), mid = a.clone().lerp(b, 0.5); mid.y -= Math.min(0.8, a.distanceTo(b) * 0.04);
+          const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, mid, b), 24, 0.07, 6), hemp); tube.castShadow = true; s.add(tube);
+        }
+        prev = cur;
+      }
+    }
     // Market stalls: the counter drops and tips onto its broken legs.
     this.stallFx = this.sim.stalls.map(st => ({ st, g: this.furnMesh[st.fi], fallAt: null, wob: 0 })).filter(f => f.g);
     this.barrelFx = this.sim.barrels.map(b => {
@@ -416,7 +496,30 @@ export class Scene {
       outer.position.y = 1.1 - 0.18 * f.lie;
     }
   }
+  // (v0.31) Late doors: boarded / chained while shut, rattling the wave before, burst open.
+  stepDoors(dt, now) {
+    const sim = this.sim;
+    for (const d of this.doorFx || []) {
+      const open = !!(sim.doorsOpen && sim.doorsOpen[d.k]), warn = !open && sim.doorShown && sim.doorShown(d.k);
+      if (d.open !== null && open && !d.open) {   // it just burst open
+        d.burst = 1; const x = d.sp.x, z = d.sp.grate ? d.sp.z : WORLD_H - 1;
+        this.spawnParticles(x, 1, z, d.sp.grate ? 0x5a5650 : 0xb89068, 40, 6, 0.14); this.spawnParticles(x, 0.6, z, 0x8a8478, 20, 4, 0.1); this.shake = Math.max(this.shake, 0.3);
+      }
+      d.open = open; d.burst = Math.max(0, d.burst - dt);
+      if (d.boards) {
+        d.boards.visible = !open;
+        d.boards.position.x = warn ? Math.sin(now / 35) * 0.05 * (Math.sin(now / 400) > 0.3 ? 1 : 0) : 0;   // something's banging on them
+        if (warn && Math.random() < dt * 2) this.spawnParticles(d.sp.x + (Math.random() - 0.5) * 3, 1 + Math.random() * 4, WORLD_H - 2.2, 0xc8b8a0, 2, 0.6, 0.05);
+      }
+      if (d.grate) {
+        const want = open ? 1.9 : warn ? Math.abs(Math.sin(now / 90)) * 0.06 * (Math.sin(now / 500) > 0.4 ? 1 : 0) : 0;
+        d.grate.rotation.z += (want - d.grate.rotation.z) * Math.min(1, dt * (open ? 10 : 25));
+        d.lock.visible = !open;
+      }
+    }
+  }
   drawMapFeatures(dt, now) {
+    this.stepDoors(dt, now);
     if (!this.doorMeshes) this.buildMapFeatures();
     this.drawFallers(dt, now);
     // Doors slide up when open (tucked above the passage ceiling) and drop to the floor when shut.
@@ -502,20 +605,40 @@ export class Scene {
     g.visible = true;
     const cx = (Math.min(...xs) + Math.max(...xs) + 1) / 2 * CELL, cz = (Math.min(...zs) + Math.max(...zs) + 1) / 2 * CELL;
     const def = TRAPS[kind];
+    // (v0.31) Ceiling traps sit flush on the real ceiling (no rod) and what they do reaches the
+    // floor: drop = how far that is, for the parts that span it (ribbons, honey, the press).
     const roof = def.surface === 'ceiling' ? this.sim.map.slabBot[good[0]] : 0;
-    const y = def.surface === 'ceiling' ? Math.min(roof, CEIL_HANG) : top || 0;   // top: on a table/counter
+    const y = def.surface === 'ceiling' ? roof : top || 0;   // top: on a table/counter
     g.position.set(cx, y, cz);
     if (def.surface === 'ceiling') {
-      // Under a high ceiling the trap hangs on an iron rod down to CEIL_HANG (1.05 m up).
-      let rod = g.userData.rod; const gap = roof - y;
-      if (!rod) { rod = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 6), mat(0x2e2a26)); g.add(rod); g.userData.rod = rod; }
-      rod.visible = gap > 0.15; rod.scale.y = Math.max(0.01, gap); rod.position.y = gap / 2;
+      const ud = g.userData, drop = ud.drop = roof;
+      if (kind === 'flypaper') {
+        const len = Math.max(0.8, drop - 1.1);   // ribbons hang to ~1.1 above the floor
+        for (const st of ud.strips.children) if (st.userData.strip) { st.scale.y = len; st.position.y = -0.36 - len / 2; }
+        for (const fl of ud.flies) fl.position.y = -0.36 - len * fl.userData.frac;
+      }
+      if (ud.strand) { const top = 1.6, len = Math.max(0.1, drop - top); ud.strand.scale.y = len; ud.strand.position.y = -top - len / 2; }
+      if (kind === 'tenderizer') this.pressAt(g, 0);
     }
     g.rotation.y = def.surface === 'wall' ? (wallDir >= 0 ? YAW_FOR[OPP[wallDir]] : 0) : YAW_FOR[ROT_DIR[rot % 4]];
     // Models are made for one tile (cord and chandelier for their old sizes): stretch them
     // to the trap's footprint in tiles, so a two-tile Rolling Pin or Grater spans two tiles.
     const [aw, ad] = AUTHORED[kind] || (def.surface === 'wall' ? [4, 1] : [4, 4]), [w, d] = def.size;
     g.scale.set(w / aw, 1, def.surface === 'wall' ? 1 : d / ad);
+  }
+  // (v0.31) Meat Tenderizer: k = 0 head up at rest, 1 = slammed down on the floor. The piston
+  // rod stretches from the sleeve to the head.
+  pressAt(g, k) {
+    const ud = g.userData, rest = -1.6, low = -(ud.drop || 5) + 0.65, y = rest + (low - rest) * k;
+    ud.head.position.y = y; const top = -1.0, len = Math.max(0.05, top - (y + 0.35));
+    ud.rod.scale.y = len; ud.rod.position.y = top - len / 2;
+  }
+  // (v0.31) A column of something pouring from a ceiling trap down to the floor (water, salt,
+  // honey): the stream falls in ~0.15 s, then thins and fades.
+  pour(x, z, yTop, color, r, secs = 0.6, opacity = 0.7) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.2, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
+    m.position.set(x, yTop, z); m.scale.y = 0.01; this.scene.add(m);
+    this.pours.push({ m, x, z, yTop, secs, t: 0, opacity, color, r });
   }
   // The trap grid under the crosshair while you hold a trap (like Orcs Must Die): tile lines
   // fading out from the aim point, and for ceiling traps, the floor tiles they will hit.
@@ -700,9 +823,15 @@ export class Scene {
         for (const [tx, ty, tz] of e.to) { const k = makeKnife(); k.position.set(e.x, e.y, e.z); k.lookAt(tx, ty, tz); this.scene.add(k); this.knives.push({ k, from: [e.x, e.y, e.z], to: [tx, ty, tz], t: 0 }); }
         break;
       }
-      case 'honeyDrip': { const g = trap(e.id); if (g) { g.userData.anim = 1; for (let k = 0; k < 6; k++) this.spawnParticles(e.x + (Math.random() - 0.5), 1.5, e.z + (Math.random() - 0.5), 0xe8a820, 1, 0.5, 0.07); } break; }
+      case 'honeyDrip': { const g = trap(e.id); if (g) { g.userData.anim = 1; g.userData.strandT = 1.4; for (let k = 0; k < 6; k++) this.spawnParticles(e.x + (Math.random() - 0.5), 0.3, e.z + (Math.random() - 0.5), 0xe8a820, 1, 0.5, 0.07); } break; }
       // New traps (0.21).
       case 'cuckoo': { const g = trap(e.id); if (g) { g.userData.anim = 1; if (e.hits) { const v = g.localToWorld(new THREE.Vector3(0, 0.1, 1.3)); this.spawnParticles(v.x, 0.2, v.z, 0x8a7a68, 8, 2.5, 0.07); } } break; }
+      case 'pound': {   // (v0.31) the Meat Tenderizer hits the floor
+        const g = trap(e.id); if (g) { g.userData.anim = 1; g.userData.slamT = 0; }
+        this.spawnParticles(e.x, 0.2, e.z, 0x9a8a78, 26, 6, 0.12); this.ring(e.x, e.z, 2.6, 0xd8d0c0, 0.45, false, true);
+        if (e.hits) this.spawnParticles(e.x, 0.3, e.z, 0x8a1c14, 8 + e.hits * 3, 4, 0.08);
+        this.shake = Math.max(this.shake, 0.35); break;
+      }
       case 'chandelier': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.3, e.z, 0xc8b8a0, 30, 6, 0.12); this.spawnParticles(e.x, 0.6, e.z, 0xffb040, 12, 4, 0.06); this.shake = Math.max(this.shake, 0.4); break; }
       case 'kettle': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 20; k++) { const a = Math.random() * 7, r = Math.random() * 3; this.spawnParticles(e.x + Math.cos(a) * r, e.y - Math.random() * e.y, e.z + Math.sin(a) * r, 0xf0f4f8, 1, 1.2, 0.18); } break; }
       case 'spicejar': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 24; k++) { const a = Math.random() * 7, r = Math.random() * 2.8; this.spawnParticles(e.x + Math.cos(a) * r, 0.3 + Math.random() * 1.2, e.z + Math.sin(a) * r, Math.random() < 0.5 ? 0x8a2a14 : 0x3a2a1a, 1, 0.8, 0.06); } break; }
@@ -712,16 +841,16 @@ export class Scene {
       case 'pinBurst': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 16; k++) { const a = k * 0.39; this.spawnParticles(e.x + Math.cos(a) * 0.6, 0.3, e.z + Math.sin(a) * 0.6, 0xd8d8e0, 1, 4, 0.04); } break; }
       case 'catapult': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
       case 'catapultLand': this.spawnParticles(e.x, 0.3, e.z, e.hot ? 0xe86a20 : 0xb8a888, 14, 3.5, 0.09); if (e.hits) this.shake = Math.max(this.shake, 0.15); break;
-      case 'pan': for (const [tx, tz] of e.to) { const p = makePan(); p.position.set(e.x, e.y - 0.8, e.z); this.scene.add(p); this.pans.push({ p, from: [e.x, e.y - 0.8, e.z], to: [tx, 0.08, tz], t: 0 }); } break;
+      case 'pan': for (const [tx, tz] of e.to) { const p = makePan(); p.position.set(e.x, e.y - 1.6, e.z); this.scene.add(p); this.pans.push({ p, from: [e.x, e.y - 1.6, e.z], to: [tx, 0.08, tz], t: 0 }); } break;   // off the rack, the whole way down
       // New traps (0.25).
       case 'fuse': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
       case 'bang': for (let k = 0; k < 30; k++) { const a = Math.random() * 7, r = Math.random() * e.r; this.spawnParticles(e.x + Math.cos(a) * r, 0.3 + Math.random(), e.z + Math.sin(a) * r, Math.random() < 0.5 ? 0xffa030 : 0xe0d0c0, 1, 4, 0.1); } this.shake = Math.max(this.shake, 0.5); break;
       case 'cordZap': { const g = trap(e.id); if (g) { const v = g.localToWorld(new THREE.Vector3((Math.random() - 0.5) * 2.4, 0.1, 0)); this.spawnParticles(v.x, 0.2, v.z, 0xf0f060, 6, 3, 0.04); } break; }
       case 'peg': case 'pegFling': { const g = trap(e.id); if (g) g.userData.anim = 1; break; }
-      case 'bubbles': for (let k = 0; k < 10 * e.n; k++) this.spawnParticles(e.x + (Math.random() - 0.5) * 3, 0.5 + Math.random() * 2, e.z + (Math.random() - 0.5) * 3, 0xd8f0ff, 1, 0.6, 0.1); break;
-      case 'potDrop': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.3, e.z, 0xc8643a, 14, 4, 0.1); this.spawnParticles(e.x, 0.2, e.z, 0x4a3020, 14, 3, 0.07); this.decal(e.x, e.z, 0x4a3020, 1.1); this.shake = Math.max(this.shake, 0.12); break; }
-      case 'splashDown': { const g = trap(e.id); if (g) g.userData.anim = 1; this.spawnParticles(e.x, 0.4, e.z, 0x6ab0ff, 22, 3.5, 0.07); this.ring(e.x, e.z, e.r, 0x3a7ad8, 0.4, false, true); break; }
-      case 'salt': { const g = trap(e.id); if (g) g.userData.anim = 1; for (let k = 0; k < 8; k++) this.spawnParticles(e.x + (Math.random() - 0.5) * e.r * 1.4, 1.6, e.z + (Math.random() - 0.5) * e.r * 1.4, 0xffffff, 1, 0.3, 0.04); break; }
+      case 'bubbles': { const top = (this.trapMeshes.get(e.id) || { position: { y: 3 } }).position.y - 1.2; for (let k = 0; k < 10 * e.n; k++) this.spawnParticles(e.x + (Math.random() - 0.5) * 3, 0.4 + Math.random() * Math.max(1, top), e.z + (Math.random() - 0.5) * 3, 0xd8f0ff, 1, 0.6, 0.1); break; }   // the whole way down
+      case 'potDrop': { const g = trap(e.id); if (g) { g.userData.anim = 1; const p = g.userData.pot.clone(); p.visible = true; p.position.set(g.position.x, g.position.y - 1.05, g.position.z); this.scene.add(p); this.pans.push({ p, from: [g.position.x, g.position.y - 1.05, g.position.z], to: [e.x, 0.3, e.z], t: 0, pot: true }); } this.spawnParticles(e.x, 0.3, e.z, 0xc8643a, 14, 4, 0.1); this.spawnParticles(e.x, 0.2, e.z, 0x4a3020, 14, 3, 0.07); this.decal(e.x, e.z, 0x4a3020, 1.1); this.shake = Math.max(this.shake, 0.12); break; }
+      case 'splashDown': { const g = trap(e.id); if (g) { g.userData.anim = 1; this.pour(e.x + 0.5, e.z, g.position.y - 1.3, 0x5a9ae8, 0.6, 0.7, 0.75); } this.spawnParticles(e.x, 0.4, e.z, 0x6ab0ff, 22, 3.5, 0.07); this.ring(e.x, e.z, e.r, 0x3a7ad8, 0.4, false, true); break; }
+      case 'salt': { const g = trap(e.id); if (g) { g.userData.anim = 1; this.pour(e.x, e.z, g.position.y - 2.3, 0xffffff, 0.4, 0.5, 0.35); } for (let k = 0; k < 8; k++) this.spawnParticles(e.x + (Math.random() - 0.5) * e.r * 1.4, 0.3 + Math.random() * 1.5, e.z + (Math.random() - 0.5) * e.r * 1.4, 0xffffff, 1, 0.3, 0.04); break; }
       case 'slip': this.spawnParticles(e.x, 0.15, e.z, 0x2a2420, 4, 1.5, 0.05); break;
       case 'stickBird': this.spawnParticles(e.x, 2, e.z, 0xe8d050, 8, 2, 0.06); break;
       case 'stompWarn': this.ring(e.x, e.z, e.r, 0xe0302a, 0.7, true); break;
@@ -731,7 +860,7 @@ export class Scene {
       case 'globSplat': this.spawnParticles(e.x, e.y + 0.05, e.z, 0x9adf3a, 8, 2); this.decal(e.x, e.z, 0x6a8a2a, 0.35, Math.max(0.02, e.y + 0.02)); break;
       case 'zap': {
         const g = trap(e.id); if (!g) break; g.userData.anim = 1;
-        for (const v of e.hits || []) this.bolt(g.position.x, g.position.y - 0.5, g.position.z, v[0], 0.3, v[1]);
+        for (const v of e.hits || []) this.bolt(g.position.x, g.position.y - 1.05, g.position.z, v[0], 0.3, v[1]);   // from the cage, all the way down
         break;
       }
       case 'kill':
@@ -1061,13 +1190,28 @@ export class Scene {
       if (ud.kind === 'bubbles') ud.pipe.rotation.z = Math.sin(now / 800 + ud.id) * 0.06;
       if (ud.kind === 'catapult') ud.hinge.rotation.x = 1.9 * Math.max(0, Math.min(1, (f - 0.8) / 0.2));   // flips up, then cranks back
       if (ud.kind === 'pans') ud.pans.forEach((p, k) => { p.visible = !(f > 0.25 && k === 1); p.rotation.z = Math.sin(now / 600 + k) * 0.04; });
+      // (v0.31) Meat Tenderizer: slams down in a blink, holds a moment, winches back up.
+      if (ud.kind === 'tenderizer') {
+        if (ud.slamT != null) { ud.slamT += dt; const k = ud.slamT < 0.07 ? (ud.slamT / 0.07) ** 2 : ud.slamT < 0.45 ? 1 : Math.max(0, 1 - (ud.slamT - 0.45) / Math.max(0.3, tr.cdMax * 0.6)); this.pressAt(g, k); if (k <= 0) ud.slamT = null; }
+        else this.pressAt(g, 0);
+      }
+      if (ud.strand) { ud.strandT = Math.max(0, (ud.strandT || 0) - dt); ud.strand.visible = ud.strandT > 0; ud.strand.material.opacity = Math.min(0.85, ud.strandT); }
     }
+    // (v0.31) Pours from ceiling traps: the stream reaches the floor, then thins and fades.
+    this.pours = this.pours.filter(o => {
+      o.t += dt; const fall = Math.min(1, o.t / 0.15), len = o.yTop * fall;
+      o.m.scale.set(1, Math.max(0.01, len), 1); o.m.position.y = o.yTop - len / 2;
+      const fade = Math.max(0, 1 - Math.max(0, o.t - 0.15) / o.secs); o.m.material.opacity = o.opacity * fade; o.m.scale.x = o.m.scale.z = 0.4 + 0.6 * fade;
+      if (fall >= 1 && !o.hit) { o.hit = true; this.spawnParticles(o.x, 0.2, o.z, o.color, 10, 2.5, 0.06); }
+      if (fade <= 0) { this.scene.remove(o.m); o.m.geometry.dispose(); o.m.material.dispose(); return false; }
+      return true;
+    });
     // Falling pans: drop in 0.3 s, clang, lie there a moment, gone.
     this.pans = this.pans.filter(o => {
       o.t += dt; const k = Math.min(1, (o.t / 0.3) ** 2);
       o.p.position.set(o.from[0] + (o.to[0] - o.from[0]) * Math.min(1, o.t / 0.3), o.from[1] + (o.to[1] - o.from[1]) * k, o.from[2] + (o.to[2] - o.from[2]) * Math.min(1, o.t / 0.3));
       o.p.rotation.x = Math.min(1, o.t / 0.3) * 0.3;
-      if (o.t >= 0.3 && !o.landed) { o.landed = true; this.spawnParticles(o.to[0], 0.2, o.to[2], 0xc8b8a0, 10, 3, 0.07); }
+      if (o.t >= 0.3 && !o.landed) { o.landed = true; this.spawnParticles(o.to[0], 0.2, o.to[2], 0xc8b8a0, 10, 3, 0.07); if (o.pot) { this.scene.remove(o.p); return false; } }   // a pot smashes
       if (o.t > 0.9) { this.scene.remove(o.p); return false; }
       return true;
     });
@@ -1105,13 +1249,14 @@ export class Scene {
     this.flames.forEach((f, k) => { const n = Math.sin(now / 90 + k * 1.7) * 0.5 + Math.sin(now / 37 + k) * 0.5; f.scale.set(1 + n * 0.12, 1 + n * 0.25, 1 + n * 0.12); if (this.torchLights[k]) this.torchLights[k].intensity = 10 * (1 + n * 0.12); });   // the light flickers with the flame
     this.life.step(dt, now, this.camera.position);
     this.updateRoute(now);
-    // Roofs fade out from below while you're under them, so you can see the fight.
+    // Roofs fade only when the camera pokes up into one (v0.31). They used to fade whenever you
+    // stood under them, so ceilings vanished (and the ceiling traps on them floated in a black
+    // void) right where you fight; with the low camera (v0.26) a ceiling stays solid overhead.
     if (this.localCat) {
-      const p = this.localCat.mesh.position, cp = this.camera.position;
+      const cp = this.camera.position;
       for (const r of this.roofs) {
         const [x0, z0, x1, z1] = r.f.rect;
-        const under = (q) => q.x > x0 && q.x < x1 && q.z > z0 && q.z < z1 && q.y < r.f.bot - 0.1;   // below it (standing ON a table is not under it)
-        const fade = under(p) || under(cp);
+        const fade = cp.x > x0 && cp.x < x1 && cp.z > z0 && cp.z < z1 && cp.y > r.f.bot - 0.5 && cp.y < r.f.top + 0.3;
         if (r.faded !== fade) {
           r.faded = fade;
           r.g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = fade; o.material.opacity = fade ? 0.22 : 1; o.material.depthWrite = !fade; } });

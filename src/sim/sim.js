@@ -159,7 +159,6 @@ const SIEGE_RANGE = 9, SIEGE_EVERY = 7, SIEGE_AIM = 1.0, SIEGE_DMG = 60, SIEGE_J
 // Ceiling traps hang on a rod or chain to at most this height (1.05 m), however high the
 // ceiling is, so they sit just over the mice instead of up in the rafters (v0.30). What they
 // drop falls from there.
-export const CEIL_HANG = 3.5;
 const LANE_SPLIT = false;   // packs split across the map's lanes (off: one cheapest route per hole)
 const TILE = 4;   // trap grid: one tile = 4x4 cells (2 x 2 units, 60 cm)
 const STALL_HITS = 6, STALL_FALL_SECS = 0.45, STALL_CRUSH = 150, STALL_HP = 260, STALL_PILE_H = 0.9;
@@ -173,7 +172,8 @@ const SRC_EL = { cat: 'physical', bleed: 'physical', trap: 'physical', splat: 'p
 
 export class Sim {
   // map = which campaign map ('entrance', 'market', 'stables', 'cellar', 'passages', 'kitchen').
-  constructor({ mode = 'normal', seed = 1234, map = 'entrance', difficulty = 'normal' } = {}) {
+  constructor({ mode = 'normal', seed = 1234, map = 'entrance', difficulty = 'normal', allDoors = false } = {}) {
+    this.allDoors = allDoors;          // (tests) every door open from the start
     this.diff = DIFFICULTY[difficulty] || DIFFICULTY.normal; this.difficulty = DIFFICULTY[difficulty] ? difficulty : 'normal';
     this.mapDef = useMap(map);
     this.map = buildMap();
@@ -255,6 +255,7 @@ export class Sim {
     this.spawnCells = SPAWNS.map(p => cellOf(p.x, p.z - 0.3));
     this.spawnCell = this.spawnCells[0];
     this.door = 0;                     // which entrance the next pack uses
+    this.doorsOpen = SPAWNS.map((_, k) => this.doorOpensAt(k) <= 1);   // (v0.31) later doors stay shut until their wave
     this.flowDirty = true; this.layoutVer = 0;   // layoutVer: bumps whenever walls/traps/doors change (caches key off it)
     this.updateFlow();
   }
@@ -330,8 +331,11 @@ export class Sim {
   // (crates, the well, sacks) or a table/counter/bench surface.
   topHeight(i) {
     if (i < 0) return 0;
+    // Planks, beams and shelf boards (v0.31) take top traps up to 7.5 high; solid blocks up to
+    // 4.6 (so not the horses, the walls or the wine racks).
+    const st = this.map.slabTop[i]; if (st >= 0.8 && st <= 7.5 && st > (this.map.type[i] === T.SOLID ? this.map.solid[i] : 0)) return st;
     if (this.map.type[i] === T.SOLID && this.map.solid[i] >= 0.8 && this.map.solid[i] <= 4.6 && !(this.map.door[i] >= 0)) return this.map.solid[i];
-    const st = this.map.slabTop[i]; return st >= 0.8 && st <= 4.6 ? st : 0;
+    return 0;
   }
 
   // Solid column height at a cell. Cats squeeze past the jammed board (gate);
@@ -468,6 +472,12 @@ export class Sim {
   }
   // The routes mice will take right now, one per entrance, as world points.
   // Drawn on the floor and the radar so you can see the invisible pathing.
+  // v0.31: a map's doors (mouse holes) can open on later waves, so it gets harder as you go.
+  // A door counts from its wave on; between waves the routes also show the doors that open
+  // next wave, so you can see where they'll come from and build for it.
+  doorOpensAt(k) { return this.allDoors ? 1 : SPAWNS[k].opens || 1; }
+  doorShown(k) { return this.doorOpensAt(k) <= (this.phase === 'wave' ? this.wave : this.wave + 1); }
+  nextOpenDoor(k) { for (let n = 1; n <= SPAWNS.length; n++) { const j = (k + n) % SPAWNS.length; if (this.doorsOpen[j]) return j; } return k; }
   routes() {
     if (this.routeCache) return this.routeCache;
     if (this.flowDirty) this.updateFlow();
@@ -480,8 +490,11 @@ export class Sim {
         const at = i;
         i = nextCell(this.map, f, i, this.passSmall, this.isBlocker, this.extraOf, this.linkFrom);
         if (i <= -2) {   // over the furniture: draw the climb, then carry on from the far side
-          const o = this.linkFrom.get(at)[-2 - i], P = o.from === 'a' ? o.L.path : [...o.L.path].reverse();
-          for (const [x, z] of P) pts.push([x, z, o.L.y]);
+          const o = this.linkFrom.get(at)[-2 - i], P = o.from === 'a' ? o.L.pts : [...o.L.pts].reverse();
+          for (let j = 0; j < P.length; j++) {   // every half unit along the run, at its height
+            const [x, z, y] = P[j], [px, pz, py] = j ? P[j - 1] : P[0], n = Math.max(1, Math.round(Math.hypot(x - px, z - pz) / CELL));
+            for (let k2 = j ? 1 : n; k2 <= n; k2++) pts.push([px + (x - px) * k2 / n, pz + (z - pz) * k2 / n, py + (y - py) * k2 / n]);
+          }
           i = o.exit; continue;
         }
         if (i < 0 && f !== this.flow) { f = this.flow; i = cellOf(pts[pts.length - 1][0], pts[pts.length - 1][1]); }
@@ -490,6 +503,7 @@ export class Sim {
     };
     const out = []; this.traces = new Map();
     this.spawnCells.forEach((start, door) => {
+      if (!this.doorShown(door)) return;            // still shut, not even next wave
       const costs = VIAS.map((_, k) => this.viaCost(k, door)), min = Math.min(...costs);
       // Direct route first (the one route() returns), then (only if lanes split) every lane packs may take.
       const d = trace(start, -1); out.push(d); this.traces.set(door + ':-1', d);
@@ -537,6 +551,7 @@ export class Sim {
       const holeOk = layer === 'floor' && kind !== 'barricade' && this.map.type[i] === T.HOLE;
       if ((!floorish(this.map.type[i]) && !holeOk) || this.map.door[i] >= 0) return false;   // not in a doorway that swings shut
       if (layer === 'ceiling' && !this.map.covered[i]) return false;
+      if (layer === 'ceiling' && Math.abs(this.map.slabBot[i] - this.map.slabBot[cells[0]]) > 0.3) return false;   // (v0.31) one flat ceiling: not half under a plank or beam
       if (layer === 'wall') {
         if (wallDir < 0) return false;
         const [dx, dz] = DIRS4[wallDir];
@@ -575,7 +590,7 @@ export class Sim {
     const up = cat.upgrades ? cat.upgrades[kind] : null, P = trapParams(kind, up);
     const tr = { id: this.nextId++, by: cat.id, kind, cells, layer: top ? 'top' : def.surface, y: top ? this.topHeight(cells[0]) : 0, rot, wallDir, cd: 0, hp: P.hp || 0, maxHp: P.hp || 0, p: P, tier: (up && up.tier) || 1, special: (up && up.special) || null,
       cost: def.cost, charges: P.charges || P.nibbles || 0, rechargeT: 0, cdMax: P.cooldown || P.recharge || 1, tickT: 0,
-      ceil: def.surface === 'ceiling' ? Math.min(this.map.slabBot[cells[0]], CEIL_HANG) : 0,
+      ceil: def.surface === 'ceiling' ? this.map.slabBot[cells[0]] : 0,   // (v0.31) mounted flush on the real ceiling; its hit reaches the floor
       x0: Math.min(...xs) * CELL, x1: (Math.max(...xs) + 1) * CELL, z0: Math.min(...zs) * CELL, z1: (Math.max(...zs) + 1) * CELL };
     for (const i of cells) this.occ[tr.layer][i] = tr.id;
     this.traps.set(tr.id, tr);
@@ -674,7 +689,13 @@ export class Sim {
     if (this.phase === 'build') {
       this.phaseTimer -= DT;
       if (this.phaseTimer <= 0) {
-        this.wave++; this.phase = 'wave';
+        this.wave++; this.phase = 'wave'; this.routeCache = null;
+        // Doors whose wave has come burst open now.
+        SPAWNS.forEach((sp, k) => { if (!this.doorsOpen[k] && this.doorOpensAt(k) <= this.wave) {
+          this.doorsOpen[k] = true; this.emit({ t: 'doorOpen', door: k });
+          this.emit({ t: 'msg', text: `${(sp.name || 'A new hole').toUpperCase()} IS OPEN: a new way in!` });
+        } });
+        if (!this.doorsOpen[this.door]) this.door = this.nextOpenDoor(this.door);
         this.spawn = { ...buildWave(this.wave, this.rng, this.gate.up, { birds: this.mapDef.birds !== false }), t: 0 }; this.packVia = -2;
         this.spawn.hpMul *= (1 + 0.08 * ((this.mapDef.order || 1) - 1)) * this.diff.hp;     // each map further in is a bit tougher; difficulty
         this.emit({ t: 'msg', text: `Wave ${this.wave}` + (this.wave % 12 === 0 ? ' — BIG BOSS RAT' : this.wave % 6 === 0 ? ' — mini boss' : '') });
@@ -701,7 +722,7 @@ export class Sim {
         if (MICE[e.type].bird) this.spawnBird(e.type, s.hpMul); else this.spawnMouse(e.type, s.hpMul, e.pack, this.door, this.packVia);
         if (e.intro) this.emit({ t: 'msg', text: `NEW: ${MICE[e.type].name} — ${INTRO_TEXT[e.type] || ''}` });
         s.t += e.gap;
-        if (e.gap > 0.1) { this.door = (this.door + 1) % SPAWNS.length; this.packVia = -2; }   // next pack: other entrance, new lane
+        if (e.gap > 0.1) { this.door = this.nextOpenDoor(this.door); this.packVia = -2; }   // next pack: the next open entrance, new lane
       }
     } else if (this.mice.length === 0 && this.shots.length === 0 && this.birds.length === 0) {
       if (this.mode === 'normal' && this.wave >= RULES.winWave) {
@@ -709,7 +730,9 @@ export class Sim {
         this.rating = ratePaws(this.lives, this.stats, this.diff.lives);
         this.emit({ t: 'end', won: true, rating: this.rating });
       } else {
-        this.phase = 'build'; this.phaseTimer = RULES.buildPhaseSeconds;
+        this.phase = 'build'; this.phaseTimer = RULES.buildPhaseSeconds; this.routeCache = null;
+        // Warn about a door that opens next wave (its route shows from now on).
+        SPAWNS.forEach((sp, k) => { if (this.doorOpensAt(k) === this.wave + 1) { this.emit({ t: 'doorWarn', door: k }); this.emit({ t: 'msg', text: `Next wave they break through ${sp.name ? 'the ' + sp.name.toLowerCase() : 'a new hole'}! Its route is marked.` }); } });
         // Income that doesn't depend on hauling tails, so you can always build.
         const bonus = Math.round((RULES.waveBonus + this.wave * 15) * this.mods.waveBonus); this.sardines += bonus;
         this.emit({ t: 'msg', text: `Wave ${this.wave} cleared  +${bonus} Paw Points` }); this.emit({ t: 'waveClear', wave: this.wave });
@@ -2038,6 +2061,13 @@ export class Sim {
     if (jn) { const cx = jx / jn - m.x, cz = jz / jn - m.z, cd = Math.hypot(cx, cz); if (cd > 0.3) { const k = Math.min(cd - 0.3, 1.5 * DT) / cd; sx += cx * k; sz += cz * k; } }   // drawn to the middle of the jammy clump
 
     const ok = (x, z) => { const c = cellOf(x, z); return c >= 0 && pass(c) && !this.isBlocker(c); };
+    // (v0.31) Knocked off a high road onto a crate stack (or anything solid that came up under
+    // it): step out to the nearest clear floor instead of walking on the spot.
+    if (m.y < 0.5 && this.isBlocker(i)) {
+      let best = null, bd = 1e9;
+      for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) { const x = m.x + dx * CELL, z = m.z + dz * CELL, dd = dx * dx + dz * dz; if (dd < bd && ok(x, z)) { bd = dd; best = [x, z]; } }
+      if (best) { [m.x, m.z] = best; return; }
+    }
     if (this.map.mud[i]) m.dirtyT = Math.max(m.dirtyT || 0, 1);     // stables mud: dirty mice get knocked flat by physics
     const sp = d.speed * (m.slowT > 0 ? (m.chillT > 0 ? STATUS.chillSlow : CAT.hairballSlow) : 1) * (m.packed ? RULES.packSpeed : 1) * (this.map.mud[i] ? MUD_SLOW : 1);
     let mx, mz;
@@ -2167,22 +2197,33 @@ export class Sim {
   // Over the furniture: scramble up at one end, run along the top, climb down the far side.
   // Traps on the top hit it on the way; cats can jump up and swat it.
   stepLink(m, d) {
-    const c = m.link, L = c.L, P = c.from === 'a' ? L.path : [...L.path].reverse(), end = c.from === 'a' ? L.b : L.a;
+    // v0.31: the run's points carry their own heights. Up/down at the ends is a climb (or a
+    // step, at the foot of a broom); along the run the height follows the slope, slower uphill
+    // and straight up a ladder stretch.
+    const c = m.link, L = c.L, P = c.from === 'a' ? L.pts : [...L.pts].reverse(), end = c.from === 'a' ? L.b : L.a;
     const sp = d.speed * (m.slowT > 0 ? CAT.hairballSlow : 1) * (m.chillT > 0 ? STATUS.chillSlow / CAT.hairballSlow : 1) * DT;
     if (c.phase === 'up' || c.phase === 'down') {
-      c.t += DT; const k = Math.min(1, c.t / CLIMB_SECS), up = c.phase === 'up';
-      const [fx, fz] = up ? [c.sx, c.sz] : P[P.length - 1], [tx, tz] = up ? P[0] : end;
-      m.x = fx + (tx - fx) * k; m.z = fz + (tz - fz) * k; m.y = L.y * (up ? k : 1 - k); m.yaw = Math.atan2(tx - fx, tz - fz);
-      m.climbing = true;
+      const up = c.phase === 'up', [px, pz, py] = up ? P[0] : P[P.length - 1];
+      c.t += DT; const k = Math.min(1, c.t / (py < 0.6 ? 0.15 : CLIMB_SECS));
+      const [fx, fz] = up ? [c.sx, c.sz] : [px, pz], [tx, tz] = up ? [px, pz] : end;
+      m.x = fx + (tx - fx) * k; m.z = fz + (tz - fz) * k; m.y = py * (up ? k : 1 - k); m.yaw = Math.atan2(tx - fx, tz - fz);
+      m.climbing = py >= 0.6;
       if (k >= 1) { if (up) { c.phase = 'top'; c.k = 1; } else { m.link = null; m.climbing = false; m.y = 0; } }
       return;
     }
-    // On top: walk the path.
-    m.climbing = false; m.y = L.y;
-    const [tx, tz] = P[Math.min(c.k, P.length - 1)], dx = tx - m.x, dz = tz - m.z, dd = Math.hypot(dx, dz);
+    // Along the run: head for point k from point k-1.
+    const [bx, bz, by] = P[Math.max(0, Math.min(c.k, P.length - 1) - 1)], [tx, tz, ty] = P[Math.min(c.k, P.length - 1)];
+    const seg = Math.hypot(tx - bx, tz - bz), dx = tx - m.x, dz = tz - m.z, dd = Math.hypot(dx, dz);
+    if (seg < 0.05) {   // straight up or down (a ladder stretch)
+      m.climbing = true; const step = 2.2 * DT * Math.sign(ty - m.y);
+      if (Math.abs(ty - m.y) <= Math.abs(step)) { m.y = ty; if (++c.k >= P.length) { c.phase = 'down'; c.t = 0; } } else m.y += step;
+      return;
+    }
+    m.climbing = false;
+    const slope = Math.abs(ty - by) / seg, v = sp / Math.sqrt(1 + slope * slope * 2.25);   // uphill/downhill a bit slower
     if (dd > 0.01) m.yaw = Math.atan2(dx, dz);
-    if (dd <= sp) { m.x = tx; m.z = tz; if (++c.k >= P.length) { c.phase = 'down'; c.t = 0; } }
-    else { m.x += dx / dd * sp; m.z += dz / dd * sp; }
+    if (dd <= v) { m.x = tx; m.z = tz; m.y = ty; if (++c.k >= P.length) { c.phase = 'down'; c.t = 0; } }
+    else { m.x += dx / dd * v; m.z += dz / dd * v; m.y = by + (ty - by) * Math.max(0, Math.min(1, 1 - (dd - v) / seg)); }
   }
 
   // One place for "a mouse hurt a cat" (bites, spit, stomps).
@@ -2582,6 +2623,23 @@ export class Sim {
           reset(tr, P.cooldown);
           this.emit({ t: 'pan', id: tr.id, x: (tr.x0 + tr.x1) / 2, y: tr.ceil, z: (tr.z0 + tr.z1) / 2, to: vs.map(m => [m.x, m.z]) });
           for (const m of vs) { m.dirtyT = Math.max(m.dirtyT || 0, 0.1); this.damageMouse(m, dmg, 'trap', false, el); }   // dirty + physics = knocked flat
+          break;
+        }
+        case 'tenderizer': {
+          // (v0.31) The press in the ceiling: slams the whole way down on everything under its
+          // tiles, knocks survivors flat (bosses just take the hit), then winches back up.
+          if (tr.cd > 0) break;
+          const vs = below(tr);
+          if (!vs.length) break;
+          reset(tr, P.cooldown); const [cx, cz] = centre(tr);
+          for (const m of vs) {
+            this.damageMouse(m, dmg, 'trap', false, el);
+            if (m.dead) continue;
+            if (P.bleed) bleed(m, P.bleed, mods.bleedMax);
+            if (!MICE[m.type].boss) { m.dirtyT = Math.max(m.dirtyT || 0, 0.1); this.damageMouse(m, 1, 'trap', false, 'physics'); }   // dirt + physics = knocked flat
+          }
+          this.emit({ t: 'pound', id: tr.id, x: cx, z: cz, hits: vs.length });
+          if (vs.length >= 4) this.bark('trap', null);
           break;
         }
         // ---- new in 0.25 ----

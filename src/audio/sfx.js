@@ -339,6 +339,12 @@ const SOUNDS = {
   gust: (a, o) => { a.noise(o, { dur: 0.6, vol: 0.5, type: 'lowpass', f: 400, f2: 1400, att: 0.05 }); a.tone(o, { type: 'sawtooth', f: 60, dur: 0.3, vol: 0.12 }); },
   flame: (a, o) => { a.noise(o, { dur: 0.5, vol: 0.5, type: 'lowpass', f: 800, f2: 2500, att: 0.02 }); },
   hypno: (a, o) => { a.tone(o, { type: 'sine', f: 400, f2: 800, dur: 0.6, vol: 0.12, vib: 30 }); a.tone(o, { type: 'sine', f: 600, f2: 300, t: 0.1, dur: 0.6, vol: 0.08, vib: 30 }); },
+  // (v0.31) The Meat Tenderizer slamming down: hiss of the piston, a heavy iron thud.
+  pound: (a, o) => { a.noise(o, { dur: 0.07, vol: 0.35, type: 'highpass', f: 3000 }); a.tone(o, { f: 65, f2: 28, t: 0.05, dur: 0.55, vol: 1.0 }); a.noise(o, { t: 0.05, dur: 0.35, vol: 0.55, type: 'lowpass', f: 600, f2: 90 }); a.tone(o, { type: 'square', f: 220, f2: 180, t: 0.05, dur: 0.25, vol: 0.05 }); },
+  // (v0.31) A new door bursting open (boards splintering / a grate flung back), and the knocking
+  // behind a door that opens next wave.
+  doorOpen: (a, o) => { a.noise(o, { dur: 0.14, vol: 0.9, type: 'highpass', f: 1400 }); a.tone(o, { f: 95, f2: 40, t: 0.03, dur: 0.6, vol: 0.8 }); a.noise(o, { t: 0.06, dur: 0.6, vol: 0.45, type: 'lowpass', f: 800, f2: 120 }); },
+  doorWarn: (a, o) => { for (let k = 0; k < 3; k++) { a.tone(o, { f: 120, f2: 70, t: k * 0.22, dur: 0.12, vol: 0.5 }); a.noise(o, { t: k * 0.22, dur: 0.08, vol: 0.3, type: 'lowpass', f: 700 }); } },
   potDrop: (a, o) => { a.noise(o, { dur: 0.08, vol: 0.7, type: 'highpass', f: 1800 }); a.noise(o, { t: 0.05, dur: 0.4, vol: 0.4, type: 'lowpass', f: 900, f2: 200 }); a.tone(o, { f: 160, f2: 60, dur: 0.2, vol: 0.4 }); },
   splashDown: (a, o) => { a.noise(o, { dur: 0.6, vol: 0.5, f: 1200, f2: 400, q: 0.7 }); },
   salt: (a, o) => { a.noise(o, { dur: 0.25, vol: 0.12, type: 'highpass', f: 7000 }); },

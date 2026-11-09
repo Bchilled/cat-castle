@@ -39,11 +39,13 @@ Click the game to lock the mouse.
 | Esc | Pause |
 | H | Hide the controls |
 
-Traps snap to the trap grid, like Orcs Must Die: one tile is 2×2 units (60 cm), and the grid shows on the floor while you hold a trap. Most traps take one tile; some take two or four. A Poison Box is one tile. Ceiling traps hit the tiles under them (marked on the floor). Floor traps also go on table and counter tops: aim at the top.
+Traps snap to the trap grid, like Orcs Must Die: one tile is 2×2 units (60 cm), and the grid shows on the floor while you hold a trap. Most traps take one tile; some take two or four. A Poison Box is one tile. Ceiling traps sit flush on the ceiling over the tiles they hit (marked on the floor), and what they do reaches the floor: the Meat Tenderizer press slams all the way down, water and salt pour down, pans and pots fall. Every map has ceilings over its lanes (alleys, sheds, lean-tos, the kitchen ceiling) so floor, wall and ceiling traps all work along the routes. Floor traps also go on table and counter tops: aim at the top.
 
 ## How it plays
 Mice pour out of the holes and take the cheapest route to the exit. You can see that route as glowing arrows on the floor.
 - **Routes:** each hole has one route, the path of least resistance, and every pack from that hole takes it. They re-route when you build. Lanes and doorways are a whole number of tiles wide (mostly 4), so a few Poison Boxes close one and send everyone the long way. You can wall them into a maze, but never seal them in.
+- **More doors:** every map starts with one way in. A second door opens on wave 8 and a third on wave 16; the wave before, it's marked on the minimap and its route shows, and you can hear them banging on the boards.
+- **High roads:** on every map but the first the rats also run up off the floor: up brooms and ladders, along planks over the crates, beams, high shelves and the pot rack, and the floor lanes run underneath them. The market and stables have a second level, the cellar and kitchen a third. Put top traps up there, or a Poison Box on the run to send them back down.
 - **Packs:** scouts run ahead.
 - **Shortcuts:** they smash through crate stacks when it's worth it, and climb over fences, crates and the cellar cheese wheel when that beats going round, and take to the kitchen counters and the hay loft if you wall off the floor. A Poison Box on top closes a route.
 - **Food:** they stop to eat food piles, and climb furniture to eat what's on top. Eating makes them tougher.

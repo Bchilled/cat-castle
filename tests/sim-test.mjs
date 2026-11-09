@@ -1,7 +1,10 @@
 // Headless rules tests: runs the sim with no graphics.
 // Run: node tests/sim-test.mjs
 import { TRAPS, CATS, ITEMS } from '../src/config.js';
-import { Sim } from '../src/sim/sim.js';
+import { Sim as RealSim } from '../src/sim/sim.js';
+// Most tests check rules on a map with every door open; v0.31's late doors are tested on
+// their own with RealSim (doors shut until their wave).
+class Sim extends RealSim { constructor(o = {}) { super({ allDoors: true, ...o }); } }
 import { W, CELL, idx, MAP_ORDER, MAPS, cellOf, T } from '../src/sim/map.js';
 import { nextCell } from '../src/sim/path.js';
 import { TICK_HZ } from '../src/config.js';
@@ -19,8 +22,8 @@ const s = new Sim({ seed: 7 });
 ok(s.flow[s.spawnCell] < Infinity, `spawn reaches exit (cost ${s.flow[s.spawnCell].toFixed(1)})`);
 ok(s.flowBig[s.spawnCell] < Infinity, 'big bosses also have a route');
 // v0.30: the gate is jammed, so both packs come through the breach in the west curtain wall.
-ok(s.routes().every(r => r.some(([x, z]) => x > 16 && x < 24 && z > 76 && z < 84)), 'with the gate jammed, both entrances route through the breach');
-ok(new Set(s.routes().map(r => r[0].join())).size === 2, 'two entrances');
+ok(s.routes().slice(0, 2).every(r => r.some(([x, z]) => x > 16 && x < 24 && z > 76 && z < 84)), 'with the gate jammed, both roads route through the breach');
+ok(new Set(s.routes().map(r => r[0].join())).size === 3, 'three entrances (two roads and the courtyard drain)');
 {
   // Path of least resistance: one route per entrance, and every pack takes it.
   ok(s.routes().length === s.spawnCells.length, `one route per entrance (${s.routes().length})`);
@@ -32,7 +35,7 @@ ok(new Set(s.routes().map(r => r[0].join())).size === 2, 'two entrances');
 s.addPlayer('p1', 'fred'); s.sardines = 1e6;
 for (let x = q(16); x < q(24); x += 4) s.command({ type: 'place', id: 'p1', trap: 'barricade', ax: x, az: q(78) });
 s.updateFlow();
-ok(s.traps.size === 4 && s.routes().every(r => r.some(([x, z]) => x > 44 && x < 52 && z > 76 && z < 84)), 'box up the breach and both packs go for the gate');
+ok(s.traps.size === 4 && s.routes().slice(0, 2).every(r => r.some(([x, z]) => x > 44 && x < 52 && z > 76 && z < 84)), 'box up the breach and both road packs go for the gate');
 s.command({ type: 'startWave' });
 const ev = run(s, 240);
 ok(ev.some(e => e.t === 'gateBreak'), 'gate breaks from mouse chewing');
@@ -970,5 +973,93 @@ let findSpot, setup;
   p.x = 42; p.z = 55; p.y = 0; walk(st, p, -1, 0, 4.5);   // (slow: mud, and he is Puddin)
   ok(p.y > 6 && p.x < 28, `Puddin walks up the loft stairs onto the hay loft (${p.y.toFixed(1)} high)`);
   ok(st.map.type[cellOf(34, 55)] === T.SOLID && !(st.flow[cellOf(34, 55)] < Infinity), 'mice can not use the stairs');
+}
+// 47. Late doors (0.31): every map starts with one door; the second opens on wave 8, the
+// third on wave 16. Shut doors send no mice and show no route until the wave before.
+{
+  for (const id of MAP_ORDER) {
+    const d = new RealSim({ map: id, seed: 1500 }); d.addPlayer('p1'); d.step();
+    ok(d.spawnCells.length === 3 && d.routes().length === 1 && d.doorsOpen.filter(Boolean).length === 1, `${id}: three doors, one open at the start`);
+  }
+  const d = new RealSim({ seed: 1501 }); d.addPlayer('p1', 'fred'); d.lives = 1e6; d.step();
+  const doorOf = (m) => SPAWNS_OF(d).findIndex(sp => Math.hypot(sp.x - m.x, sp.z - m.z) < 4);
+  function SPAWNS_OF(sim) { return MAPS[sim.mapDef.id].spawns; }
+  // Play a wave quickly: note which door each mouse comes out of, then clear the board once
+  // they're all out.
+  const playWave = () => {
+    d.command({ type: 'startWave' }); const ev = run(d, 0.05), seen = new Set();
+    for (let t = 0; t < 30 * 200 && d.phase === 'wave'; t++) {
+      d.step(); ev.push(...d.events); d.events.length = 0;
+      for (const m of d.mice) if (m.seenDoor == null) { m.seenDoor = doorOf(m); seen.add(m.seenDoor); }
+      if (!d.spawn.queue.length) { d.mice.length = 0; d.birds.length = 0; d.shots.length = 0; }
+    }
+    return { seen, ev };
+  };
+  d.wave = 6; const w7 = playWave();
+  ok(d.wave === 7 && w7.seen.size === 1 && w7.seen.has(0), `wave 7: every mouse comes out of door 1 (${[...w7.seen]})`);
+  ok(d.phase === 'build' && d.routes().length === 2 && w7.ev.some(e => e.t === 'doorWarn' && e.door === 1), 'after wave 7: a warning, and the route from door 2 shows (it opens next wave)');
+  const w8 = playWave();
+  ok(d.wave === 8 && d.doorsOpen[1] && w8.ev.some(e => e.t === 'doorOpen' && e.door === 1), 'wave 8: door 2 bursts open');
+  ok(w8.seen.has(0) && w8.seen.has(1) && !w8.seen.has(2), `wave 8: packs come out of doors 1 and 2, not 3 (${[...w8.seen]})`);
+  d.wave = 15; const w16 = playWave();
+  ok(d.doorsOpen[2] && w16.seen.has(2), `wave 16: the courtyard drain opens and mice come up it (${[...w16.seen]})`);
+  // Sealing a shut door's route is still refused: it will open.
+  const sl = new RealSim({ map: 'cellar', seed: 1502 }); sl.addPlayer('p1'); sl.sardines = 1e6; sl.step();
+  ok(sl.spawnCells.every(c => sl.flow[c] < Infinity), 'every door, shut or open, has a way to the hole');
+}
+// 48. Layered runs (0.31): the market and stables add a second level, the cellar and kitchen
+// a third. The first door's rats take the high road (brooms, ladders, planks, beams); on the
+// market, stables and kitchen another door's floor lane runs underneath it. A trap fits up
+// there, a Poison Box on it sends them back to the floor, and a rat really runs it.
+{
+  const high = (r) => r.filter(p => (p[2] || 0) > 2.5);
+  const run = { market: 'Over the crates', stables: 'Loft and beam', cellar: 'Vault beam', kitchen: 'Pot rack' };
+  for (const [id, name] of Object.entries(run)) {
+    const s = new Sim({ map: id, seed: 1600 }); s.addPlayer('p1'); s.sardines = 1e6; s.step();
+    const R = s.routes(), L = s.map.links.find(l => l.name === name);
+    ok(L && high(R[0]).length > 20, `${id}: door 1's rats take the ${name} (${high(R[0]).length} points up high)`);
+    if (id !== 'cellar') {
+      const under = R.some((q, e) => e > 0 && high(R[0]).some(p => q.some(f => (f[2] || 0) < 0.5 && Math.hypot(p[0] - f[0], p[1] - f[1]) < 0.6)));
+      ok(under, `${id}: another door's floor lane runs under it (criss-cross)`);
+    }
+    // A tile on the run: a mousetrap fits, and a Poison Box closes the run.
+    const c = L.cells.map(i => [i % W - (i % W) % 4, ((i / W) | 0) - ((i / W) | 0) % 4]).find(([x, z]) => s.canPlace('mousetrap', x, z, 0, -1, true) === true);
+    ok(c && s.canPlace('mousetrap', c[0], c[1], 0, -1, true) === true, `${id}: a trap fits up on the ${name}`);
+    s.placeTrap(s.cats.get('p1'), 'barricade', c[0], c[1], 0, -1, true); s.updateFlow(); s.routeCache = null;
+    ok(!s.links.includes(L) && high(s.routes()[0]).length < high(R[0]).length / 2, `${id}: a Poison Box on it sends them back down`);
+  }
+  // The cellar's coal chute (wave 16) runs over the racks; the passages shelves go over the doors.
+  const ce = new Sim({ map: 'cellar', seed: 1601 }); ce.addPlayer('p1'); ce.step();
+  ok(high(ce.routes()[2]).length > 20, 'cellar: the coal chute rats go over the rack tops');
+  // A rat runs the kitchen's top level: up the ladder, along at 7 high, down by the pantry.
+  const k = new Sim({ map: 'kitchen', seed: 1602 }); k.addPlayer('p1'); k.step();
+  const rat = k.spawnAt('mouse', 53, 66, 999); rat.via = -1; let top = 0, down = false;
+  for (let t = 0; t < 30 * 60; t++) { k.step(); k.events.length = 0; top = Math.max(top, rat.y); if (top > 6 && rat.z < 24 && rat.y < 0.5) { down = true; break; } }
+  ok(top > 6.5 && down, `a rat climbs to the kitchen's top level and comes down off the pot rack (top ${top.toFixed(1)})`);
+}
+// 49. Traps fit the map (0.31). Every door's route runs under ceilings a ceiling trap can go
+// on for at least a quarter of its floor stretch (lanes, sheds, the kitchen ceiling...);
+// ceiling traps sit flush on the real ceiling; one can't straddle two ceiling heights; and
+// the Meat Tenderizer slams everything under it.
+{
+  for (const id of MAP_ORDER) {
+    const s = new Sim({ map: id, seed: 1700 }); s.addPlayer('p1'); s.step();
+    const ceil = new Uint8Array(s.map.type.length), Wm = s.map.type.length / (MAPS[id].h / CELL);
+    for (let az = 0; az < MAPS[id].h / CELL; az += 4) for (let ax = 0; ax < Wm; ax += 4) if (s.canPlace('zapper', ax, az) === true) for (let dz = 0; dz < 8; dz++) for (let dx = 0; dx < 8; dx++) ceil[(az + dz) * Wm + ax + dx] = 1;
+    // (a route that's mostly up on a high road, like the stables loft, is trapped up there instead)
+    const worst = Math.min(...s.routes().map(r => r.filter(p => !((p[2] || 0) > 0.5))).filter(fl => fl.length >= 40).map(fl => fl.filter(([x, z]) => ceil[Math.floor(z / CELL) * Wm + Math.floor(x / CELL)]).length / fl.length));
+    ok(worst >= 0.25, `${id}: every door's floor route runs under ceilings for ceiling traps (worst ${(worst * 100) | 0}%)`);
+  }
+  const k = new Sim({ map: 'kitchen', seed: 1701 }); k.addPlayer('p1', 'fred'); k.sardines = 1e6; k.cats.get('p1').loadout = null; k.step();
+  const ax = 2 * Math.round(60 / 4) * 2, az = 2 * Math.round(40 / 4) * 2;   // (x 60, z 40: the open kitchen floor)
+  ok(k.canPlace('tenderizer', ax, az) === true, 'the Meat Tenderizer fits on the kitchen ceiling');
+  k.placeTrap(k.cats.get('p1'), 'tenderizer', ax, az, 0, -1); const tr = [...k.traps.values()].pop();
+  ok(tr && tr.kind === 'tenderizer' && tr.ceil === 10, `ceiling traps sit flush on the real ceiling (${tr && tr.ceil})`);
+  const ms = [0, 1, 2].map(n => { const m = k.spawnAt('mouse', (tr.x0 + tr.x1) / 2 + (n - 1) * 0.8, (tr.z0 + tr.z1) / 2, 150); m.via = -1; m.stunT = 3; return m; });
+  const ev = []; for (let t = 0; t < 10; t++) { k.step(); ev.push(...k.events); k.events.length = 0; }
+  ok(ev.some(e => e.t === 'pound' && e.hits === 3) && ms.every(m => m.dead || m.hp < 150), 'the Meat Tenderizer slams the mice under it');
+  // One flat ceiling: not half under the market plank (2.8) and half under the tavern arch (7).
+  const mk = new Sim({ map: 'market', seed: 1702 }); mk.addPlayer('p1'); mk.step();
+  ok(mk.canPlace('zapper', 64, 48) !== true && mk.canPlace('zapper', 60, 48) === true, 'a ceiling trap cannot straddle two ceiling heights');
 }
 process.exit(fails ? 1 : 0);

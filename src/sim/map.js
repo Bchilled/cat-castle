@@ -49,6 +49,9 @@ function shell(w, h, ht, look, spawnXs) {
 }
 const blk = (name, rect, h, look, extra = {}) => ({ name, kind: 'solid', rect, h, look, ...extra });
 const over = (name, rect, bot, top, look, legs = 'corners') => ({ name, kind: 'over', legs, rect, bot, top, look });
+// A plank, beam or shelf board laid across at height `top` (v0.31): mice run along it (as part
+// of a raised run), cats can stand on it, top traps go on it, ceiling traps hang under it.
+const plank = (name, rect, top, look = 'plank') => ({ name, kind: 'over', legs: 'none', rect, bot: top - (look === 'beam' ? 0.5 : 0.2), top, look });
 const roof = (name, rect, bot, top, look) => ({ name, kind: 'roof', rect, bot, top, look });
 // Stairs (v0.28): a solid flight that rises along one axis, from height `from` at one end to
 // `to` at the other (axis 'z': from at z0, to at z1; 'x': from at x0, to at x1). Built at
@@ -103,7 +106,12 @@ export const MAPS = {
       { name: 'Spear rack', kind: 'solid', rect: [10, 52, 22, 53], h: 6, look: 'rack' },
       // North: three lanes between the buildings, 4 tiles each.
       { name: 'Armoury', kind: 'solid', rect: [2, 10, 22, 30], h: 16, look: 'guardhouse' },
-      { name: 'Colonnade roof', kind: 'over', rect: [22, 10, 30, 30], bot: 7, top: 7.8, look: 'colonnade' },
+      // (v0.31) Ceilings over the lanes the mice take, so all three trap surfaces (floor, wall,
+      // ceiling) work along them, like Orcs Must Die's corridors. The colonnade's pillars stand
+      // against the armoury only, so the lane under it takes 2x2 ceiling traps.
+      { name: 'Colonnade roof', kind: 'over', legs: 'west', rect: [22, 10, 30, 30], bot: 7, top: 7.8, look: 'colonnade' },
+      roof('Covered way', [66, 10, 74, 30], 7, 8, 'beams'),                                    // the east lane
+      { name: 'Woodshed', kind: 'over', legs: 'corners', rect: [18, 58, 28, 76], bot: 7, top: 7.8, look: 'beams' },   // over the path from the breach
       { name: 'Guardhouse W', kind: 'solid', rect: [30, 10, 44, 30], h: 16, look: 'guardhouse' },
       { name: 'Guardhouse E', kind: 'solid', rect: [52, 10, 66, 30], h: 16, look: 'guardhouse' },
       { name: 'Guard passage', kind: 'roof', rect: [44, 10, 52, 30], bot: 7, top: 16, look: 'tunnelroof' },
@@ -123,7 +131,9 @@ export const MAPS = {
     hole: { x0: 46, x1: 50, z0: 2, z1: 2.5 }, clearing: { x0: 28, x1: 68, z0: 92, z1: 102 },
     // Forest roads 4 tiles wide: the west one straight on to the moat (and a branch to the clearing).
     roads: [[[20, 120], [20, 92]], [[20, 98], [30, 98]], [[76, 120], [76, 98], [66, 98]]],
-    spawns: [{ x: 20, z: 118.8 }, { x: 76, z: 118.8 }], catSpawn: { x: 48, z: 8 },
+    // Doors (v0.31): the west road from the start, the east road from wave 8, and from wave 16
+    // they come up the old drain in the middle of the courtyard.
+    spawns: [{ x: 20, z: 118.8, name: 'West road' }, { x: 76, z: 118.8, name: 'East road', opens: 8 }, { x: 60, z: 48, name: 'Courtyard drain', opens: 16, grate: true }], catSpawn: { x: 48, z: 8 },
     vias: [{ name: 'Colonnade', x: 26, z: 20, weight: 1 }, { name: 'Guard passage', x: 48, z: 20, weight: 1 }, { name: 'East lane', x: 70, z: 20, weight: 1 }],
     torches: [[2, 34, 1, 0], [94, 34, -1, 0], [44, 74, 1, 0], [52, 74, -1, 0], [42, 2, 0, 1], [54, 2, 0, 1], [30, 20, -1, 0], [66, 20, 1, 0]],
     // Knock-over props near the edges of the table, bench and walkways (x, surface height, z).
@@ -142,6 +152,10 @@ export const MAPS = {
       ...shell(88, 104, 24, 'house', [22, 66]),
       // North row of houses: the tavern arch (covered, 4 tiles) and the north alley (3 tiles).
       blk('Houses', [6, 22, 30, 40], 20, 'house'), roof('Tavern arch', [30, 22, 38, 40], 7, 20, 'tunnelroof'),
+      // (v0.31) The upper floors jut out over the alleys (jettied houses): ceilings over the
+      // ways in and the lanes north, for ceiling traps.
+      roof('Jettied houses', [18, 72, 26, 100], 7, 9, 'beams'), roof('Jettied houses', [62, 72, 70, 100], 7, 9, 'beams'),
+      roof('Overhang', [58, 22, 64, 40], 7, 9, 'beams'), roof('Overhang', [2, 22, 6, 40], 7, 9, 'beams'),
       blk('Tavern', [38, 22, 58, 40], 20, 'house'), blk('Houses', [64, 22, 86, 40], 20, 'house'),
       // West houses with the back alley (2 tiles) behind them; a gap from the square into it.
       blk('Houses', [6, 40, 14, 58], 20, 'house'), blk('Houses', [6, 62, 14, 70], 20, 'house'),
@@ -155,12 +169,15 @@ export const MAPS = {
       blk('Well', [40, 52, 48, 58], 3.2, 'well'),
       blk('Apple sacks', [14, 52, 16, 56], 0.8, 'sacks'), blk('Bread sacks', [72, 52, 74, 56], 0.8, 'sacks'), blk('Cabbages', [42, 66, 46, 68], 0.8, 'sacks'),
       blk('Barrels', [50, 70, 56, 74], 3, 'barrels'),
+      // The high road (v0.31): planks from the veg stall over the square to the fish stall,
+      // a landing, and a plank through the tavern arch over the crates stacked in it.
+      plank('Plank', [28, 48, 30, 60], 3), plank('Plank', [28, 40, 36, 44], 3), plank('Plank', [34, 22, 36, 40], 3),
       // The north yard by the back door.
       blk('Crates', [10, 8, 16, 12], 1.6, 'crate'), blk('Crates', [72, 6, 78, 10], 1.6, 'crate'), blk('Cart', [20, 12, 26, 20], 3.6, 'cart'),
       over('Awning bench', [56, 8, 66, 11], 1.5, 1.9, 'bench'),
     ],
     clutter: [[2, 2, 10, 8], [78, 2, 86, 8], [14, 40, 18, 44], [70, 40, 74, 44], [14, 66, 18, 70], [70, 66, 74, 70], [26, 70, 32, 74], [58, 18, 64, 22]],
-    hole: { x0: 42, x1: 46, z0: 2, z1: 2.5 }, spawns: [{ x: 22, z: 102.8 }, { x: 66, z: 102.8 }], catSpawn: { x: 44, z: 8 },
+    hole: { x0: 42, x1: 46, z0: 2, z1: 2.5 }, spawns: [{ x: 22, z: 102.8, name: 'West alley' }, { x: 66, z: 102.8, name: 'East alley', opens: 8 }, { x: 4, z: 56, name: 'Back alley drain', opens: 16, grate: true }], catSpawn: { x: 44, z: 8 },
     vias: [{ name: 'Back alley', x: 4, z: 40, weight: 1 }, { name: 'Tavern arch', x: 34, z: 31, weight: 1 }, { name: 'North alley', x: 61, z: 31, weight: 1 }],
     foods: [{ name: 'Apples', x: 17.5, z: 54, r: 3.5, amount: 25 }, { name: 'Bread', x: 70.5, z: 54, r: 3.5, amount: 25 }, { name: 'Cabbages', x: 44, z: 69.5, r: 3.5, amount: 25 }],
     torches: [[14, 50, 1, 0], [74, 50, -1, 0], [38, 31, -1, 0], [44, 2, 0, 1], [26, 86, -1, 0], [62, 86, 1, 0]],
@@ -176,7 +193,7 @@ export const MAPS = {
     blurb: 'A long stable aisle under the hay loft, and a muddy yard round the barn, full of troughs.',
     twist: 'Mud slows everything. Troughs drown mice: fling them in.',
     furniture: [
-      ...shell(100, 96, 22, 'house', [23, 74]),
+      ...shell(100, 96, 22, 'house', [23, 56, 74]),
       // The aisle is 5 tiles wide under the loft, horse pens off its west side, three
       // 3-tile doorways into the yard. A paddock wall splits the yard, two 4-tile gaps in it.
       { name: 'Hay loft', kind: 'over', rect: [18, 14, 28, 86], bot: 5.5, top: 6.2, look: 'loft' },
@@ -185,8 +202,15 @@ export const MAPS = {
       blk('Stable wall', [28, 14, 30, 28], 10, 'house'), blk('Stable wall', [28, 34, 30, 50], 10, 'house'),
       blk('Stable wall', [28, 56, 30, 72], 10, 'house'), blk('Stable wall', [28, 78, 30, 86], 10, 'house'),
       blk('Horse', [4, 29, 14, 31], 5, 'horse', { tint: 0x8a5a32 }), blk('Horse', [4, 53, 14, 55], 5, 'horse', { tint: 0xb8b0a4 }),   // in two of the pens: real size
+      { ...plank('Loft beam', [28, 30, 46, 32], 6.2, 'beam'), hang: 3 },                         // (v0.31) from the loft out through the loft door, over the yard lane
       blk('Paddock wall', [30, 40, 40, 42], 4, 'stone'), blk('Paddock wall', [48, 40, 76, 42], 4, 'stone'), blk('Paddock wall', [84, 40, 98, 42], 4, 'stone'),
       blk('Barn', [50, 50, 78, 66], 18, 'guardhouse'),
+      // (v0.31) Lean-to roofs off both sides of the barn and a cart shed in the north yard, over
+      // the yard lanes (posts down the open side), so the yard takes ceiling traps too.
+      { name: 'Lean-to', kind: 'over', legs: 'west', rect: [38, 44, 50, 72], bot: 7, top: 7.8, look: 'beams' },
+      { name: 'Lean-to', kind: 'over', legs: 'east', rect: [78, 44, 88, 72], bot: 7, top: 7.8, look: 'beams' },
+      { name: 'Cart shed', kind: 'over', legs: 'corners', rect: [56, 12, 68, 28], bot: 7, top: 7.8, look: 'beams' },
+      { name: 'Feed shed', kind: 'over', legs: 'corners', rect: [38, 12, 52, 28], bot: 7, top: 7.8, look: 'beams' },
       blk('Fence', [32, 72, 60, 73], 1.2, 'fence'), blk('Fence', [68, 30, 98, 31], 1.2, 'fence'),
       blk('Cart', [76, 8, 82, 16], 3.6, 'cart'), blk('Hay bales', [86, 4, 98, 14], 2.6, 'bales'),
       blk('Oat sacks', [36, 2, 40, 5], 0.8, 'sacks'), blk('Water barrel', [92, 80, 96, 84], 3, 'barrels'),
@@ -194,7 +218,7 @@ export const MAPS = {
     clutter: [[88, 20, 98, 28], [32, 86, 44, 94], [80, 86, 90, 94], [80, 66, 90, 70], [32, 14, 38, 20], [42, 66, 50, 70]],
     waters: [{ x0: 50, x1: 62, z0: 46, z1: 50 }, { x0: 82, x1: 96, z0: 56, z1: 60 }, { x0: 40, x1: 54, z0: 76, z1: 79 }],
     muds: [{ x0: 34, x1: 92, z0: 24, z1: 70 }],
-    hole: { x0: 48, x1: 52, z0: 2, z1: 2.5 }, spawns: [{ x: 23, z: 94.8 }, { x: 74, z: 94.8 }], catSpawn: { x: 50, z: 8 },
+    hole: { x0: 48, x1: 52, z0: 2, z1: 2.5 }, spawns: [{ x: 23, z: 94.8, name: 'Stable door' }, { x: 74, z: 94.8, name: 'Yard gate', opens: 8 }, { x: 56, z: 94.8, name: 'Muck heap gap', opens: 16 }], catSpawn: { x: 50, z: 8 },
     vias: [{ name: 'Stable aisle', x: 23, z: 50, weight: 1 }, { name: 'Yard', x: 44, z: 41, weight: 1 }],
     foods: [{ name: 'Oats', x: 38, z: 6.5, r: 3.5, amount: 25 }],
     torches: [[2, 50, 1, 0], [28, 40, -1, 0], [98, 50, -1, 0], [50, 2, 0, 1], [50, 58, -1, 0], [78, 58, 1, 0]],
@@ -217,16 +241,20 @@ export const MAPS = {
       blk('Cellar wall', [2, 82, 8, 84], 14, 'stone'), blk('Cellar wall', [16, 82, 38, 84], 14, 'stone'), blk('Cellar wall', [46, 82, 66, 84], 14, 'stone'), blk('Cellar wall', [74, 82, 82, 84], 14, 'stone'),
       blk('Cellar wall', [22, 14, 24, 82], 14, 'stone'), blk('Cellar wall', [58, 14, 60, 82], 14, 'stone'),
       // West storeroom: racks across it, gaps on alternate sides.
-      ...[[2, 22, 16, 24], [8, 32, 22, 34], [2, 42, 16, 44], [8, 52, 22, 54], [2, 62, 16, 64], [8, 72, 22, 74]].map(r => blk('Wine rack', r, 7, 'winerack')),
+      ...[[2, 22, 18, 24], [6, 32, 22, 34], [2, 42, 18, 44], [6, 52, 22, 54], [2, 62, 18, 64], [6, 72, 22, 74]].map(r => blk('Wine rack', r, 7, 'winerack')),
       // The cheese hall: vault pillars and the wheel.
       ...[[28, 22], [52, 22], [28, 38], [52, 38], [28, 56], [52, 56], [28, 70], [52, 70]].map(([x, z]) => blk('Pillar', [x, z, x + 2, z + 2], 8, 'pillar')),
       blk('Cheese wheel', [38, 44, 46, 52], 3, 'cheesewheel'),
+      // The high road (v0.31): boards laid across the west rack tops (straight north over the
+      // zig-zag), and a vault beam down the middle of the hall, over the wheel.
+      ...[[12, 24, 14, 32], [12, 34, 14, 42], [12, 44, 14, 52], [12, 54, 14, 62]].map(r => plank('Rack board', r, 7)),
+      { ...plank('Vault beam', [42, 16, 44, 80], 6.6, 'beam'), hang: 1.4 },
       // East racks: two long racks, three corridors (the far one only open at the top).
       blk('Wine rack', [66, 20, 70, 76], 7, 'winerack'), blk('Wine rack', [74, 26, 78, 82], 7, 'winerack'),
       blk('Barrels', [72, 4, 82, 12], 3, 'barrels'), blk('Barrels', [2, 88, 10, 96], 3, 'barrels'), blk('Crates', [4, 4, 10, 8], 1.6, 'crate'),
     ],
     clutter: [[16, 84, 22, 90], [62, 84, 72, 90], [24, 74, 28, 82], [54, 74, 58, 82], [24, 14, 28, 18], [54, 14, 58, 18], [12, 2, 20, 6], [60, 2, 70, 6], [78, 14, 82, 24]],
-    hole: { x0: 40, x1: 44, z0: 2, z1: 2.5 }, spawns: [{ x: 24, z: 98.8 }, { x: 60, z: 98.8 }], catSpawn: { x: 42, z: 8 },
+    hole: { x0: 40, x1: 44, z0: 2, z1: 2.5 }, spawns: [{ x: 24, z: 98.8, name: 'West steps' }, { x: 60, z: 98.8, name: 'East steps', opens: 8 }, { x: 10, z: 70, name: 'Coal chute', opens: 16, grate: true }], catSpawn: { x: 42, z: 8 },
     vias: [{ name: 'West storeroom', x: 12, z: 48, weight: 1 }, { name: 'Cheese hall', x: 42, z: 60, weight: 1 }, { name: 'East racks', x: 63, z: 50, weight: 1 }],
     foods: [{ name: 'Cheese wheel', x: 42, z: 48, r: 5.5, amount: 60 }],
     torches: [[2, 30, 1, 0], [82, 70, -1, 0], [42, 2, 0, 1], [24, 48, 1, 0], [58, 48, -1, 0], [30, 84, 0, 1]],
@@ -241,7 +269,7 @@ export const MAPS = {
     blurb: 'Narrow passages inside the walls, a short cut through the laundry, ceilings everywhere.',
     twist: 'Servants open and shut the doors on a timer. Mice queue at a shut door, or take another way if it is shorter. Hit a tall shelf until it topples across the corridor.',
     furniture: [
-      ...shell(80, 100, 14, 'plaster', [5, 75]),
+      ...shell(80, 100, 14, 'plaster', [5, 37, 75]),
       roof('Ceiling', [2, 2, 78, 98], 6, 7, 'beams'),
       blk('Room', [8, 8, 34, 30], 14, 'plaster'), blk('Room', [40, 8, 56, 30], 14, 'plaster'), blk('Room', [62, 14, 72, 30], 14, 'plaster'),
       blk('Room', [8, 36, 20, 62], 14, 'plaster'), blk('Room', [26, 36, 34, 62], 14, 'plaster'), blk('Room', [40, 36, 72, 62], 14, 'plaster'),
@@ -251,14 +279,17 @@ export const MAPS = {
       blk('Laundry wall', [40, 70, 42, 76], 14, 'plaster'), blk('Laundry wall', [40, 80, 42, 90], 14, 'plaster'),
       blk('Laundry wall', [42, 88, 72, 90], 14, 'plaster'), blk('Laundry wall', [70, 70, 72, 88], 14, 'plaster'),
       blk('Linen basket', [3, 40, 7, 43], 1.4, 'basket'), blk('Coal scuttle', [73, 20, 77, 23], 1.4, 'bucket'),
+      // Shelves along the middle and west passages, over the timed doors (v0.31): when a door
+      // shuts, the mice go up a broom and along the shelf instead of queueing.
+      plank('Shelf', [34, 40, 36, 58], 3.5, 'shelfboard'), plank('Shelf', [6, 70, 8, 84], 3.5, 'shelfboard'),
     ],
     waters: [{ x0: 48, x1: 54, z0: 78, z1: 82 }, { x0: 60, x1: 66, z0: 74, z1: 78 }],
-    clutter: [[42, 82, 48, 88], [64, 82, 70, 88], [58, 8, 72, 12], [36, 92, 46, 98]],
+    clutter: [[42, 82, 48, 88], [64, 82, 70, 88], [58, 8, 72, 12], [46, 92, 54, 98]],
     doors: [
       { rect: [34, 48, 40, 49], period: 16, offset: 0 }, { rect: [20, 30, 21, 36], period: 18, offset: 6 },
       { rect: [56, 62, 57, 68], period: 14, offset: 3 }, { rect: [2, 76, 8, 77], period: 20, offset: 10 },
     ],
-    hole: { x0: 36, x1: 40, z0: 2, z1: 2.5 }, spawns: [{ x: 5, z: 98.8 }, { x: 75, z: 98.8 }], catSpawn: { x: 37, z: 5 },   // hole on the tile grid (2 tiles)
+    hole: { x0: 36, x1: 40, z0: 2, z1: 2.5 }, spawns: [{ x: 5, z: 98.8, name: 'West stair' }, { x: 75, z: 98.8, name: 'East stair', opens: 8 }, { x: 37, z: 98.8, name: 'Back stair', opens: 16 }], catSpawn: { x: 37, z: 5 },   // hole on the tile grid (2 tiles)
     vias: [{ name: 'West passage', x: 5, z: 50, weight: 1 }, { name: 'Middle passage', x: 37, z: 33, weight: 1 }, { name: 'Laundry', x: 56, z: 79, weight: 1 }],
     torches: [[2, 20, 1, 0], [78, 80, -1, 0], [34, 50, -1, 0], [40, 20, 1, 0], [20, 50, 1, 0], [42, 78, 1, 0]],
     props: [['basket', 5, 1.4, 41.5], ['pot', 76, 1.4, 21]],
@@ -274,6 +305,9 @@ export const MAPS = {
     twist: 'Three ways in, through the scullery, the larder and the bakehouse. The oven, the hearth and the spit burn mice and cats alike.',
     furniture: [
       ...shell(96, 100, 26, 'plaster', [16, 48, 80]),
+      // (v0.31) The kitchen's ceiling (rafters and boards, 3 m up) over every room, for ceiling
+      // traps. Listed first: tables, shelves and the pot rack below it keep their own heights.
+      roof('Kitchen ceiling', [2, 2, 94, 98], 10, 11, 'beams'),
       blk('Kitchen wall', [2, 64, 12, 66], 12, 'plaster'), blk('Kitchen wall', [20, 64, 44, 66], 12, 'plaster'),
       blk('Kitchen wall', [52, 64, 76, 66], 12, 'plaster'), blk('Kitchen wall', [84, 64, 94, 66], 12, 'plaster'),
       blk('Scullery wall', [32, 66, 34, 98], 12, 'plaster'), blk('Bakehouse wall', [62, 66, 64, 98], 12, 'plaster'),
@@ -286,12 +320,13 @@ export const MAPS = {
       blk('Flour sacks', [18, 4, 26, 8], 2.6, 'sacks'), blk('Crates', [56, 90, 62, 96], 1.6, 'crate'),
       blk('Sacks', [36, 90, 42, 96], 2.6, 'sacks'),
       blk('Larder shelves', [34, 70, 36, 88], 7, 'winerack'), blk('Bread racks', [64, 70, 66, 84], 7, 'winerack'),
+      { ...plank('Pot rack', [52, 12, 54, 60], 7, 'beam'), hang: 5 }, plank('High shelf', [52, 10, 70, 12], 7, 'shelfboard'),   // (v0.31) the top layer
     ],
     waters: [{ x0: 6, x1: 12, z0: 78, z1: 82 }, { x0: 20, x1: 26, z0: 84, z1: 88 }],     // the scullery's wash tubs
     clutter: [[10, 2, 16, 6], [54, 2, 62, 6], [78, 2, 90, 6], [2, 66, 10, 72], [24, 90, 32, 98], [52, 90, 56, 96], [66, 66, 74, 70], [78, 18, 88, 22]],
     fires: [{ x: 44, z: 10.5, r: 3 }, { x: 84, z: 91, r: 2.5 }, { x: 48, z: 43, r: 3.2 }],
     foods: [{ name: 'Dropped veg', x: 22, z: 54, r: 3.5, amount: 25 }],
-    hole: { x0: 70, x1: 74, z0: 2, z1: 2.5 }, spawns: [{ x: 16, z: 98.8 }, { x: 48, z: 98.8 }, { x: 80, z: 98.8 }], catSpawn: { x: 72, z: 8 },
+    hole: { x0: 70, x1: 74, z0: 2, z1: 2.5 }, spawns: [{ x: 48, z: 98.8, name: 'Larder door' }, { x: 16, z: 98.8, name: 'Scullery door', opens: 8 }, { x: 80, z: 98.8, name: 'Bakehouse door', opens: 16 }], catSpawn: { x: 72, z: 8 },
     vias: [{ name: 'Scullery door', x: 16, z: 65, weight: 1 }, { name: 'Larder door', x: 48, z: 65, weight: 1 }, { name: 'Bakehouse door', x: 80, z: 65, weight: 1 }],
     torches: [[2, 10, 1, 0], [94, 10, -1, 0], [30, 2, 0, 1], [60, 2, 0, 1], [33, 80, 1, 0], [63, 80, -1, 0], [44, 64, 0, -1]],
     props: [['pot', 5.5, 3.4, 24], ['jug', 5.5, 3.4, 40], ['pot', 5.5, 3.4, 52], ['pot', 90.5, 3.4, 26], ['jug', 90.5, 3.4, 44],
@@ -315,7 +350,7 @@ const TOPS = {
 // opening a shortcut for the rest of the wave. Servants stack them back between waves.
 const CRATES = {
   entrance: [[44, 18, 52, 20]],   // the guard passage
-  market: [[30, 30, 38, 32]],     // across the tavern arch
+  market: [[30, 30, 38, 32], [2, 28, 6, 30]],   // across the tavern arch; (v0.31) a fallen cart in the back alley: drain rats cross the square, under the plank
   passages: [[34, 20, 40, 22]],   // the last stretch of the main passage, before the hall
 };
 // Hand-made furniture routes (low things get them automatically; see buildMap).
@@ -323,13 +358,36 @@ const CRATES = {
 // route is worse (a maze, a blocked lane) or, over the kitchen island, when it's simply
 // the short way. Top traps (Knife Block, Kettle, Spice Jar, a Snapper up there...) catch
 // them up there; a Poison Box anywhere on the run closes it. ladder: draw ladders at the ends.
+// v0.31 layered runs: [x, z, y, look] points (see addLink). The market and stables have a
+// second level, the cellar and kitchen a third (floor, furniture tops, beams and high shelves),
+// the passages go up over their timed doors. Runs cross over the floor lanes below them.
 const LINKS = {
   cellar: [{ name: 'Cheese wheel', a: [42, 53.5], b: [42, 42.5], y: 3, path: [[42, 51.6], [42, 44.4]] },
-           { name: 'Cheese wheel', a: [36.5, 48], b: [47.5, 48], y: 3, path: [[38.4, 48], [45.6, 48]] }],
+           { name: 'Cheese wheel', a: [36.5, 48], b: [47.5, 48], y: 3, path: [[38.4, 48], [45.6, 48]] },
+           // From the coal chute room: up a ladder on to the racks, north along the boards over
+           // the zig-zag, down at the top. (The chute opens at wave 16.)
+           { name: 'Rack tops', a: [12, 69], b: [12, 17], y: 7, path: [[12, 68, 0.2], [13, 63.5, 7, 'ladder'], [13, 22.5], [12, 18.5, 0.2, 'ladder']] },
+           // Up a ladder at the hall's south end, along the vault beam high over the wheel and
+           // the floor lane, down a ladder two thirds of the way along (every high road comes
+           // down well before the hole, so the last stretch is a floor gauntlet for everyone).
+           // Rats like it (fav): the default way in.
+           { name: 'Vault beam', a: [43, 82.5], b: [43, 23.5], y: 6.6, fav: 0.8, path: [[43, 81.5, 0.2], [43, 79.5, 6.6, 'ladder'], [43, 26.5], [43, 24.5, 0.2, 'ladder']] }],
+  market: [{ name: 'Over the crates', a: [27, 69], b: [35, 18.5], y: 3,
+             path: [[27, 68, 0.15], [27, 64.5, 3, 'broom'], [29, 62], [29, 47], [29, 42], [35, 42], [35, 23], [35, 19.5, 0.15, 'broom']] }],
+  passages: [{ name: 'Middle shelf', a: [35, 63], b: [35, 35], y: 3.5, path: [[35, 62, 0.15], [35, 58.5, 3.5, 'broom'], [35, 40.5], [35, 37, 0.15, 'broom']] },
+             { name: 'West shelf', a: [7, 88], b: [7, 66], y: 3.5, path: [[7, 87, 0.15], [7, 84.5, 3.5, 'broom'], [7, 70.5], [7, 67, 0.15, 'broom']] }],
   kitchen: [{ name: 'West worktop', a: [4, 60], b: [4, 12], y: 3.4, path: [[4, 57.6], [4, 14.4]] },
+            // The top level: up a ladder by the larder doorway, north along the pot rack hung
+            // high over the kitchen (the scullery lane crosses under it), down a ladder off its
+            // side well short of the pantry. Rats like it (fav): the default way in.
+            { name: 'Pot rack', a: [53, 63], b: [56.5, 20], y: 7, fav: 0.65, path: [[53, 62, 0.2], [53, 59.5, 7, 'ladder'], [53, 20], [55.5, 20, 0.2, 'ladder']] },
             { name: 'East worktop', a: [92, 60], b: [92, 12], y: 3.4, path: [[92, 57.6], [92, 14.4]] },
             { name: 'Over the table', a: [37, 34], b: [37, 24], y: 3.4, path: [[37, 31.6], [37, 26.4]] }],
-  stables: [{ name: 'Hay loft', a: [23, 88], b: [23, 12], y: 6.2, path: [[23, 85.6], [23, 14.4]], ladder: true }],
+  stables: [{ name: 'Hay loft', a: [23, 88], b: [23, 12], y: 6.2, path: [[23, 85.6], [23, 14.4]], ladder: true },
+            // Up a ladder at the loft's south end, along the loft, out through the loft door along
+            // the beam over the yard lane (the muck heap rats run underneath), down a ladder in
+            // the yard, a good way short of the hole. Rats like it (fav): door 1's way in.
+            { name: 'Loft and beam', a: [21, 90], b: [47, 35.5], y: 6.2, fav: 0.6, path: [[21, 89, 0.2], [21, 86.5, 6.2, 'ladder'], [21, 31], [45.5, 31], [47, 33.5, 0.2, 'ladder']] }],
 };
 // Things that fall over (v0.17). Shelves stand against a wall; knock one over (hit it a few
 // times) and it falls across the corridor, crushing what's under it and blocking the way
@@ -444,10 +502,17 @@ export function buildMap() {
         if (type[i] === T.SOLID && f.kind === 'roof') return;     // roofs don't override walls
         slabBot[i] = f.bot; slabTop[i] = f.top; furn[i] = fi;
         const sideX = x === cx0 || x === cx1 || x === cx0 + 1 || x === cx1 - 1;
-        if (f.legs === 'corners') {
+        if (f.legs === 'none') {
+          // A plank or beam laid across (v0.31): nothing standing in the lane under it.
+        } else if (f.legs === 'corners') {
           // Table / bench: one leg (1x1 unit) in each corner.
           const sideZ = z === cz0 || z === cz1 || z === cz0 + 1 || z === cz1 - 1;
           if (sideX && sideZ) { type[i] = T.SOLID; solid[i] = f.top; }
+        } else if (f.legs === 'west' || f.legs === 'east') {
+          // (v0.31) Posts down one side only (an arcade against a building, a lean-to's open
+          // side): the lane under it stays clear for 2x2 ceiling traps.
+          const edge = f.legs === 'west' ? (x === cx0 || x === cx0 + 1) : (x === cx1 || x === cx1 - 1);
+          if (edge && (z - cz0) % 8 < 2) { type[i] = T.SOLID; solid[i] = f.top; }
         } else if (f.kind === 'over' && sideX && (z - cz0) % 8 < 2) { type[i] = T.SOLID; solid[i] = f.top; }   // colonnade pillars every 4 units
       });
     }
@@ -492,15 +557,27 @@ export function buildMap() {
   const links = [];
   const floorAt = (x, z) => { const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL); if (cx < 1 || cz < 1 || cx >= W - 1 || cz >= H - 1) return -1; const i = cz * W + cx; return miceWalkable(type[i]) && type[i] !== T.HOLE && type[i] !== T.GATE && (slabBot[i] === 0 || slabBot[i] > 2.5) ? i : -1; };   // not under a low table
   const entry = (x, z) => { const out = []; for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) { const i = floorAt(x + dx * CELL, z + dz * CELL); if (i >= 0 && Math.hypot(dx, dz) * CELL <= 0.8) out.push(i); } return out; };
-  const addLink = (name, a, b, y, path, ladder = false) => {
+  // v0.31: a run can change height. Each path point is [x, z] (at the run's height y) or
+  // [x, z, y] or [x, z, y, look]: up a broom, along a shelf, over a plank bridge, down a sack
+  // pile. look says what the stretch arriving at that point is drawn as ('broom', 'plank',
+  // 'ladder', 'rope'; none = it's on furniture that's already there). A run that starts or
+  // ends on the floor (y under 0.6, the foot of a broom) costs almost nothing to get onto.
+  // fav (v0.31): under 1 = rats like this run (high, out of the way) and take it over a floor
+  // route that's up to about 1/fav as long. 1 = only when it's really the shorter way.
+  const addLink = (name, a, b, y, path, ladder = false, fav = 1) => {
     const ia = floorAt(a[0], a[1]), ib = floorAt(b[0], b[1]); if (ia < 0 || ib < 0) return;
-    let len = 0, prev = a; const cells = new Set();
-    for (const q of [...path, b]) {
-      const n = Math.ceil(Math.hypot(q[0] - prev[0], q[1] - prev[1]) / 0.25);
-      for (let k = 0; k <= n; k++) { const x = prev[0] + (q[0] - prev[0]) * k / n, z = prev[1] + (q[1] - prev[1]) * k / n, cx = Math.floor(x / CELL), cz = Math.floor(z / CELL); if (type[cz * W + cx] === T.SOLID || slabTop[cz * W + cx] > 0) cells.add(cz * W + cx); }
-      len += Math.hypot(q[0] - prev[0], q[1] - prev[1]); prev = q;
+    const pts = path.map(p => [p[0], p[1], p[2] ?? y, p[3] || null]);
+    let len = 0, flat = 0, climb = 0, prev = [a[0], a[1], 0]; const cells = new Set();
+    for (const q of [...pts, [b[0], b[1], 0]]) {
+      const n = Math.max(1, Math.ceil(Math.hypot(q[0] - prev[0], q[1] - prev[1]) / 0.25));
+      for (let k = 0; k <= n; k++) {
+        const x = prev[0] + (q[0] - prev[0]) * k / n, z = prev[1] + (q[1] - prev[1]) * k / n, yy = prev[2] + (q[2] - prev[2]) * k / n, cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+        const j = cz * W + cx;   // what it runs on, at that height (a Poison Box up there closes the run)
+        if (yy > 0.5 && ((type[j] === T.SOLID && Math.abs(solid[j] - yy) < 0.8) || (slabTop[j] > 0 && Math.abs(slabTop[j] - yy) < 0.8))) cells.add(j);
+      }
+      len += Math.hypot(q[0] - prev[0], q[1] - prev[1], q[2] - prev[2]); flat += Math.hypot(q[0] - prev[0], q[1] - prev[1]); climb += Math.abs(q[2] - prev[2]); prev = q;
     }
-    links.push({ id: links.length, name, a, b, y, path, ladder, cellA: ia, cellB: ib, entryA: entry(a[0], a[1]), entryB: entry(b[0], b[1]), len, cells: [...cells] });
+    links.push({ id: links.length, name, a, b, y, path, pts, ladder, flat, climb, fav, rampA: pts[0][2] < 0.6, rampB: pts[pts.length - 1][2] < 0.6, cellA: ia, cellB: ib, entryA: entry(a[0], a[1]), entryB: entry(b[0], b[1]), len, cells: [...cells] });
   };
   FURNITURE.forEach(f => {
     if (f.kind !== 'solid' || f.h > 1.8 || f.h < 0.5) return;
@@ -513,7 +590,7 @@ export function buildMap() {
       else { const z = z0 + d * t; addLink(f.name, [x0 - 1, z], [x1 + 1, z], f.h, [[x0 + 0.25, z], [x1 - 0.25, z]]); }
     }
   });
-  for (const l of MAP.links || []) addLink(l.name, l.a, l.b, l.y, l.path, !!l.ladder);
+  for (const l of MAP.links || []) addLink(l.name, l.a, l.b, l.y, l.path, !!l.ladder, l.fav || 1);
   return { type, solid, slabBot, slabTop, furn, covered, wallDir, bigOk, forest, mud, door, links };
 }
 

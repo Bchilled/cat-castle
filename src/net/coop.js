@@ -145,6 +145,7 @@ export function snapshot(sim) {
 
 // Apply a snapshot to the guest's mirror sim (reusing objects so the renderer's smoothing keeps working).
 export function applySnapshot(sim, s, localId = null) {
+  if (s.phase !== sim.phase || s.wave !== sim.wave) { sim.routeCache = null; sim.doorsOpen = sim.doorsOpen.map((_, k) => sim.doorOpensAt(k) <= s.wave); }   // doors open by wave (v0.31)
   Object.assign(sim, { phase: s.phase, wave: s.wave, phaseTimer: s.phaseTimer >= 1e9 ? Infinity : s.phaseTimer, lives: s.lives, sardines: s.sardines, yarn: s.yarn, time: s.time, trinkets: s.trinkets, rating: s.rating });
   sim.stats.kills = s.kills; sim.stats.combos = s.combos;
   if (s.gate.up !== sim.gate.up) { sim.gate.up = s.gate.up; sim.flowDirty = true; }

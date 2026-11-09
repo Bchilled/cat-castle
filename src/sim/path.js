@@ -52,7 +52,9 @@ let heap = null;   // reused between calls (no garbage)
 // links: furniture routes (map.links that are open): reaching one end costs LINK_CLIMB twice
 // (up and down) plus the distance over the top.
 export const LINK_CLIMB = 6;
-export const linkCost = (L) => LINK_CLIMB * 2 + L.len / CELL;
+// Getting onto a run costs a climb at each end, except where it starts or ends at the foot of a
+// broom or a ramp (rats just run up those).
+export const linkCost = (L) => (L.rampA ? 1 : LINK_CLIMB) + (L.rampB ? 1 : LINK_CLIMB) + (L.fav || 1) * ((L.flat ?? L.len) + (L.climb || 0) * 0.5) / CELL;   // rats climb quickly; fav = a run they like
 export function computeFlow(map, { goals, pass = (i) => miceWalkable(map.type[i]), extra = () => 0, blocked = () => false, wall = () => false, links = null }) {
   const N = W * H, dist = new Float32Array(N).fill(Infinity);
   const okA = new Uint8Array(N), openA = new Uint8Array(N), cost = new Float32Array(N), type = map.type;

@@ -171,7 +171,14 @@ export class Hud {
     }
     // Labels: exit X, spawn Y.
     c.font = 'bold 11px sans-serif'; c.fillStyle = '#ff5a3a'; c.fillText('X', this.rx((HOLE.x0 + HOLE.x1) / 2) - 4, this.rz(HOLE.z1) + 12);
-    c.fillStyle = '#b48aff'; SPAWNS.forEach(sp => c.fillText('Y', this.rx(sp.x) - 4, this.rz(sp.z) - 2));
+    // (v0.31) Doors: open ones purple Y; the one opening next wave pulses orange "!"; shut ones a
+    // dim grey bar (boarded up).
+    SPAWNS.forEach((sp, k) => {
+      const x = this.rx(sp.x), z = this.rz(sp.z), open = !sim.doorsOpen || sim.doorsOpen[k], warn = !open && sim.doorShown && sim.doorShown(k);
+      if (open) { c.fillStyle = '#b48aff'; c.fillText('Y', x - 4, z - 2); }
+      else if (warn) { c.fillStyle = Math.floor(performance.now() / 300) % 2 ? '#ff9a2a' : '#ffd060'; c.fillText('!', x - 2, z - 2); }
+      else { c.fillStyle = '#6a6460'; c.fillRect(x - 5, z - 6, 10, 3); }
+    });
   }
 
   message(text) { $('msg').textContent = text; $('msg').classList.add('show'); this.msgT = 2.5; }

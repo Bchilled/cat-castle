@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.31.0 — 2026-11-08
+Traps fit the map, more doors as the waves build, and high roads over the floor.
+- **Ceiling traps are fixed to the ceiling, and they act all the way to the floor**, like Orcs Must Die:
+  - They sit flush on the real ceiling in an iron frame over the tiles they hit. The iron rod from 0.30 is gone.
+  - They're built at full size (a 2×2-tile trap is 1.2 m across).
+  - What they do reaches the floor:
+    - the Bug Zapper fires bolts all the way down
+    - the bucket's water and the salt pour down in a stream
+    - honey runs down in a strand
+    - pans and the flower pot fall the whole way
+    - bubbles drift down
+    - flypaper ribbons hang to just above the floor
+  - A ceiling trap can't straddle two ceiling heights (half under a plank and half under a roof).
+- **New trap: the Meat Tenderizer** (ceiling, 2×2 tiles, 85). An iron press set in the ceiling. It slams the whole way down on everything under it, knocks survivors flat (bosses just take the hit), then winches back up.
+  - Upgrades: Spiked Face (+40% damage, survivors bleed) or Steam Piston (resets twice as fast).
+  - Unlock: 8 paw prints.
+- **Ceilings over the lanes on every map**, so floor, wall and ceiling traps all work along the routes. Before, the market, stables and kitchen routes had almost no ceiling a trap could go on.
+  - **Entrance:** a covered way over the east lane, and a woodshed over the path from the breach. The colonnade's pillars now stand on the armoury side only, so the lane under it takes 2×2 traps.
+  - **Market:** the upper floors jut out over both alleys in from the south, and over the east and back lanes.
+  - **Stables:** lean-to roofs off both sides of the barn, a cart shed and a feed shed in the north yard.
+  - **Kitchen:** a timber ceiling 3 m up over every room.
+  - Now every door's floor route has ceiling-trap spots over 26% to 96% of it, where it was 0–14% on four maps.
+- **Ceilings you can see:**
+  - Roofs no longer fade out while you stand under them; they fade only if the camera pokes into one. That fade was why the tavern arch looked like a black void with traps floating in it.
+  - Bounce light from the floor lights ceilings and undersides.
+  - Big room ceilings no longer throw shadow over the whole room.
+- **Late doors.** Every map starts with one way in. A second opens on wave 8 and a third on wave 16, so it gets harder as the waves build.
+  - Shut doorways are boarded up floor to lintel; drains are chained-down grates.
+  - The wave before a door opens, its route shows on the floor, the minimap marks it with a pulsing "!", the boards rattle and dust falls, and you hear banging.
+  - On its wave it bursts open (the grate is flung back) with a crash.
+  - Indoors, every doorway in the south wall now has a lintel and posts, so it reads as a door.
+  - The doors:
+    - Entrance: west road; east road at wave 8; the courtyard drain at wave 16.
+    - Market: west alley; east alley; the back alley drain.
+    - Stables: stable door; yard gate; muck heap gap.
+    - Cellar: west steps; east steps; the coal chute.
+    - Passages: west stair; east stair; back stair.
+    - Kitchen: larder door; scullery door; bakehouse door.
+- **High roads (layered paths).** On every map but the first, rats run up off the floor and along over it.
+  - The market and stables have a second level; the cellar and kitchen a third; the passages vary.
+  - The ways up: brooms leant against the crates and shelves, ladders, planks, beams, high shelves and the kitchen pot rack.
+  - Each is drawn as what it is (broom, ladder, plank, beam on hangers, shelf on brackets, pot rack with pots).
+  - Where the rats take them by default:
+    - Market: the first door's rats go up a broom and over the crates on planks. The drain rats cross the square underneath, because a fallen cart blocks the back alley.
+    - Stables: up the loft ladder, along the loft, out through the loft door on a beam over the yard lane. The muck heap rats run underneath.
+    - Cellar: up a ladder onto the vault beam, high over the hall and the cheese wheel. The coal chute rats go over the wine-rack tops.
+    - Kitchen: up a ladder onto the pot rack. The scullery lane runs underneath.
+    - Passages: up a broom onto the shelves over the timed doors when a door is shut.
+  - Every high road comes down well before the hole, so the last stretch is a floor gauntlet for everyone.
+  - Top traps fit up there, and a Poison Box on a run sends them back to the floor.
+  - Under the hood: runs follow 3D paths. Climbing is quick; ladders are slower. Rats prefer some runs (the fav setting).
+- Fixed: a rat knocked off a high road onto a crate stack walked on the spot forever. It now steps out to clear floor.
+- Removed: ceiling traps hanging on rods (`CEIL_HANG`), and roofs fading when you stand under them.
+- Files:
+  - `src/sim/map.js`: plank helper (52–54); the entrance's covered way, woodshed and colonnade (109–114); the doors per map (134–136, 180, 196, 257, 272, 292, 329).
+  - `src/sim/map.js`: market roofs and spawns (155–158, 172–174); stables beam, roofs and sheds (205–221); cellar racks and beam (244–251); passages shelves (282–287); kitchen ceiling and pot rack (308–310, 323).
+  - `src/sim/map.js`: the market cart (353); runs (361–390); one-side posts (505–515); 3D runs and fav (560–593).
+  - `src/sim/path.js`: run cost (55–57).
+  - `src/sim/sim.js`: door state (161, 175–176, 258, 334–338); routes with doors and 3D runs (475–480, 493–497, 506); one flat ceiling (554); traps flush on the ceiling (593); doors open and warn (692–698, 725–735).
+  - `src/sim/sim.js`: out of a crate stack (2064–2070); 3D run walking (2200–2226); Meat Tenderizer (2628–2644).
+  - `src/net/coop.js`: guests' door state (148).
+  - `src/render/models.js`: ceiling mount (9, 283–294); Bug Zapper and Meat Tenderizer (348–378); pot, bucket, salt and flypaper (477–521); honey (555–567); chandelier rose (584); pans (643–655); bubbles (689–698).
+  - `src/render/models.js`: colonnade (962); shed posts and ceilings that don't cast shadow (1030–1036); plank, beam and shelf (1080–1114).
+  - `src/render/scene.js`: imports and sizes (11, 31); bounce light (51–54); doors (179–221); no-shadow ceilings (277); runs drawn (396–430); door states each frame (499–522); flush placement (608–622); press and pour (629–642).
+  - `src/render/scene.js`: trap effects (826–863); per-frame press, honey and pours (1193–1214); roof fade (1252–1259).
+  - `src/audio/sfx.js`: press and door sounds (342–347).
+  - `src/ui/hud.js`: minimap doors (174–181).
+  - `src/ui/icons.js`: ceiling-trap icons (22–27).
+  - `src/config.js`: VERSION (8), Meat Tenderizer (370–380), upgrades (423).
+  - `src/meta/profile.js`: unlock (15).
+  - `README.md` (42–48); `ROADMAP.md` (12).
+  - `tests/sim-test.mjs` (4–7, 25–26, 38, 977–1064).
+
+Tests: 304 sim checks pass. New checks cover: late doors; high roads taken by default, with the crossings, top traps and Poison Box; every route under ceilings; flush ceiling traps; the Meat Tenderizer; one flat ceiling.
+
+Balance: the new-player bot (starter traps, no upgrades), compared on the same seeds against 0.30:
+- kitchen: reaches wave 24, was wave 18
+- cellar: about the same (wins one seed)
+- stables, market, passages: level
+- entrance: one wave earlier (23, was 24)
+
+Its losses are cat deaths and boss leaks in the late waves, as before; no mouse leaks.
+
+In the browser: ceiling traps checked at rest and mid-hit on the market, kitchen and cellar; doors checked shut, warning and open; runs checked on every map. No errors.
+
 ## 0.30.0 — 2026-11-08
 Real models, real light, new layouts, and cats that move like cats.
 - **Built from a 3D model kit**, not boxes. Every map's walls, floors, buildings, barrels, crates, kegs, sacks, tables, benches, banners, shelves and lanterns now use the KayKit castle packs by Kay Lousberg (free to use, CC0).

@@ -12,7 +12,7 @@ const KEY = 'catcastle.profile';
 
 // Unlock prices in paw prints (starters are free). Pricier = stronger or more specialised.
 export const UNLOCK = {
-  traps: { glove: 6, bucket: 5, oilslick: 5, flypaper: 5, hotplate: 8, icetray: 8, bellows: 8, flowerpot: 8, candle: 10, hypno: 10, forkdarts: 10, rollingpin: 10, salt: 10, skull: 14, honey: 6, magnifier: 10, knifeblock: 12, trapdoor: 14, cuckoo: 7, spicejar: 8, kettle: 10, chandelier: 14, stickyjam: 6, pincushion: 6, catapult: 10, pans: 10, cord: 5, firecracker: 8, bubbles: 8, wheel: 10, peg: 10 },
+  traps: { glove: 6, bucket: 5, oilslick: 5, flypaper: 5, hotplate: 8, icetray: 8, bellows: 8, flowerpot: 8, candle: 10, hypno: 10, forkdarts: 10, rollingpin: 10, salt: 10, skull: 14, honey: 6, magnifier: 10, knifeblock: 12, trapdoor: 14, cuckoo: 7, spicejar: 8, kettle: 10, chandelier: 14, stickyjam: 6, pincushion: 6, catapult: 10, pans: 10, cord: 5, firecracker: 8, bubbles: 8, wheel: 10, peg: 10, tenderizer: 8 },
   items: { catnip: 5, flea: 6, squeaky: 6, bell: 6, pistol: 5, matches: 7, holy: 8 },
 };
 export const HATS = {

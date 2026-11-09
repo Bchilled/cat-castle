@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.30.0';
+export const VERSION = '0.31.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -367,13 +367,17 @@ export const TRAPS = {
   cord:      { el: 'electric', name: 'Frayed Cord', desc: 'A frayed lamp cord across the floor. Jolts everything on it twice a second; wet mice pass the shock on to their friends.', cost: 30, surface: 'floor', size: [8, 4], damage: 4, pathCost: 0 },
   peg:       { el: 'physical', name: 'Clothes Peg', desc: 'A giant sprung clothes peg. Clamps the biggest mouse that steps in, even a Fat Rat or a boss, and squeezes it while it is held.', cost: 65, surface: 'floor', size: [4, 4], hold: 2.5, dps: 20, cooldown: 6, pathCost: 0 },
   bubbles:   { el: 'water', name: 'Soap Bubbles', desc: 'A bubble pipe on the ceiling. Blows bubbles round the mice underneath: they float helplessly for 2 s, out of reach of everything, then drop soaked.', cost: 55, surface: 'ceiling', size: [8, 8], radius: 2, cooldown: 4, float: 2, maxHits: 3, pathCost: 0 },
+  // ---- new in 0.31 ----
+  // A press set in the ceiling (the meat hammer): slams the whole way down to the floor on its
+  // 2x2 tiles, knocks survivors flat, winches back up. The ceiling trap that reads from the floor.
+  tenderizer:{ el: 'physics', name: 'Meat Tenderizer', desc: 'A studded iron press set in the ceiling. Slams all the way down to the floor on everything underneath, knocks survivors flat, then winches back up.', cost: 85, surface: 'ceiling', size: [8, 8], damage: 110, cooldown: 3.5, radius: 2, pathCost: 0 },
   glove:     { el: 'physics', name: 'Boxing Glove', desc: "Spring-loaded wall punch. Knocks small mice across the lane, dazes the big ones.",  cost: 70,  surface: 'wall',    size: [4, 1], cooldown: 3, reach: 4, push: 10, damage: 15, bigStun: 1.2, pathCost: 0 },   // OMD push trap
 };
 // Trap bar order = keys 1..8.
 export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove', 'bait',
   'hotplate', 'icetray', 'oilslick', 'rollingpin', 'skull', 'forkdarts', 'bellows', 'candle', 'hypno', 'flowerpot', 'bucket', 'salt', 'flypaper',
   'trapdoor', 'magnifier', 'knifeblock', 'honey', 'cuckoo', 'chandelier', 'kettle', 'spicejar',
-  'stickyjam', 'pincushion', 'catapult', 'pans', 'firecracker', 'wheel', 'cord', 'peg', 'bubbles'];
+  'stickyjam', 'pincushion', 'catapult', 'pans', 'firecracker', 'wheel', 'cord', 'peg', 'bubbles', 'tenderizer'];
 
 // Trap upgrades, bought in the shop with paw prints (kept between runs).
 // Tier 2: more power (damage/effect x1.25). Tier 3: resets 20% faster. Then pick one of two
@@ -416,6 +420,7 @@ export const SPECIALS = {
   pincushion: { a: { name: 'Hat Pins', desc: 'Two bleeds per jab.', set: { stacks: 2 } }, b: { name: 'Needle Burst', desc: 'Every 6 s it fires pins at every mouse within 2.5.', set: { burst: 6 } } },
   catapult:   { a: { name: 'Ladle', desc: 'Lobs big mice too, and they splash 50% harder.', mul: { splash: 1.5 }, set: { big: true } }, b: { name: 'Soup Spoon', desc: 'Hot soup: the landing sets everything there burning.', set: { hot: true } } },
   pans:       { a: { name: 'Cast Iron', desc: '+60% damage.', mul: { damage: 1.6 } }, b: { name: 'Pan Rack', desc: 'Drops three pans on three mice.', set: { count: 3 } } },
+  tenderizer: { a: { name: 'Spiked Face', desc: '+40% damage, and survivors bleed.', mul: { damage: 1.4 }, set: { bleed: 2 } }, b: { name: 'Steam Piston', desc: 'Winches back up twice as fast.', mul: { cooldown: 0.5 } } },
   firecracker:{ a: { name: 'Cherry Bomb', desc: 'A 50% wider blast.', mul: { radius: 1.5 } }, b: { name: 'String of Crackers', desc: 'Three bangs in a row instead of one (each 60% as hard).', set: { bangs: 3 } } },
   wheel:      { a: { name: 'Dynamo', desc: 'Nearby traps reset three times as fast, and the runner gets zapped.', set: { power: 3, zap: true } }, b: { name: 'Big Wheel', desc: 'Two runners at once, held 50% longer.', mul: { hold: 1.5 }, set: { runners: 2 } } },
   cord:       { a: { name: 'Live Wire', desc: 'Twice the shock.', mul: { damage: 2 } }, b: { name: 'Puddle Cord', desc: 'It lies in a puddle: mice on it get wet first, so every jolt chains.', set: { wet: true } } },

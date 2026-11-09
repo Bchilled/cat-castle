@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { CELL } from '../sim/map.js';
 import { tmat } from './textures.js';
-import { CATS } from '../config.js';
+import { CATS, TRAPS } from '../config.js';
 
 const matCache = new Map();
 // Flat-shaded matte material, cached so identical colours share one material.
@@ -280,6 +280,18 @@ export function makeTrap(kind, ghost = false) {
     const l = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), new THREE.MeshBasicMaterial({ color: 0x5ee06a }));
     l.position.set(x, y, z); add(l); g.userData.lamp = l;
   };
+  // (v0.31) Ceiling traps are built at their real footprint (the renderer doesn't stretch
+  // them) and bolted flush to the ceiling: a dark backing plate with an iron frame round the
+  // trap's tiles, so it reads as fitted to the ceiling right over the tiles it hits.
+  // y = 0 is the ceiling; everything hangs below. Returns the footprint [W, D] in units.
+  const ceilMount = () => {
+    const [cw, cd] = TRAPS[kind].size, W = cw * CELL, D = cd * CELL;
+    B(0x2e2a26, 0, -0.04, 0, W * 0.96, 0.08, D * 0.96);
+    for (const sz of [-1, 1]) B(0x1a1816, 0, -0.1, sz * D * 0.46, W * 0.96, 0.08, 0.12);
+    for (const sx of [-1, 1]) B(0x1a1816, sx * W * 0.46, -0.1, 0, 0.12, 0.08, D * 0.96);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) P(cyl(0.07, 0.07, 0.05, 6), 0x8a8478, sx * W * 0.43, -0.15, sz * D * 0.43);
+    return [W, D];
+  };
   if (kind === 'barricade') {
     // Poison Box: a big cardboard crate of rat poison, a full tile, green labels with a
     // skull and crossbones on every side, taped lid. Shrinks as it gets chewed.
@@ -333,13 +345,37 @@ export function makeTrap(kind, ghost = false) {
     g.userData.drum = drum;
     lamp(h - 0.15, 1.15, -0.15);
   } else if (kind === 'zapper') {
-    // Hangs from the underside of a roof; a big blue bug zapper on a chain.
-    B(0x2f2c29, 0, -0.25, 0, 0.05, 0.5, 0.05);
-    B(0x3a4458, 0, -0.75, 0, 0.8, 0.55, 0.8);
-    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.7), new THREE.MeshBasicMaterial({ color: 0x6fb8ff }));
-    glow.position.y = -0.78; add(glow); g.userData.glow = glow;
-    lamp(0, -1.12, 0);
-  } else if (kind === 'gluepad') {
+    // (v0.31) A big bug zapper set flush into the ceiling: an iron cage round a glowing blue
+    // tube block, grid wires on every side. It fires bolts the whole way down to the floor.
+    const [W, D] = ceilMount();
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) B(0x24221f, sx * W * 0.33, -0.55, sz * D * 0.33, 0.09, 0.95, 0.09);   // cage posts
+    B(0x3a3632, 0, -0.2, 0, W * 0.72, 0.2, D * 0.72);                                                                     // housing
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(W * 0.56, 0.55, D * 0.56), new THREE.MeshBasicMaterial({ color: 0x6fb8ff }));
+    glow.position.y = -0.62; add(glow); g.userData.glow = glow;
+    for (let k = -3; k <= 3; k++) for (const sd of [-1, 1]) {                                                             // the grid wires
+      B(0x9aa8b8, k * W * 0.09, -0.62, sd * D * 0.31, 0.025, 0.6, 0.025); B(0x9aa8b8, sd * W * 0.31, -0.62, k * D * 0.09, 0.025, 0.6, 0.025);
+    }
+    B(0x24221f, 0, -1.0, 0, W * 0.72, 0.08, D * 0.72);                                                                    // drip tray
+    lamp(W * 0.42, -0.2, D * 0.42);
+  } else if (kind === 'tenderizer') {
+    // (v0.31) The Meat Tenderizer: an iron press housed in the ceiling. A piston drives the
+    // studded head all the way down to the floor (the renderer stretches the rod), then it
+    // winches back up. Head at rest: bottom 2.3 below the ceiling.
+    const [W, D] = ceilMount();
+    B(0x3a3632, 0, -0.32, 0, W * 0.72, 0.5, D * 0.72);                                        // housing
+    for (const sx of [-1, 1]) B(0xc89a2a, sx * W * 0.36, -0.32, 0, 0.04, 0.3, D * 0.6);      // brass trim
+    P(cyl(0.38, 0.38, 0.45, 12), 0x2a2826, 0, -0.78, 0);                                      // sleeve
+    const rod = P(cyl(0.2, 0.2, 1, 10), 0xa8a8b0, 0, -1, 0); g.userData.rod = rod;             // piston (scaled by the renderer)
+    const head = new THREE.Group(); head.position.y = -1.6; add(head); g.userData.head = head;
+    head.add(part(BOX, 0x4a4642, 0, 0, 0, W * 0.86, 0.7, D * 0.86, !ghost));
+    head.add(part(BOX, 0x6a6560, 0, 0.38, 0, W * 0.7, 0.08, D * 0.7, false));
+    for (const sz of [-1, 1]) for (let k = 0; k < 6; k++) head.add(part(BOX, k % 2 ? 0x1a1a1a : 0xe0b020, (k - 2.5) * W * 0.14, 0, sz * D * 0.432, W * 0.14, 0.18, 0.02, false));   // hazard band
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) {                                  // the tenderizer face: pyramid studs
+      const st = part(new THREE.ConeGeometry(0.26, 0.3, 4), 0x2e2c2a, (i - 2) * W * 0.17, -0.5, (j - 2) * D * 0.17, 1, 1, 1, false);
+      st.rotation.x = Math.PI; st.rotation.y = Math.PI / 4; head.add(st);
+    }
+    lamp(W * 0.42, -0.2, D * 0.42);
+  } else if (kind === 'gluepad') {  } else if (kind === 'gluepad') {
     B(0xd8c24a, 0, 0.02, 0, S * 0.96, 0.04, S * 0.96);
     const goo = new THREE.Mesh(new THREE.PlaneGeometry(S * 0.86, S * 0.86), new THREE.MeshLambertMaterial({ color: 0xe9df8a, transparent: true, opacity: 0.8 }));
     goo.rotation.x = -Math.PI / 2; goo.position.y = 0.045; add(goo); g.userData.goo = goo;
@@ -438,39 +474,51 @@ export function makeTrap(kind, ghost = false) {
     const rim = new THREE.Mesh(new THREE.TorusGeometry(0.63, 0.04, 6, 32), mat(0x6a3a8a)); wheel.add(rim);
     lamp(h - 0.15, 1.2, -0.12);
   } else if (kind === 'flowerpot') {
-    // A terracotta pot on a hook. Drops when mice pass underneath; a new one is hung while it resets.
-    B(0x3a3632, 0, -0.25, 0, 0.04, 0.5, 0.04);
-    const pot = new THREE.Group(); pot.position.y = -0.85; add(pot); g.userData.pot = pot;
-    pot.add(part(cyl(0.42, 0.3, 0.6, 12), 0xc8643a, 0, 0, 0, 1, 1, 1, !ghost));
-    pot.add(part(cyl(0.38, 0.38, 0.04, 12), 0x4a3020, 0, 0.29, 0, 1, 1, 1, false));
-    for (let k = 0; k < 5; k++) { const lf = part(new THREE.ConeGeometry(0.08, 0.4, 4), 0x4a8a3a, Math.cos(k * 1.3) * 0.15, 0.48, Math.sin(k * 1.3) * 0.15, 1, 1, 1, false); lf.rotation.z = Math.cos(k * 1.3) * 0.4; pot.add(lf); }
-    lamp(0.35, -0.25, 0);
+    // A terracotta pot on a bracket screwed to the ceiling. Drops when mice pass underneath (it
+    // falls the whole way); a new one is hung while it resets.
+    const [W, D] = ceilMount();
+    B(0x2a2826, 0, -0.35, 0, 0.08, 0.6, 0.08); B(0x2a2826, 0, -0.62, 0, 0.5, 0.06, 0.06);
+    const pot = new THREE.Group(); pot.position.y = -1.05; add(pot); g.userData.pot = pot;
+    pot.add(part(cyl(0.45, 0.32, 0.65, 12), 0xc8643a, 0, 0, 0, 1, 1, 1, !ghost));
+    pot.add(part(cyl(0.41, 0.41, 0.04, 12), 0x4a3020, 0, 0.31, 0, 1, 1, 1, false));
+    for (let k = 0; k < 5; k++) { const lf = part(new THREE.ConeGeometry(0.09, 0.45, 4), 0x4a8a3a, Math.cos(k * 1.3) * 0.15, 0.52, Math.sin(k * 1.3) * 0.15, 1, 1, 1, false); lf.rotation.z = Math.cos(k * 1.3) * 0.4; pot.add(lf); }
+    for (const sx of [-1, 1]) B(0x2a2826, sx * 0.25, -0.75, 0, 0.03, 0.3, 0.03);
+    lamp(W * 0.38, -0.2, D * 0.38);
   } else if (kind === 'bucket') {
-    // A wooden bucket on a pivot, full of water, that tips over the mice below.
-    B(0x3a3632, 0, -0.2, 0, 0.04, 0.4, 0.04);
-    const tip = new THREE.Group(); tip.position.y = -0.45; add(tip); g.userData.tip = tip;
-    tip.add(part(cyl(0.42, 0.34, 0.6, 12), 0x8a6a48, 0, -0.3, 0, 1, 1, 1, !ghost));
-    for (const y of [-0.1, -0.45]) { const band = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.025, 4, 20), mat(0x5a5a5a)); band.rotation.x = Math.PI / 2; band.position.y = y; tip.add(band); }
-    const water = new THREE.Mesh(new THREE.CircleGeometry(0.37, 16), mat(0x3a7ad8)); water.rotation.x = -Math.PI / 2; water.position.y = -0.04; tip.add(water);
-    lamp(0.35, -0.25, 0);
+    // A big wooden tub hung in an iron yoke from the ceiling. It tips and the water falls the
+    // whole way to the floor.
+    const [W, D] = ceilMount();
+    for (const sx of [-1, 1]) B(0x2a2826, sx * 1.0, -0.5, 0, 0.1, 0.9, 0.14);                 // yoke arms
+    const tip = new THREE.Group(); tip.position.y = -0.95; add(tip); g.userData.tip = tip;
+    const ax = P(cyl(0.06, 0.06, 2.1, 6), 0x2a2826, 0, -0.95, 0); ax.rotation.z = Math.PI / 2;
+    tip.add(part(cyl(0.9, 0.72, 1.1, 14), 0x8a6a48, 0, -0.35, 0, 1, 1, 1, !ghost));
+    for (const y of [-0.05, -0.65]) { const band = new THREE.Mesh(new THREE.TorusGeometry(y > -0.3 ? 0.88 : 0.8, 0.035, 4, 24), mat(0x4a4a4a)); band.rotation.x = Math.PI / 2; band.position.y = y; tip.add(band); }
+    const water = new THREE.Mesh(new THREE.CircleGeometry(0.84, 18), mat(0x3a7ad8)); water.rotation.x = -Math.PI / 2; water.position.y = 0.16; tip.add(water);
+    lamp(W * 0.42, -0.2, D * 0.42);
   } else if (kind === 'salt') {
-    // A giant salt shaker hanging cap-down, sprinkling blessed salt.
-    const sh = new THREE.Group(); sh.position.y = -0.2; add(sh); g.userData.shaker = sh;
-    sh.add(part(cyl(0.3, 0.3, 0.8, 12), 0xe8f0f4, 0, -0.45, 0, 1, 1, 1, !ghost));
-    sh.add(part(cyl(0.26, 0.26, 0.55, 12), 0xffffff, 0, -0.5, 0, 1, 1, 1, false));
-    sh.add(part(cyl(0.31, 0.25, 0.22, 12), 0xb8b8c0, 0, -0.95, 0, 1, 1, 1, !ghost));
-    lamp(0.4, -0.25, 0);
+    // A giant salt shaker hung cap-down from the ceiling; blessed salt rains the whole way down.
+    const [W, D] = ceilMount();
+    B(0x2a2826, 0, -0.2, 0, 0.06, 0.3, 0.06);
+    const sh = new THREE.Group(); sh.position.y = -0.35; add(sh); g.userData.shaker = sh;
+    sh.add(part(cyl(0.6, 0.6, 1.5, 14), 0xe8f0f4, 0, -0.8, 0, 1, 1, 1, !ghost));
+    sh.add(part(cyl(0.55, 0.55, 1.0, 14), 0xffffff, 0, -0.85, 0, 1, 1, 1, false));
+    sh.add(part(cyl(0.62, 0.5, 0.4, 14), 0xb8b8c0, 0, -1.72, 0, 1, 1, 1, !ghost));
+    for (let k = 0; k < 7; k++) { const a = k * 0.9, r = k ? 0.28 : 0; sh.add(part(cyl(0.04, 0.04, 0.02, 5), 0x3a3a40, Math.cos(a) * r, -1.93, Math.sin(a) * r, 1, 1, 1, false)); }
+    lamp(W * 0.42, -0.2, D * 0.42);
   } else if (kind === 'flypaper') {
-    // Sticky yellow strips hanging off little rolls, a few unlucky flies stuck on.
-    const strips = new THREE.Group(); add(strips); g.userData.strips = strips;
-    for (let k = 0; k < 4; k++) {
-      const x = (k % 2 - 0.5) * 1.1, z = (Math.floor(k / 2) - 0.5) * 1.1;
-      P(cyl(0.06, 0.06, 0.2, 6), 0x8a6a40, x, -0.1, z);
-      const st = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 1.4), new THREE.MeshLambertMaterial({ color: 0xe8d050, side: THREE.DoubleSide, transparent: ghost, opacity: ghost ? 0.5 : 1 }));
-      st.position.set(x, -0.9, z); st.rotation.y = k * 0.8; strips.add(st);
-      for (let f = 0; f < 3; f++) { const fly = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 3), mat(0x111111)); fly.position.set(x + (f - 1) * 0.05, -0.5 - f * 0.3, z); strips.add(fly); }
+    // Sticky yellow ribbons off rolls on two rails along the ceiling. They hang almost to the
+    // floor (the renderer sets their length from the ceiling height), flies stuck on.
+    const [W, D] = ceilMount();
+    const strips = new THREE.Group(); add(strips); g.userData.strips = strips; g.userData.flies = [];
+    for (const sz of [-1, 1]) B(0x5a4a3a, 0, -0.14, sz * D * 0.25, W * 0.85, 0.1, 0.1);
+    for (let k = 0; k < 6; k++) {
+      const x = ((k % 3) - 1) * W * 0.28, z = (Math.floor(k / 3) - 0.5) * D * 0.5;
+      P(cyl(0.08, 0.08, 0.24, 6), 0x8a6a40, x, -0.24, z);
+      const st = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 1), new THREE.MeshLambertMaterial({ color: 0xe8d050, side: THREE.DoubleSide, transparent: ghost, opacity: ghost ? 0.5 : 1 }));
+      st.position.set(x, -1.2, z); st.rotation.y = k * 0.8; st.userData.strip = true; strips.add(st);
+      for (let f = 0; f < 3; f++) { const fly = new THREE.Mesh(new THREE.SphereGeometry(0.035, 4, 3), mat(0x111111)); fly.position.set(x + (f - 1) * 0.06, -1, z); fly.userData.frac = 0.2 + f * 0.25; strips.add(fly); g.userData.flies.push(fly); }
     }
-  } else if (kind === 'trapdoor') {
+  } else if (kind === 'trapdoor') {  } else if (kind === 'trapdoor') {
     // A hinged hatch flush with the floor: two plank leaves drop open over a dark chute.
     const hole = new THREE.Mesh(new THREE.PlaneGeometry(S * 0.88, S * 0.88), new THREE.MeshBasicMaterial({ color: 0x050403 })); hole.rotation.x = -Math.PI / 2; hole.position.y = 0.012; add(hole);
     for (const [x, z, sx, sz] of [[0, -h + 0.06, S, 0.12], [0, h - 0.06, S, 0.12], [-h + 0.06, 0, 0.12, S], [h - 0.06, 0, 0.12, S]]) B(0x4a3624, x, 0.03, z, sx, 0.06, sz);
@@ -504,16 +552,19 @@ export function makeTrap(kind, ghost = false) {
     g.userData.handles = handles;
     lamp(h - 0.15, 0.35, -h + 0.15);
   } else if (kind === 'honey') {
-    // A honeycomb hanging from the roof, honey drooping off it.
-    B(0x3a3632, 0, -0.15, 0, 0.04, 0.3, 0.04);
-    const comb = new THREE.Group(); comb.position.y = -0.6; add(comb); g.userData.comb = comb;
-    comb.add(part(cyl(0.55, 0.45, 0.5, 6), 0xd89a20, 0, 0, 0, 1, 1, 1, !ghost));
-    for (let k = 0; k < 6; k++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.52, 6), mat(0xb87a10)); c.position.set(Math.cos(k * 1.05) * 0.3, 0, Math.sin(k * 1.05) * 0.3); comb.add(c); }
+    // A honeycomb hanging from the ceiling, honey drooping off it; when it drips, a strand of
+    // honey runs the whole way down to the puddle (stretched by the renderer).
+    const [W, D] = ceilMount();
+    B(0x2a2826, 0, -0.3, 0, 0.06, 0.5, 0.06);
+    const comb = new THREE.Group(); comb.position.y = -0.95; add(comb); g.userData.comb = comb;
+    comb.add(part(cyl(0.95, 0.8, 0.8, 6), 0xd89a20, 0, 0, 0, 1, 1, 1, !ghost));
+    for (let k = 0; k < 6; k++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.82, 6), mat(0xb87a10)); c.position.set(Math.cos(k * 1.05) * 0.5, 0, Math.sin(k * 1.05) * 0.5); comb.add(c); }
     const drips = [];
-    for (let k = 0; k < 4; k++) { const d = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.3, 6), mat(0xe8a820)); d.rotation.x = Math.PI; d.position.set(Math.cos(k * 1.6) * 0.28, -0.38, Math.sin(k * 1.6) * 0.28); comb.add(d); drips.push(d); }
+    for (let k = 0; k < 5; k++) { const d = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.45, 6), mat(0xe8a820)); d.rotation.x = Math.PI; d.position.set(Math.cos(k * 1.3) * 0.45, -0.6, Math.sin(k * 1.3) * 0.45); comb.add(d); drips.push(d); }
     g.userData.drips = drips;
-    lamp(0.45, -0.15, 0);
-  } else if (kind === 'cuckoo') {
+    if (!ghost) { const strand = new THREE.Mesh(cyl(0.06, 0.03, 1, 6), new THREE.MeshBasicMaterial({ color: 0xe8a820, transparent: true, opacity: 0.85 })); strand.visible = false; add(strand); g.userData.strand = strand; }
+    lamp(W * 0.42, -0.2, D * 0.42);
+  } else if (kind === 'cuckoo') {  } else if (kind === 'cuckoo') {
     // A carved cuckoo clock: a little wooden house with a dial, pine-cone weights on chains,
     // a door the bird pops out of, and a mallet arm that slams down on the lane.
     B(0x6a4426, 0, 1.25, -0.12, 0.9, 1.0, 0.3);
@@ -530,6 +581,7 @@ export function makeTrap(kind, ghost = false) {
     lamp(h - 0.15, 1.95, -0.12);
   } else if (kind === 'chandelier') {
     // An iron ring of candles hung on a chain; the ring (body) drops when it falls.
+    P(cyl(0.45, 0.3, 0.16, 12), 0x2a2826, 0, -0.08, 0);                                       // (v0.31) ceiling rose: it's fixed to the ceiling
     const chain = B(0x2a2826, 0, -0.65, 0, 0.04, 1.3, 0.04); g.userData.chain = chain;
     const body = new THREE.Group(); body.position.y = -1.3; add(body); g.userData.body = body;
     const ring = part(new THREE.TorusGeometry(1.1, 0.07, 6, 24), 0x3a3632, 0, 0, 0, 1, 1, 1, !ghost); ring.rotation.x = Math.PI / 2; body.add(ring);
@@ -588,18 +640,19 @@ export function makeTrap(kind, ghost = false) {
     const arrow = P(new THREE.ConeGeometry(0.22, 0.45, 3), 0xd8c048, 0, 0.18, 0.75); arrow.rotation.x = Math.PI / 2;
     lamp(h - 0.15, 0.4, -h + 0.15);
   } else if (kind === 'pans') {
-    // A hanging rack of heavy iron pans.
-    for (const x of [-0.7, 0.7]) B(0x2a2826, x, -0.3, 0, 0.03, 0.6, 0.03);
-    B(0x3a3632, 0, -0.62, 0, 1.7, 0.08, 0.08);
+    // A rack of heavy iron pans on a rail hung from the ceiling; one drops the whole way down.
+    const [W, D] = ceilMount();
+    for (const x of [-W * 0.38, W * 0.38]) B(0x2a2826, x, -0.35, 0, 0.04, 0.6, 0.04);
+    B(0x3a3632, 0, -0.66, 0, W * 0.85, 0.1, 0.1);
     const pans = [];
-    for (const x of [-0.55, 0, 0.55]) {
-      const pg = new THREE.Group(); pg.position.set(x, -0.62, 0); add(pg); pans.push(pg);
-      pg.add(part(BOX, 0x1e1c1a, 0, -0.25, 0, 0.06, 0.45, 0.04, false));
-      const pan = part(cyl(0.3, 0.26, 0.08, 14), 0x2a2826, 0, -0.75, 0, 1, 1, 1, !ghost); pan.rotation.x = Math.PI / 2; pg.add(pan);
+    for (const x of [-0.42, -0.14, 0.14, 0.42]) {
+      const pg = new THREE.Group(); pg.position.set(x * W, -0.66, 0); add(pg); pans.push(pg);
+      pg.add(part(BOX, 0x1e1c1a, 0, -0.3, 0, 0.07, 0.55, 0.05, false));
+      const pan = part(cyl(0.42, 0.36, 0.1, 16), 0x2a2826, 0, -0.95, 0, 1, 1, 1, !ghost); pan.rotation.x = Math.PI / 2; pg.add(pan);
     }
     g.userData.pans = pans;
-    lamp(0.85, -0.15, 0);
-  } else if (kind === 'firecracker') {
+    lamp(W * 0.42, -0.2, D * 0.38);
+  } else if (kind === 'firecracker') {  } else if (kind === 'firecracker') {
     // A bundle of red paper bangers with a fuse; once it's gone off, a scorch mark.
     const body = new THREE.Group(); add(body); g.userData.body = body;
     for (const [x, z] of [[0, 0], [0.32, 0.1], [-0.2, 0.28], [0.1, -0.3]]) {
@@ -633,13 +686,16 @@ export function makeTrap(kind, ghost = false) {
     const spring = part(new THREE.TorusGeometry(0.16, 0.035, 5, 12), 0xb0b0b8, 0.3, 0.25, 0, 1, 1, 1, false); spring.rotation.y = Math.PI / 2; add(spring);
     lamp(h - 0.15, 0.35, -h + 0.15);
   } else if (kind === 'bubbles') {
-    // A bubble pipe hanging from the roof over a soap dish lid.
-    B(0x3a3632, 0, -0.2, 0, 0.03, 0.4, 0.03);
-    const pipe = new THREE.Group(); pipe.position.y = -0.55; add(pipe); g.userData.pipe = pipe;
-    const stem = part(cyl(0.04, 0.04, 0.9, 6), 0x7a4a2a, 0.3, 0, 0, 1, 1, 1, !ghost); stem.rotation.z = 1.2; pipe.add(stem);
-    pipe.add(part(cyl(0.18, 0.14, 0.3, 10), 0x7a4a2a, -0.15, -0.15, 0, 1, 1, 1, !ghost));
-    for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.12 + k * 0.04, 10, 8), new THREE.MeshLambertMaterial({ color: 0xd8f0ff, transparent: true, opacity: 0.35, depthWrite: false })); b.position.set(-0.3 - k * 0.2, -0.45 - k * 0.15, 0.1 * k); pipe.add(b); }
-    lamp(0.6, -0.15, 0);
+    // A brass bubble machine set in the ceiling: a soap drum and a pipe that blows bubbles
+    // down round the mice below.
+    const [W, D] = ceilMount();
+    P(cyl(0.7, 0.7, 0.6, 14), 0xc89a3a, 0, -0.4, 0);
+    P(cyl(0.72, 0.72, 0.06, 14), 0x8a6a28, 0, -0.72, 0);
+    const pipe = new THREE.Group(); pipe.position.y = -0.85; add(pipe); g.userData.pipe = pipe;
+    const stem = part(cyl(0.06, 0.06, 1.2, 6), 0x7a4a2a, 0.4, 0, 0, 1, 1, 1, !ghost); stem.rotation.z = 1.2; pipe.add(stem);
+    pipe.add(part(cyl(0.26, 0.2, 0.4, 10), 0x7a4a2a, -0.2, -0.2, 0, 1, 1, 1, !ghost));
+    for (let k = 0; k < 4; k++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.16 + k * 0.05, 10, 8), new THREE.MeshLambertMaterial({ color: 0xd8f0ff, transparent: true, opacity: 0.35, depthWrite: false })); b.position.set(-0.4 - k * 0.25, -0.6 - k * 0.25, 0.12 * k); pipe.add(b); }
+    lamp(W * 0.42, -0.2, D * 0.42);
   }
   if (ghost) g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.5; o.material.depthWrite = false; } });
   return g;
@@ -903,7 +959,7 @@ export function makeFurniture(f) {
     case 'colonnade': {
       // Roof slab plus the pillars the map makes solid (1x1 every 4 units on both long sides).
       TB('planks', 3, 0x9a7a58, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d);
-      for (let pz = 0; pz < d; pz += 4) for (const px of [0.5, w - 0.5]) {
+      for (let pz = 0; pz < d; pz += 4) for (const px of f.legs === 'west' ? [0.5] : f.legs === 'east' ? [w - 0.5] : [0.5, w - 0.5]) {   // (v0.31) one side only for an arcade
         TB('stone', 3, 0xd0c8bc, -w / 2 + px, f.bot / 2, -d / 2 + pz + 0.5, 1, f.bot, 1);
       }
       break;
@@ -971,8 +1027,13 @@ export function makeFurniture(f) {
       break;
     }
     case 'vault': case 'beams': {
-      TB(f.look === 'vault' ? 'stone' : 'planks', 4, f.look === 'vault' ? 0x8a8278 : 0x8a7058, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d, false);
+      if (w * d > 300) g.userData.noCast = true;   // (v0.31) a room's ceiling: light comes in the high windows, so it throws no shadow
+      TB(f.look === 'vault' ? 'stone' : 'planks', 4, f.look === 'vault' ? 0x9a9288 : 0xb09070, 0, (f.bot + f.top) / 2, 0, w, f.top - f.bot, d, false);
       for (let z = -d / 2 + 3; z < d / 2; z += 6) B(f.look === 'vault' ? 0x4e4840 : DARKWOOD, 0, f.bot + 0.15, z, w, 0.3, 0.6, false);   // ribs / beams
+      // (v0.31) Sheds and lean-tos stand on posts (where the map makes them solid).
+      const post = (px, pz) => TB('planks', 2, 0x6e5030, px, f.bot / 2, pz, 1, f.bot, 1);
+      if (f.legs === 'corners') for (const sx of [-1, 1]) for (const sz of [-1, 1]) post(sx * (w / 2 - 0.5), sz * (d / 2 - 0.5));
+      if (f.legs === 'west' || f.legs === 'east') for (let pz = 0; pz < d; pz += 4) post((f.legs === 'west' ? -1 : 1) * (w / 2 - 0.5), -d / 2 + pz + 0.5);
       break;
     }
     case 'winerack': {
@@ -1014,6 +1075,41 @@ export function makeFurniture(f) {
       const r = Math.min(w, d) / 2;
       outline(TC('planks', 1, 0xc8a060, cyl(r, r * 0.85, f.h, 12), 0, f.h / 2, 0), 1.03);
       for (let y = 0.2; y < f.h; y += 0.3) g.add(part(cyl(r * 1.01, r * 1.01, 0.05, 12), 0x8a6a38, 0, y, 0, 1, 1, 1, false));
+      break;
+    }
+    // ---- v0.31: the high road. Boards, beams and shelves the rats run along, up off the floor.
+    case 'plank': {
+      // A rough board laid across the crates (or between racks): cleats under it, nail heads.
+      const long = w >= d, L = long ? w : d, th = f.top - f.bot;
+      TB('planks', 2, 0xa88a62, 0, (f.bot + f.top) / 2, 0, w, th, d);
+      for (let k = -L / 2 + 1; k < L / 2; k += 3) B(0x6e5030, long ? k : 0, f.bot - 0.05, long ? 0 : k, long ? 0.3 : w * 0.9, 0.1, long ? d * 0.9 : 0.3, false);
+      for (let k = -L / 2 + 0.5; k < L / 2; k += 1.5) for (const o of [-0.3, 0.3]) B(0x2a2622, long ? k : o * w, f.top + 0.005, long ? o * d : k, 0.06, 0.01, 0.06, false);
+      break;
+    }
+    case 'beam': {
+      // A squared timber with iron straps, hung on short iron hangers from whatever is above
+      // (the vault, the rafters). A pot rack gets copper pots on hooks under it.
+      const long = w >= d, L = long ? w : d, th = f.top - f.bot;
+      TB('planks', 3, 0x7a5a3a, 0, (f.bot + f.top) / 2, 0, w, th, d);
+      for (let k = -L / 2 + 1.5; k < L / 2; k += 4) B(0x2a2622, long ? k : 0, (f.bot + f.top) / 2, long ? 0 : k, long ? 0.15 : w + 0.04, th + 0.04, long ? d + 0.04 : 0.15, false);
+      const up = f.hang || 2.5;   // how far the hangers reach up
+      for (let k = -L / 2 + 2; k < L / 2; k += 7) for (const o of [-0.3, 0.3]) B(0x2a2826, long ? k : o * w, f.top + up / 2, long ? o * d : k, 0.06, up, 0.06, false);
+      if (/pot rack/i.test(f.name)) for (let k = -L / 2 + 3; k < L / 2; k += 4.5) {
+        const sd = (Math.round(k) % 2 ? 1 : -1) * (long ? d : w) * 0.3;
+        B(0x2a2622, long ? k : sd, f.bot - 0.3, long ? sd : k, 0.04, 0.6, 0.04, false);
+        const pot = part(cyl(0.45, 0.4, 0.5, 12), 0xb8683a, long ? k : sd, f.bot - 0.85, long ? sd : k); g.add(pot);
+      }
+      break;
+    }
+    case 'shelfboard': {
+      // A long shelf on iron brackets against the wall, jars and crocks along the back.
+      const long = w >= d, L = long ? w : d, th = f.top - f.bot;
+      TB('planks', 2, 0x9a7a52, 0, (f.bot + f.top) / 2, 0, w, th, d);
+      for (let k = -L / 2 + 1; k < L / 2; k += 3.5) {
+        B(0x2a2826, long ? k : 0, f.bot - 0.45, long ? 0 : k, long ? 0.08 : w * 0.8, 0.9, long ? d * 0.8 : 0.08, false);
+        B(0x2a2826, long ? k : 0, f.bot - 0.05, long ? 0 : k, long ? 0.08 : w * 0.9, 0.1, long ? d * 0.9 : 0.08, false);
+      }
+      for (let k = -L / 2 + 0.8; k < L / 2; k += 2.6) if ((Math.round(k * 3) % 5) < 2) g.add(part(cyl(0.22, 0.26, 0.55, 8), [0x8a5a3a, 0x5a6a4a, 0xc8b8a0][Math.abs(Math.round(k)) % 3], long ? k : w * 0.25, f.top + 0.27, long ? d * 0.25 : k));   // to one side: the rats run past them
       break;
     }
     default: TB(f.tex || 'planks', 3, f.tint || 0xb08a60, 0, (f.h || 1) / 2, 0, w, f.h || 1, d);
