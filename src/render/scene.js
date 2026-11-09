@@ -903,7 +903,11 @@ export class Scene {
       case 'pounceLand': this.spawnParticles(e.x, e.y + 0.1, e.z, 0xd8d0c0, 18, 5); this.ring(e.x, e.z, CAT.pounceRadius, 0xfff0a0, 0.45, false, true, e.y); this.shake = Math.max(this.shake, 0.2); break;
       case 'slam': this.spawnParticles(e.x, e.y + 0.1, e.z, 0xd8d0c0, 18, 5); break;
       case 'pelletHit': this.spawnParticles(e.x, e.y + 0.1, e.z, e.mouse ? 0x8a1c14 : 0x8a8a6a, 4, 2, 0.05); break;
-      case 'hairSplat': this.spawnParticles(e.x, e.y + 0.1, e.z, 0x6a7a3a, 14, 4); this.decal(e.x, e.z, 0x5a6a2a, 0.9, Math.max(0.02, e.y + 0.02)); break;
+      // (v0.32) Fred's furball: tufts of ginger fur where it bowls a mouse over, a dark wet streak
+      // behind it, and a soggy splat where it stops.
+      case 'hairSplat': this.spawnParticles(e.x, e.y + 0.2, e.z, 0xd9772a, 16, 3); this.decal(e.x, e.z, 0x2c2a30, 1.1, Math.max(0.02, e.y + 0.02)); break;
+      case 'hairTrail': this.decal(e.x, e.z, 0x2c2a30, 0.7, Math.max(0.02, e.y + 0.02)); break;
+      case 'hairBowl': this.spawnParticles(e.x, e.y + 0.3, e.z, 0xd9772a, 8, 3); break;
       case 'wallkick': this.spawnParticles(e.x, e.y + 0.5, e.z, 0xd8d0c0, 6, 2); break;
       case 'item': this.itemFx(e); break;
       case 'smash': this.spawnParticles(e.x, e.y + 0.3, e.z, 0xb86a3a, 16, 4, 0.08); this.shake = Math.max(this.shake, 0.15); break;
@@ -1122,10 +1126,19 @@ export class Scene {
     const PG = this.projGeo || (this.projGeo = {
       glob: [new THREE.IcosahedronGeometry(0.16, 0), new THREE.MeshBasicMaterial({ color: 0x9adf3a })],
       pellet: [new THREE.IcosahedronGeometry(0.06, 0), mat(0x8a8a5a)], whisker: [new THREE.BoxGeometry(0.025, 0.025, 0.7), new THREE.MeshBasicMaterial({ color: 0xffffff })],
-      burr: [new THREE.OctahedronGeometry(0.1, 1), mat(0x7a5a2a)], pebble: [new THREE.DodecahedronGeometry(0.09, 0), mat(0x9a948a)], hairball: [new THREE.IcosahedronGeometry(0.2, 0), mat(0x6a7a3a)] });
+      burr: [new THREE.OctahedronGeometry(0.1, 1), mat(0x7a5a2a)], pebble: [new THREE.DodecahedronGeometry(0.09, 0), mat(0x9a948a)], hairball: [(() => {   // (v0.32) a soggy, matted ginger furball (it was a green ball that looked like poison)
+        const geo = new THREE.IcosahedronGeometry(0.3, 1), p = geo.attributes.position;
+        for (let v = 0; v < p.count; v++) { const k = 1 + Math.sin(v * 12.9898) * 0.14; p.setXYZ(v, p.getX(v) * k, p.getY(v) * k, p.getZ(v) * k); }   // lumpy and tufty
+        geo.computeVertexNormals(); return geo;
+      })(), new THREE.MeshStandardMaterial({ color: 0xc8641e, roughness: 0.55, metalness: 0.05, flatShading: true })] });
     const proj = (k) => k === 'hairball' ? outline(new THREE.Mesh(...PG.hairball)) : new THREE.Mesh(...(PG[k] || PG.pellet));
     this.syncSimple(sim.globs, this.globMeshes, () => proj('glob'), (g, b) => { g.position.set(b.x, b.y, b.z); });
     this.syncSimple(sim.missiles, this.missileMeshes, (b) => proj(b.kind), (g, b) => {
+        if (b.kind === 'hairball') {   // (v0.32) rolls along the floor: spin it the way it's going
+          g.position.set(b.x, b.y + 0.3, b.z); const sp = Math.hypot(b.vx, b.vz) || 1;
+          g.rotateOnWorldAxis(new THREE.Vector3(b.vz / sp, 0, -b.vx / sp), sp * dt / 0.3);
+          return;
+        }
         g.position.set(b.x, b.y, b.z);
         if (b.kind === 'whisker') g.rotation.set(0, Math.atan2(b.vx, b.vz), 0); else g.rotation.y += dt * 10;   // needles fly point-first
       });
@@ -1256,7 +1269,9 @@ export class Scene {
       const cp = this.camera.position;
       for (const r of this.roofs) {
         const [x0, z0, x1, z1] = r.f.rect;
-        const fade = cp.x > x0 && cp.x < x1 && cp.z > z0 && cp.z < z1 && cp.y > r.f.bot - 0.5 && cp.y < r.f.top + 0.3;
+        // (v0.32) During the level-start flyover every roof (anything 3 up or higher) fades, so
+        // the route underneath shows from above.
+        const fade = (!!this.camDriver && r.f.bot >= 3) || (cp.x > x0 && cp.x < x1 && cp.z > z0 && cp.z < z1 && cp.y > r.f.bot - 0.5 && cp.y < r.f.top + 0.3);
         if (r.faded !== fade) {
           r.faded = fade;
           r.g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = fade; o.material.opacity = fade ? 0.22 : 1; o.material.depthWrite = !fade; } });
@@ -1269,8 +1284,13 @@ export class Scene {
     // way a person does and it all looked normal-sized. Down here, 50–70 cm behind and
     // just above the cat's head, the walls, table legs and people tower over you.
     // The cat is centred, just below the crosshair (no shoulder offset).
+    // (v0.32) Something else can fly the camera for a while (the level-start flyover,
+    // render/flyover.js): camDriver(camera, dt) moves it and returns false when it's done.
+    // Then the normal camera eases back in over a second instead of jumping.
     const me = this.localCat;
-    if (me) {
+    if (this.camDriver) {
+      if (this.camDriver(this.camera, dt) === false) { this.camDriver = null; this.easeIn = { t: 1, p: this.camera.position.clone(), q: this.camera.quaternion.clone() }; }
+    } else if (me) {
       if (this.camDist == null) this.camDist = me.kind === 'puddin' ? 2.8 : 2.3;
       const p = me.mesh.position, catH = me.kind === 'puddin' ? 1.25 : 0.95;
       const target = new THREE.Vector3(p.x, p.y + catH * 1.25, p.z);
@@ -1287,6 +1307,12 @@ export class Scene {
       this.camera.position.copy(target).addScaledVector(back, d).addScaledVector(right, sh);
       if (this.shake > 0) { this.shake = Math.max(0, this.shake - dt); const a = this.shake * 0.35; this.camera.position.x += (Math.random() - 0.5) * a; this.camera.position.y += (Math.random() - 0.5) * a; }
       this.camera.lookAt(target.clone().addScaledVector(back, -14).addScaledVector(right, sh));
+      if (this.easeIn) {   // (v0.32) gliding down from the flyover into the cat's camera
+        this.easeIn.t = Math.max(0, this.easeIn.t - dt / 1.1);
+        const e = this.easeIn.t * this.easeIn.t * (3 - 2 * this.easeIn.t);
+        this.camera.position.lerp(this.easeIn.p, e); this.camera.quaternion.slerp(this.easeIn.q, e);
+        if (this.easeIn.t <= 0) this.easeIn = null;
+      }
       // Fade the cat when the camera is squeezed right up against it.
       const close = d < 1.0;
       if (me.close !== close) { me.close = close; me.mesh.userData.body.traverse(o => { if (o.isMesh && o.material !== OUTLINE) { o.material = o.material.clone(); o.material.transparent = close; o.material.opacity = close ? 0.35 : 1; } }); }

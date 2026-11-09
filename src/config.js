@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.31.1';
+export const VERSION = '0.32.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -96,14 +96,21 @@ export const CAT = {
   pelletInterval: 0.18,
   pelletSpeed: 26,
   pelletDamage: 4,
-  // Fred, right click: big hairball — arcs to the crosshair, splash + slow.
+  // Fred, right click (v0.32 rework): the Hack-up. He coughs up a big soggy ginger furball that
+  // rolls along the floor the way he's aiming, bowls over every mouse it rolls through (hit,
+  // knocked flat, soaked) and leaves a wet trail that slows whatever walks through it. A real
+  // cooldown now (it was a 1.2 s green splash you could spam).
   hairballCost: 35,
-  hairballCooldown: 1.2,
-  hairballSpeed: 16,
-  hairballDamage: 12,
-  hairballRadius: 1.0,
+  hairballCooldown: 7,
+  hairballSpeed: 11,         // rolling speed (units a second), slowing as it goes
+  hairballRange: 16,         // how far it rolls at most
+  hairballDamage: 18,        // to each mouse it rolls through
+  hairballRadius: 0.55,      // how wide it bowls
+  hairballMaxHits: 10,
+  hairballKnockSecs: 1.2,    // how long the mice it bowls over lie flat (bosses aren't knocked over)
   hairballSlow: 0.45,        // speed multiplier while slowed
-  hairballSlowSecs: 2.5,
+  hairballSlowSecs: 2.5,     // slowed this long by the roll
+  hairballTrailSecs: 5,      // the wet trail lasts this long
   // Puddin, left click: heavy bite. Killing with a bite eats the mouse: heal, no tail.
   biteInterval: 0.55,
   biteDamage: 34,
@@ -233,7 +240,7 @@ export const ITEMS = {
   holy:    { name: 'Holy Water',     cd: 25, radius: 3, damage: 60, el: 'holy', desc: 'A splash of holy water where you aim. Ghosts and plague rats hate it.' },
 };
 export const ITEM_ORDER = ['laser', 'bola', 'catnip', 'flea', 'tonic', 'squeaky', 'bell', 'pistol', 'matches', 'holy'];
-export const LOADOUT_SIZE = 8;   // traps you bring into a map
+export const LOADOUT_SIZE = 4;   // traps you bring into a map (v0.32: one per slot kind, see SLOTS)
 
 // Playable cats. Fred: quick, fragile, ranged, parkour. Puddin: slow tank, melee.
 export const CATS = {
@@ -373,7 +380,7 @@ export const TRAPS = {
   tenderizer:{ el: 'physics', name: 'Meat Tenderizer', desc: 'A studded iron press set in the ceiling. Slams all the way down to the floor on everything underneath, knocks survivors flat, then winches back up.', cost: 85, surface: 'ceiling', size: [8, 8], damage: 110, cooldown: 3.5, radius: 2, pathCost: 0 },
   glove:     { el: 'physics', name: 'Boxing Glove', desc: "Spring-loaded wall punch. Knocks small mice across the lane, dazes the big ones.",  cost: 70,  surface: 'wall',    size: [4, 1], cooldown: 3, reach: 4, push: 10, damage: 15, bigStun: 1.2, pathCost: 0 },   // OMD push trap
 };
-// Trap bar order = keys 1..8.
+// The order traps are listed in (v0.32: the loadout has four typed slots, see SLOTS).
 export const TRAP_ORDER = ['barricade', 'mousetrap', 'flipper', 'grinder', 'zapper', 'gluepad', 'tacks', 'glove', 'bait',
   'hotplate', 'icetray', 'oilslick', 'rollingpin', 'skull', 'forkdarts', 'bellows', 'candle', 'hypno', 'flowerpot', 'bucket', 'salt', 'flypaper',
   'trapdoor', 'magnifier', 'knifeblock', 'honey', 'cuckoo', 'chandelier', 'kettle', 'spicejar',
@@ -440,9 +447,34 @@ export function trapParams(kind, up) {
   if (p.maxHits) p.maxHits = Math.round(p.maxHits); if (p.swallow) p.swallow = Math.round(p.swallow); if (p.charges) p.charges = Math.round(p.charges);
   return p;
 }
-// Starting traps (everything else is unlocked in the shop).
-export const STARTER_TRAPS = ['barricade', 'mousetrap', 'flipper', 'gluepad', 'tacks', 'bait', 'grinder', 'zapper'];
-export const STARTER_ITEMS = ['laser', 'bola', 'tonic'];
+// Starting traps (v0.32): one of each kind of slot, the cat-and-kitchen versions of Orcs Must
+// Die 2's first traps. Poison Box = Barricade, Snapper = Spike Trap, Fork Darts = Arrow Wall,
+// Meat Tenderizer = Pounder. One item: the Laser Pointer.
+export const STARTER_TRAPS = ['mousetrap', 'tenderizer', 'forkdarts', 'barricade'];
+export const STARTER_ITEMS = ['laser'];
+// What saves from before v0.32 started with (they keep these).
+export const OLD_STARTER_TRAPS = ['barricade', 'mousetrap', 'flipper', 'gluepad', 'tacks', 'bait', 'grinder', 'zapper'];
+export const OLD_STARTER_ITEMS = ['laser', 'bola', 'tonic'];
+// The loadout (v0.32): four slots, one of each kind, keys 1-4 in this order, plus one item (Q).
+// Barricade = the Poison Box (it blocks); Floor = every other floor trap, table-top ones too.
+export const SLOTS = [
+  { id: 'floor',     name: 'Floor',     fits: (d, k) => d.surface === 'floor' && k !== 'barricade' },
+  { id: 'ceiling',   name: 'Ceiling',   fits: (d) => d.surface === 'ceiling' },
+  { id: 'wall',      name: 'Wall',      fits: (d) => d.surface === 'wall' },
+  { id: 'barricade', name: 'Barricade', fits: (d, k) => k === 'barricade' },
+];
+// Unlocks (v0.32): nothing is bought or shown until you earn it. The first time you clear
+// wave 4, 8, 12, 16, 20 and 24 on a map you get that map's next trap; waves 12 and 24 also
+// give an item; winning (wave 24) opens the next map. Each map hands out six traps, so all
+// 36 are yours by the end of the kitchen.
+export const UNLOCKS = {
+  entrance: { 4: { trap: 'flipper' },  8: { trap: 'gluepad' },    12: { trap: 'grinder', item: 'bola' },    16: { trap: 'bucket' },      20: { trap: 'tacks' },    24: { trap: 'oilslick', item: 'tonic' } },
+  market:   { 4: { trap: 'flypaper' }, 8: { trap: 'glove' },      12: { trap: 'cord', item: 'pistol' },     16: { trap: 'honey' },       20: { trap: 'stickyjam' }, 24: { trap: 'bait', item: 'catnip' } },
+  stables:  { 4: { trap: 'cuckoo' },   8: { trap: 'pincushion' }, 12: { trap: 'flowerpot', item: 'squeaky' }, 16: { trap: 'hotplate' }, 20: { trap: 'bellows' },  24: { trap: 'icetray', item: 'flea' } },
+  cellar:   { 4: { trap: 'bubbles' },  8: { trap: 'spicejar' },   12: { trap: 'candle', item: 'bell' },     16: { trap: 'firecracker' }, 20: { trap: 'zapper' },   24: { trap: 'rollingpin', item: 'matches' } },
+  passages: { 4: { trap: 'hypno' },    8: { trap: 'kettle' },     12: { trap: 'salt', item: 'holy' },       16: { trap: 'catapult' },    20: { trap: 'magnifier' }, 24: { trap: 'wheel' } },
+  kitchen:  { 4: { trap: 'pans' },     8: { trap: 'peg' },        12: { trap: 'knifeblock' },               16: { trap: 'chandelier' },  20: { trap: 'skull' },    24: { trap: 'trapdoor' } },
+};
 
 export const GATE = { hp: 60 };   // falls in a few bites, stays down once broken
 

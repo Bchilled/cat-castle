@@ -217,6 +217,8 @@ const SOUNDS = {
   hit: (a, o, R) => { a.noise(o, { dur: 0.05, vol: 0.2, type: 'lowpass', f: 1600 + R() * 600 }); },
   hairball: (a, o) => { a.noise(o, { dur: 0.35, vol: 0.45, type: 'lowpass', f: 900, f2: 300 }); a.tone(o, { type: 'sawtooth', f: 160, f2: 90, dur: 0.3, vol: 0.12 }); },
   hairSplat: (a, o) => { a.noise(o, { dur: 0.25, vol: 0.5, type: 'lowpass', f: 600, f2: 150 }); },
+  // (v0.32) the furball thudding into a mouse as it rolls through: a soft wet thump.
+  hairBowl: (a, o) => { a.noise(o, { dur: 0.12, vol: 0.4, type: 'lowpass', f: 700, f2: 200 }); a.tone(o, { f: 140, f2: 70, dur: 0.1, vol: 0.2 }); },
   bite: (a, o, R) => { a.noise(o, { dur: 0.06, vol: 0.4, f: 1400 + R() * 400, q: 2 }); a.noise(o, { t: 0.05, dur: 0.06, vol: 0.3, f: 1000, q: 2 }); },
   eat: (a, o) => { a.noise(o, { dur: 0.08, vol: 0.4, f: 1300, q: 2 }); a.tone(o, { f: 320, f2: 110, t: 0.12, dur: 0.18, vol: 0.3 }); },
   pounce: (a, o) => { a.noise(o, { dur: 0.3, vol: 0.35, f: 400, f2: 2200, q: 1.5 }); },

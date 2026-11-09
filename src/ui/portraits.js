@@ -170,4 +170,9 @@ export const PORTRAITS = {
   }),
 };
 
-export const portraitURL = (kind) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(PORTRAITS[kind] || PORTRAITS.fred);
+// The drawn SVG portraits (before v0.32; kept as a fallback).
+export const svgPortraitURL = (kind) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(PORTRAITS[kind] || PORTRAITS.fred);
+// (v0.32) Kanye's cartoon portraits (0.31.1), at web size: 256 px head-and-shoulders, and the
+// full-body art for the cat screen. Source PNGs are in assets/portraits/.
+export const portraitURL = (kind) => `assets/portraits/web/${PORTRAITS[kind] ? kind : 'fred'}.webp`;
+export const fullArtURL = (kind) => `assets/portraits/web/${PORTRAITS[kind] ? kind : 'fred'}-full.webp`;

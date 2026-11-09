@@ -1,8 +1,6 @@
 // main.js — wires input -> commands -> sim (fixed tick) -> renderer + HUD.
 
-import { DT, TRAPS, TRAP_ORDER, STARTER_TRAPS, MICE, CATS, CAT_ORDER, ITEMS, ITEM_ORDER, LOADOUT_SIZE, RULES, COMBOS, DIFFICULTY, DIFFICULTY_ORDER } from './config.js';
-import { CAT_INFO, abilityRows, elTag } from './ui/catinfo.js';
-import { portraitURL } from './ui/portraits.js';
+import { DT, TRAPS, MICE, CATS, ITEMS, RULES, COMBOS, VERSION, GAME_TITLE } from './config.js';
 import { Sfx } from './audio/sfx.js';
 import { Sim } from './sim/sim.js';
 import { MAPS, MAP_ORDER } from './sim/map.js';
@@ -11,186 +9,136 @@ import { LocalTransport } from './net/local.js';
 import { hostRoom, joinRoom, roomCode, snapshot, applySnapshot, applyEvent, SKIP_EVENTS } from './net/coop.js';
 import { Scene } from './render/scene.js';
 import { Hud } from './ui/hud.js';
-import * as THREE from 'three';
-import { makeCat } from './render/models.js';
-import { loadProfile, saveProfile, sandboxProfile, unlockedTraps, unlockedItems, upgradesFor, runReward, applyReward } from './meta/profile.js';
-import { openShop } from './ui/shop.js';
-import { openTraps } from './ui/traps.js';
-import { trapIcons } from './ui/icons.js';
+import { loadProfile, saveProfile, sandboxProfile, wipeProfile, upgradesFor, runReward, applyReward, noteWave } from './meta/profile.js';
+import { initMenus } from './ui/menus.js';
+import { makeFlyover } from './render/flyover.js';
 import { Coach } from './ui/coach.js';
 import { loadKit } from './render/kit.js';
 // The castle's 3D models load in the background from the menu (a game waits for them if needed).
 const kitLoad = loadKit();
 
 
-// Saved progress between runs: paw prints, yarn, unlocks, upgrades, hats (meta/profile.js).
+// Saved progress between runs: paw prints, yarn, the furthest wave on each map (which decides
+// what's unlocked), upgrades, hats (meta/profile.js).
 // ?sandbox in the URL: everything unlocked with plenty to spend, nothing saved.
 const SANDBOX = new URLSearchParams(location.search).has('sandbox');
-// Reload with one-shot flags (go = start straight away, shop = open the shop), keeping ?sandbox.
+const FLAGS = new URLSearchParams(location.search);
+// Reload with one-shot flags (go = start straight away, kit = open Your traps), keeping ?sandbox.
 const relaunch = (flag) => { location.href = location.pathname + '?' + [SANDBOX ? 'sandbox' : '', flag].filter(Boolean).join('&'); };
 const dropFlags = () => history.replaceState(null, '', location.pathname + (SANDBOX ? '?sandbox' : ''));
-window.__relaunch = relaunch;   // the end screen's buttons use it
-const profile = SANDBOX ? sandboxProfile() : loadProfile();
+window.__relaunch = relaunch;
+let profile = SANDBOX ? sandboxProfile() : loadProfile();
+const $ = (id) => document.getElementById(id);
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
+document.title = GAME_TITLE; $('logo').textContent = GAME_TITLE; $('version').textContent = `v${VERSION}`;   // (a working title until Brent picks the name)
+if (SANDBOX) document.body.classList.add('sandbox');
 let coop = null;   // co-op session (see the co-op section below); null = playing alone
 // Sound: needs a click before the browser allows it, so unlock on the first one.
 const sfx = new Sfx();
 document.addEventListener('pointerdown', () => sfx.unlock(), { once: false });
 document.addEventListener('keydown', () => sfx.unlock());
-// Loading-screen tips.
-const TIPS = [
-  'Mice always get a way through. Poison Boxes decide WHICH way: build a maze and they walk all of it.',
-  'Put a Flinger beside the moat and point it at the water. Free drowning.',
-  'When Puddin kills a mouse with a Chomp he eats it and gets health back.',
-  'Eat a Mama Mouse and her Pinkies never come out.',
-  'A red ring on the floor means a boss is about to stomp. Move.',
-  'Stunned mice see stars. The circle of stars shrinks as the stun wears off.',
-  'Trap lamps: green = ready, red = resetting.',
-  'Bug Zappers hang under anything with a roof: passages, tables, benches, stall counters, the cellar vault.',
-  'Every mouse from a hole takes the same route, the cheapest one. Close a lane with a few Poison Boxes and they all go the other way.',
-  'Every kill pays Paw Points on the spot. Kill plenty, build more.',
-  'Bring 8 traps and 1 item. Click a slot under the maps to swap them, unlock more and upgrade them.',
-  'Q uses your item. E is your second ability. Hold F to sniff out where the mice are going.',
-  'Fred can kick off walls twice before he has to land.',
-  'Brush past a pot on a table edge and it falls. Time it right and it lands on a pack of mice.',
-  'Market food piles make mice tougher. Kill them before they get there, or bait them away.',
-  "In the servants' passages the doors swing shut on a timer. Watch the radar: brown = shut.",
-  'Kitchen fires burn mice and cats alike. Fling mice into them.',
-  'Win a map to move onward: entrance, market, stables, cellar, passages, kitchen.',
-  'Mice climb over fences, crates and buckets when it beats going round. Box both sides, or trap the top.',
-  'Co-op: up to four cats. The host picks the map; when you win, the host takes everyone onward.',
-  'Hit a tall shelf a few times and it topples across the corridor, flattening mice and blocking the way.',
-  'Run into a barrel (or pounce near it) to send it rolling through a pack of mice.',
-  'In the market, claw at a stall leg: break enough and the whole counter comes down on the mice under it.',
-];
-{ let k = Math.floor(Math.random() * TIPS.length); const show = () => { const el = document.getElementById('tip'); if (el) el.textContent = 'Tip: ' + TIPS[k++ % TIPS.length]; }; show(); setInterval(show, 6000); }
-const showWallet = () => { document.getElementById('profile').textContent = `${profile.paws} paw prints · ${profile.yarn} yarn${SANDBOX ? ' · sandbox (nothing saved)' : ''}`; };
-showWallet();
-// Cat select: a grid of portraits, and a detail panel with the chosen cat turning in 3D.
-let chosenCat = CAT_ORDER.includes(localStorage.getItem('catcastle.cat')) ? localStorage.getItem('catcastle.cat') : 'fred';
-const catsEl = document.getElementById('cats');
-catsEl.innerHTML = CAT_ORDER.map(k => `<button class="catpick" data-cat="${k}"><img src="${portraitURL(k)}" alt=""><b>${CATS[k].name}</b><small>${CAT_INFO[k].role}</small></button>`).join('');
-let previewOn = true, previewCat = null;
-const pv = (() => {
-  const cv = document.getElementById('catview');
-  const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
-  const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffe8d0, 0x3a2a1c, 2)); const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(2, 3, 2); sc.add(dl);
-  const cam = new THREE.PerspectiveCamera(35, cv.width / cv.height, 0.1, 50);
-  const tick = (t) => {
-    if (!previewOn) { r.dispose(); return; }
-    if (previewCat) { previewCat.rotation.y = t / 1600; previewCat.userData.tail.rotation.z = Math.sin(t / 400) * 0.3; }
-    r.render(sc, cam); requestAnimationFrame(tick);
+
+// ---------- menus (v0.32, src/ui/menus.js) ----------
+const menus = initMenus({
+  get profile() { return profile; }, sfx,
+  isCoop: () => !!coop, isGuest: () => !!(coop && coop.role === 'guest'),
+  solo: () => leaveCoop(),
+  wipe: () => { profile = wipeProfile(); menus.state.slots = []; menus.state.map = 'entrance'; menus.state.item = 'laser'; },
+  onKitChange: () => { if (coop && coop.role === 'guest' && coop.link) coop.link.send(hello()); },   // tell the host what you're bringing
+  onPlay: () => {
+    if (coop && coop.role === 'guest') return;
+    if (coop && coop.role === 'host' && coop.guests.length) hostStart('normal', menus.state.map);
+    else { leaveCoop(); start('normal'); }   // hosting but nobody joined: just play
+  },
+});
+
+// The title's backdrop: your next map, live, with mice streaming in, the camera slowly
+// circling high over it. Starts once the castle models have loaded; stops when a game starts.
+let backdrop = null;
+kitLoad.then(() => {
+  if (game || FLAGS.has('go') || !document.getElementById('game')) return;   // straight into a game: no backdrop
+  const map = menus.state.map || 'entrance';
+  const bs = new Sim({ map, seed: 7, allDoors: true }); bs.lives = 1e9; bs.phaseTimer = 2;
+  const sc = new Scene(document.getElementById('game'), bs);
+  const cx = MAPS[map].w / 2, cz = MAPS[map].h / 2, R = Math.max(MAPS[map].w, MAPS[map].h) * 0.3;
+  let last = performance.now(), acc = 0, live = true;
+  const tick = (now) => {
+    if (!live) return;
+    const dt = Math.min(0.1, (now - last) / 1000); last = now; acc += dt;
+    while (acc >= DT) { if (bs.phase === 'build') bs.phaseTimer = Math.min(bs.phaseTimer, 3); bs.step(); bs.events.length = 0; acc -= DT; }
+    const a = now / 1000 * (Math.PI * 2 / 150) + 2.2;   // once round every two and a half minutes
+    sc.camera.position.set(cx + Math.sin(a) * R, 34, cz + Math.cos(a) * R); sc.camera.lookAt(cx + Math.sin(a) * R * 0.2, 0, cz + Math.cos(a) * R * 0.2);
+    sc.render(dt, 0, 0, null);
+    requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-  return { show(kind) {
-    if (previewCat) sc.remove(previewCat);
-    previewCat = makeCat(kind, profile.worn[kind]); sc.add(previewCat);
-    if (previewCat.userData.reach) previewCat.userData.reach.visible = false;   // no attack markers on the menu
-    if (previewCat.userData.rage) previewCat.userData.rage.visible = false;
-    const big = kind === 'puddin';
-    cam.position.set(0, big ? 1.4 : 1.1, big ? 4.6 : 3.6); cam.lookAt(0, big ? 0.7 : 0.55, 0);
-  } };
-})();
-function pickCat(k) {
-  chosenCat = k; try { localStorage.setItem('catcastle.cat', k); } catch { /* private window */ }
-  document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('picked', x.dataset.cat === k));
-  const d = CATS[k], info = CAT_INFO[k];
-  document.getElementById('catdetail').innerHTML = `<h2>${d.name}</h2><p>${info.blurb}</p>` +
-    abilityRows(k).map(([key, name, note, el]) => `<div class="ab-row"><i>${key}</i> <b>${name}</b> ${elTag(el)} — ${note}</div>`).join('') +
-    `<div class="stats">Health ${d.maxHp} · Energy ${d.maxEnergy} (+${d.energyRegen}/s) · Speed ${d.speed}</div>`;
-  pv.show(k);
-  if (coop && coop.role === 'guest' && coop.link) coop.link.send(hello());   // tell the host which cat you picked
+  backdrop = { stop() { live = false; sc.dispose(); const c = document.getElementById('game'); c.replaceWith(c.cloneNode(false)); } };
+});
+const stopBackdrop = () => { if (backdrop) { backdrop.stop(); backdrop = null; } };
+
+// First screen: the intro film (once per visit; it plays muted, Skip or any key skips it),
+// then the title. ?go starts a game straight away (Try again, Onward), ?kit opens Your traps.
+function intro() {
+  const v = $('introvid');
+  let left = false;
+  const leave = () => { if (left) return; left = true; v.pause(); try { sessionStorage.setItem('catcastle.intro', '1'); } catch { /* private window */ } menus.go('title'); removeEventListener('keydown', leave); };
+  if ((() => { try { return sessionStorage.getItem('catcastle.intro'); } catch { return null; } })()) { menus.go('title'); return; }
+  menus.go('intro');
+  v.onended = leave; v.onerror = leave; $('introskip').onclick = leave; addEventListener('keydown', leave);
+  v.src = 'assets/intro/intro.mp4';
+  v.play().catch(leave);
+  setTimeout(() => { if (v.readyState < 2) leave(); }, 4000);   // not there, or too slow: straight to the title
 }
-document.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => { sfx.unlock(); sfx.play('click'); pickCat(b.dataset.cat); }));
-pickCat(chosenCat);
-// Loadout: pick 8 traps to bring, and 1 item. Remembered between visits.
-const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
-const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
-// Only traps and items you've unlocked (shop) can be brought.
-let loadout = load('catcastle.loadout', STARTER_TRAPS.slice(0, LOADOUT_SIZE)).filter(k => TRAPS[k] && unlockedTraps(profile).includes(k));
-let chosenItem = unlockedItems(profile).includes(load('catcastle.item', 'laser')) ? load('catcastle.item', 'laser') : 'laser';
-// The menu shows your 8 trap slots and your item; click any of them (or the button) to open
-// the Traps & Items screen, where you unlock, upgrade and swap (src/ui/traps.js).
-const kit = { get loadout() { return loadout; }, set loadout(v) { loadout = v; }, get item() { return chosenItem; }, set item(v) { chosenItem = v; } };
-const saveKit = () => { save('catcastle.loadout', loadout); save('catcastle.item', chosenItem); };
-function drawLoadout() {
-  const traps = unlockedTraps(profile), icons = trapIcons(loadout);
-  loadout = loadout.filter(k => traps.includes(k));
-  const locked = TRAP_ORDER.length - traps.length + ITEM_ORDER.length - unlockedItems(profile).length;
-  let h = '<div class="lh">Your traps</div>';
-  for (let i = 0; i < LOADOUT_SIZE; i++) { const k = loadout[i]; h += `<button class="ls ${k ? '' : 'empty'}" data-lslot="${i}" title="${k ? TRAPS[k].desc : 'Empty: click to choose a trap'}"><span class="key">${i + 1}</span>${k && icons[k] ? `<img src="${icons[k]}" alt="">` : ''}<span class="nm">${k ? TRAPS[k].name : 'empty'}</span></button>`; }
-  h += `<button class="ls item" data-lslot="item" title="${ITEMS[chosenItem].desc}"><span class="key">Q</span><span class="nm">${ITEMS[chosenItem].name}</span></button>`;
-  h += `<div><button id="trapsbtn">Traps &amp; items${locked ? ` <small>(${locked} to unlock)</small>` : ''}</button></div>`;
-  document.getElementById('loadout').innerHTML = h;
-  const open = (slot) => { sfx.unlock(); sfx.play('click'); openTraps(profile, { sfx, state: kit, save: saveKit, slot, onChange: () => { showWallet(); drawLoadout(); pickCat(chosenCat); } }); };
-  document.querySelectorAll('[data-lslot]').forEach(b => b.onclick = () => open(b.dataset.lslot === 'item' ? null : +b.dataset.lslot));
-  document.getElementById('trapsbtn').onclick = () => open(null);
-}
-drawLoadout();
-// Shop (between runs). Also opens straight away from the end screen's Shop button (?shop=1).
-const shop = () => openShop(profile, { sfx, cat: () => chosenCat, onChange: () => { showWallet(); drawLoadout(); pickCat(chosenCat); } });
-document.getElementById('shopbtn').onclick = () => { sfx.unlock(); sfx.play('click'); shop(); };
-if (new URLSearchParams(location.search).has('shop')) { dropFlags(); shop(); }
-// Map select: the six stretches of the journey, entrance to kitchen.
-let chosenMap = MAPS[load('catcastle.map', 'entrance')] ? load('catcastle.map', 'entrance') : 'entrance';
-function drawMaps() {
-  document.getElementById('maps').innerHTML = MAP_ORDER.map((k, i) => `<button class="mp ${k === chosenMap ? 'on' : ''}" data-map="${k}"><b>${i + 1}. ${MAPS[k].name}</b><small>${MAPS[k].twist}</small></button>`).join('');
-  document.querySelectorAll('[data-map]').forEach(b => b.onclick = () => { chosenMap = b.dataset.map; save('catcastle.map', chosenMap); sfx.play('click'); drawMaps(); });
-  // The play button names the map you'll be playing.
-  const pb = document.querySelector('[data-mode="normal"]'); if (pb) pb.textContent = `${MAPS[chosenMap].name} · ${RULES.winWave} waves`;
-}
-drawMaps();
-// Difficulty: Relaxed / Normal / Brutal (remembered).
-let chosenDiff = DIFFICULTY[load('catcastle.diff', 'normal')] ? load('catcastle.diff', 'normal') : 'normal';
-function drawDiff() {
-  document.getElementById('diff').innerHTML = DIFFICULTY_ORDER.map(k => `<button class="df ${k === chosenDiff ? 'picked' : ''}" data-diff="${k}" title="${DIFFICULTY[k].desc}">${DIFFICULTY[k].name}</button>`).join('') + `<small>${DIFFICULTY[chosenDiff].desc}</small>`;
-  document.querySelectorAll('[data-diff]').forEach(b => b.onclick = () => { chosenDiff = b.dataset.diff; save('catcastle.diff', chosenDiff); sfx.play('click'); drawDiff(); });
-}
-drawDiff();
-if (new URLSearchParams(location.search).has('go')) setTimeout(() => { previewOn = false; dropFlags(); start('normal'); }, 0);
-document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
-  if (loadout.length < 1) { sfx.play('deny'); return; }
-  if (coop && coop.role === 'guest') { sfx.play('deny'); coopStatus('The host starts the game.'); return; }
-  previewOn = false;
-  if (coop && coop.role === 'host' && coop.guests.length) hostStart(b.dataset.mode, chosenMap);
-  else { if (coop && coop.room) coop.room.close(); coop = null; start(b.dataset.mode); }   // hosting but nobody joined yet: just play
-}));
+if (FLAGS.has('go')) { dropFlags(); setTimeout(() => start('normal'), 0); }   // (after the rest of this file has run)
+else if (FLAGS.has('kit')) { dropFlags(); menus.go('kit'); }
+else intro();
 
 // ---------- co-op (up to four cats online) ----------
 // Host: makes a room code. Guests: type it in. The host picks the map and presses Play.
 // Players: p1 = host, p2..p4 = guests in the order they joined.
-const coopStatus = (t) => { document.getElementById('coopstatus').textContent = t; };
-const hello = () => ({ t: 'hello', cat: chosenCat, loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null });
-const lobbyLine = () => coop.guests.length ? `Room ${coop.code}: ${[CATS[chosenCat].name + ' (you)', ...coop.guests.map(g => CATS[g.hello.cat].name)].join(', ')}. Pick a map and press Play.` : `Room ${coop.code}: waiting for friends…`;
-document.getElementById('hostbtn').onclick = async () => {
+const coopStatus = (t) => { $('coopstatus').innerHTML = t; };
+const hello = () => ({ t: 'hello', cat: menus.state.cat, loadout: menus.loadout(), item: menus.state.item, upgrades: upgradesFor(profile), hat: profile.worn[menus.state.cat] || null });
+// The room pill under the wallet: who's in.
+const roomPill = () => {
+  const el = $('w-room');
+  if (!coop || !coop.code) { el.classList.remove('on'); return; }
+  const names = coop.role === 'host' ? [CATS[menus.state.cat].name + ' (you)', ...coop.guests.map(g => CATS[g.hello.cat].name)] : [`you (${CATS[menus.state.cat].name})`];
+  el.textContent = `Room ${coop.code}: ${names.join(', ')}`; el.classList.add('on');
+};
+const lobbyLine = () => coop.guests.length ? `Room <span class="roomcode">${coop.code}</span> ${coop.guests.length} friend${coop.guests.length > 1 ? 's' : ''} in. Choose your cat, then press Play.` : `Room <span class="roomcode">${coop.code}</span> Give your friends this code.`;
+function leaveCoop() { if (coop && coop.room) coop.room.close(); if (coop && coop.link && coop.link.close) coop.link.close(); coop = null; coopStatus(''); $('mp-next').disabled = true; roomPill(); }
+$('hostbtn').onclick = async () => {
   if (coop) return; sfx.unlock(); sfx.play('click');
   const code = roomCode(); coop = { role: 'host', code, guests: [] };
   try {
     coop.room = await hostRoom(code, coopStatus, ({ link, hello: h }) => {
       const g = { link, hello: h, id: 'p' + (coop.guests.length + 2) }; coop.guests.push(g);
-      coopStatus(lobbyLine()); sfx.play('intro');
-      link.on('data', (d) => { if (d && d.t === 'hello') { g.hello = d; if (!coop.started) coopStatus(lobbyLine()); } });
-      link.on('close', () => { g.gone = true; if (!coop.started) { coop.guests = coop.guests.filter(x => x !== g); coopStatus(lobbyLine()); } });
+      coopStatus(lobbyLine()); roomPill(); sfx.play('intro');
+      link.on('data', (d) => { if (d && d.t === 'hello') { g.hello = d; if (!coop.started) { coopStatus(lobbyLine()); roomPill(); } } });
+      link.on('close', () => { g.gone = true; if (!coop.started) { coop.guests = coop.guests.filter(x => x !== g); coopStatus(lobbyLine()); roomPill(); } });
     });
+    coopStatus(lobbyLine()); roomPill(); $('mp-next').disabled = false;
   } catch { coop = null; }
 };
 // Host: tell every guest what we're playing (same map, same seed, who is who), then start.
 function hostStart(mode, map) {
   const seed = (Date.now() & 0xffff) | 1;
   const live = coop.guests.filter(g => !g.gone);
-  const players = [{ id: 'p1', cat: chosenCat, hat: profile.worn[chosenCat] || null, item: chosenItem }, ...live.map(g => ({ id: g.id, cat: g.hello.cat, hat: g.hello.hat, item: g.hello.item }))];
-  for (const g of live) g.link.send({ t: 'start', map, mode, seed, you: g.id, players, difficulty: chosenDiff });
-  start(mode, { ...coop, role: 'host', seed, map, players, guests: live, difficulty: chosenDiff });
+  const players = [{ id: 'p1', cat: menus.state.cat, hat: profile.worn[menus.state.cat] || null, item: menus.state.item }, ...live.map(g => ({ id: g.id, cat: g.hello.cat, hat: g.hello.hat, item: g.hello.item }))];
+  for (const g of live) g.link.send({ t: 'start', map, mode, seed, you: g.id, players, difficulty: menus.state.diff });
+  start(mode, { ...coop, role: 'host', seed, map, players, guests: live, difficulty: menus.state.diff });
 }
-document.getElementById('joinbtn').onclick = async () => {
-  const code = document.getElementById('joincode').value.trim().toUpperCase();
+$('joinbtn').onclick = async () => {
+  const code = $('joincode').value.trim().toUpperCase();
   if (coop || code.length !== 4) { sfx.play('deny'); return; }
   sfx.unlock(); sfx.play('click'); coop = { role: 'guest', code }; coopStatus(`Joining ${code}…`);
   try {
     const link = await joinRoom(code, hello(), coopStatus);
-    coop.link = link;
+    coop.link = link; coopStatus(`You're in room <span class="roomcode">${code}</span> Choose your cat and traps; the host starts the game.`); $('mp-next').disabled = false; roomPill();
     // 'start' also arrives mid-game when the host moves everyone on to the next map.
-    link.on('data', (d) => { if (d && d.t === 'start') { previewOn = false; start(d.mode, { ...coop, role: 'guest', seed: d.seed, map: d.map, you: d.you, players: d.players, difficulty: d.difficulty }); } });
-    link.on('close', () => { if (!coop.started) { coop = null; coopStatus('The host closed the room.'); } });
+    link.on('data', (d) => { if (d && d.t === 'start') start(d.mode, { ...coop, role: 'guest', seed: d.seed, map: d.map, you: d.you, players: d.players, difficulty: d.difficulty }); });
+    link.on('close', () => { if (coop && !coop.started) { coop = null; coopStatus('The host closed the room.'); $('mp-next').disabled = true; roomPill(); menus.refreshKit(); } });
   } catch { coop = null; }
 };
 
@@ -201,12 +149,15 @@ let game = null;
 async function start(mode, co = null) {
   await kitLoad;
   if (game) game.stop();
-  document.getElementById('menu').classList.remove('show'); document.getElementById('end').classList.remove('show');
+  stopBackdrop(); menus.preview.dispose(); menus.go(null);   // menus away (and the wallet with them)
+  document.body.classList.add('ingame');                       // the HUD shows only in a game
   sfx.unlock(); sfx.setMusic('build');
-  if (co) { co.started = true; chosenMap = co.map; coop = co; }
+  if (co) { co.started = true; coop = co; }
+  menus.fixKit();
+  const chosenMap = co ? co.map : menus.state.map, chosenCat = menus.state.cat, loadout = menus.loadout(), chosenItem = menus.state.item;
   sfx.setAmbience(chosenMap);   // distant life of this map (voices, horses, pots, drips...)
   const guest = co && co.role === 'guest', LOCAL_ID = guest ? co.you : 'p1';
-  const difficulty = co ? co.difficulty || 'normal' : chosenDiff;   // co-op: the host's choice
+  const difficulty = co ? co.difficulty || 'normal' : menus.state.diff;   // co-op: the host's choice
   const sim = new Sim({ mode, seed: co ? co.seed : (Date.now() & 0xffff) | 1, map: chosenMap, difficulty });
   const mine = { loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null };
   if (!co) sim.addPlayer('p1', chosenCat, mine);
@@ -231,7 +182,11 @@ async function start(mode, co = null) {
     }
   }
   if (guest) {
-    offs.push(co.link.on('data', (d) => { if (d && d.t === 'snap') inbox.push(d); else if (d && d.t === 'pause') hud.message(d.p ? 'The host paused the game' : 'Back to it!'); }));
+    offs.push(co.link.on('data', (d) => {
+      if (d && d.t === 'snap') inbox.push(d);
+      else if (d && d.t === 'pause') hud.message(d.p ? 'The host paused the game' : 'Back to it!');
+      else if (d && d.t === 'endless') { sim.mode = 'endless'; ended = false; endEl.classList.remove('show'); hud.message('Endless: hold them as long as you can'); }   // the host kept going after the win
+    }));
     offs.push(co.link.on('close', () => { if (!ended) { hud.message('The host left the game.'); setTimeout(() => relaunch(''), 3000); } }));
   }
   const sendAll = (o) => { if (co && !guest) for (const g of co.guests) if (!g.gone) g.link.send(o); };
@@ -438,6 +393,38 @@ async function start(mode, co = null) {
   }
 
   let last = performance.now(), acc = 0, ended = false, grindT = 0;
+  // ---------- end of a run ----------
+  // Pay out (paw prints for waves cleared, the rating and a first-win bonus; yarn from bosses),
+  // list what got unlocked, and offer what's next. A win offers Keep going: the same run carries
+  // on as endless (v0.32: endless isn't on the menu any more), and its end pays only the extra.
+  const runUnlocks = { traps: [], items: [], maps: [] };
+  let paidWaves = 0, paidYarn = 0;
+  const endEl = document.getElementById('end');
+  function endOfRun(e) {
+    ended = true;
+    const cleared = e.won ? sim.wave : Math.max(0, sim.wave - 1);
+    const reward = runReward(profile, { won: e.won, waves: cleared, rating: e.rating, yarn: sim.yarn - paidYarn, map: chosenMap, difficulty, paid: paidWaves });
+    const u = applyReward(profile, reward, { won: e.won, map: chosenMap, waves: cleared, again: paidWaves > 0 }); saveProfile(profile);
+    for (const k of ['traps', 'items', 'maps']) runUnlocks[k].push(...u[k].filter(x => !runUnlocks[k].includes(x)));
+    const endless = paidWaves > 0;
+    paidWaves = cleared; paidYarn = sim.yarn;
+    document.exitPointerLock?.();
+    const nextMap = MAP_ORDER[MAP_ORDER.indexOf(chosenMap) + 1];
+    const buttons = [];
+    if (e.won && !guest) buttons.push({ label: 'Keep going (endless)', big: true, onClick: keepGoing });
+    if (e.won && nextMap && !guest) buttons.push({ label: `Onward: ${MAPS[nextMap].name}`, big: !buttons.length, onClick: () => { try { localStorage.setItem('catcastle.map', JSON.stringify(nextMap)); } catch { /* private */ } if (co) { coop = co; hostStart(mode, nextMap); } else relaunch('go'); } });
+    if (!e.won && !guest) buttons.push({ label: co ? 'Try again together' : 'Try again', big: true, onClick: () => co ? hostStart(mode, chosenMap) : relaunch('go') });
+    if (!co) buttons.push({ label: 'Change traps', onClick: () => relaunch('kit') });
+    buttons.push({ label: 'Main menu', onClick: () => relaunch('') });
+    hud.showEnd(e.won, e.rating, sim, profile, reward, chosenCat, { unlocked: runUnlocks, buttons, endless, guest });
+  }
+  // Keep going after the win: the host (or you alone) carries the same run on from wave 25.
+  function keepGoing() {
+    if (!sim.continueEndless()) return;
+    sendAll({ t: 'endless' });
+    ended = false; endEl.classList.remove('show'); sfx.setMusic('build'); hud.message('Endless: hold them as long as you can');
+    canvas.requestPointerLock();
+  }
   function frame(now) {
     if (!running) return;                     // this game was torn down (next map in co-op)
     const dt = Math.min(0.1, (now - last) / 1000); last = now; acc += dt;
@@ -462,28 +449,14 @@ async function start(mode, co = null) {
         if (e.t === 'bark') hud.bark(e.who, e.text, e.kind);
         if (e.t === 'catHurt' && e.id === LOCAL_ID) hud.flashHurt();
         if (e.t === 'trapAdd' && e.trap.by === LOCAL_ID) coachSeen.placed++;
-        if (e.t === 'end' && !ended) {
-          ended = true;
-          // Pay out: paw prints for waves cleared, the rating and a first-win bonus; yarn from bosses.
-          const cleared = e.won ? sim.wave : Math.max(0, sim.wave - 1);
-          const reward = runReward(profile, { won: e.won, waves: cleared, rating: e.rating, yarn: sim.yarn, map: chosenMap, difficulty });
-          applyReward(profile, reward, { won: e.won, map: chosenMap }); saveProfile(profile);
-          document.exitPointerLock?.();
-          hud.showEnd(e.won, e.rating, sim, profile, reward, chosenCat);
-          // Won a map: offer the next stretch of the journey.
-          const nextMap = MAP_ORDER[MAP_ORDER.indexOf(chosenMap) + 1];
-          const endEl = document.getElementById('end');
-          if (e.won && nextMap && !guest) {   // co-op: the host takes everyone on together
-            const b = document.createElement('button'); b.className = 'play'; b.textContent = `Onward: ${MAPS[nextMap].name}`;
-            b.onclick = () => { save('catcastle.map', nextMap); if (co) { coop = co; hostStart(mode, nextMap); } else relaunch('go'); };
-            endEl.prepend(b);
-          }
-          if (co && !e.won && !guest) {        // co-op: try the same map again, together
-            const b = document.createElement('button'); b.className = 'play'; b.textContent = 'Try again together';
-            b.onclick = () => hostStart(mode, chosenMap); endEl.prepend(b);
-          }
-          if (guest) { const p = document.createElement('p'); p.className = 'dim'; p.textContent = 'The host can take everyone on to the next map, or try again.'; endEl.prepend(p); }
+        // (v0.32) A milestone wave (4, 8, 12...) cleared for the first time unlocks something
+        // straight away: saved now, ready for your next game, listed again at the end.
+        if (e.t === 'waveClear') {
+          const u = noteWave(profile, chosenMap, e.wave); saveProfile(profile);
+          for (const k of u.traps) { runUnlocks.traps.push(k); hud.message(`Unlocked: ${TRAPS[k].name}! Yours from your next game`); }
+          for (const k of u.items) runUnlocks.items.push(k);
         }
+        if (e.t === 'end' && !ended) endOfRun(e);
       }
       sim.events.length = 0;
     }
@@ -509,6 +482,20 @@ async function start(mode, co = null) {
     else if (!paused) coach.update(dt, { moved: coachSeen.moved, sel: selected, placed: coachSeen.placed, phase: sim.phase, kills: sim.stats.kills, sniffed: coachSeen.sniffed });
     scene.render(dt, yaw, pitch, LOCAL_ID);
     requestAnimationFrame(frame);
+  }
+  // ---------- level start: the flyover (v0.32, render/flyover.js) ----------
+  // Shows where the mice come in, the route they take and the hole they're after, then hands
+  // over to your cat, turned to face back down that route (it used to start you staring at
+  // the hole's door). Any key or click skips it.
+  {
+    const cap = document.getElementById('cinecap');
+    const fly = makeFlyover(sim, (h) => { if (h) { cap.innerHTML = h; cap.classList.add('on'); } else cap.classList.remove('on'); }, LOCAL_ID);
+    yaw = fly.faceYaw; pitch = 0.25;
+    document.body.classList.add('cine');
+    const skip = () => fly.skip();
+    addEventListener('keydown', skip, sig); addEventListener('pointerdown', skip, sig);
+    scene.camDriver = (cam, dt) => { const r = fly.drive(cam, dt); if (r === false) document.body.classList.remove('cine'); return r; };
+    window.__skipFlyover = skip; window.__fly = fly;   // used by the screenshot tests
   }
   requestAnimationFrame(frame);
   window.__sim = sim; window.__scene = scene;   // handy for debugging in the browser console

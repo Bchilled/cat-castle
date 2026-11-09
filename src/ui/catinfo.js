@@ -7,7 +7,7 @@ export const CAT_INFO = {
   fred: {
     role: 'Ranged · fast · fragile',
     blurb: 'Scruffy ginger alley tom with a mouth on him.',
-    pri: ['Spitball', 'rapid single shots, each one bleeds'], sec: ['Hairball', 'arcing splash, slows'],
+    pri: ['Spitball', 'rapid single shots, each one bleeds'], sec: ['Hack-up', 'coughs up a soggy furball that bowls mice over and leaves a wet trail'],
     e: ['Alley Dash', 'dart forward slashing all you pass'], jump: ['Double Jump', 'plus two wall kicks'],
   },
   puddin: {

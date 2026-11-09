@@ -22,7 +22,7 @@ const s = new Sim({ seed: 7 });
 ok(s.flow[s.spawnCell] < Infinity, `spawn reaches exit (cost ${s.flow[s.spawnCell].toFixed(1)})`);
 ok(s.flowBig[s.spawnCell] < Infinity, 'big bosses also have a route');
 // v0.30: the gate is jammed, so both packs come through the breach in the west curtain wall.
-ok(s.routes().slice(0, 2).every(r => r.some(([x, z]) => x > 16 && x < 24 && z > 76 && z < 84)), 'with the gate jammed, both roads route through the breach');
+ok(s.routes().slice(0, 1).every(r => r.some(([x, z]) => x > 16 && x < 24 && z > 76 && z < 84)), 'with the gate jammed, the west road routes through the breach');   // (0.32: the east road opens on wave 8, after the gate is down anyway)
 ok(new Set(s.routes().map(r => r[0].join())).size === 3, 'three entrances (two roads and the courtyard drain)');
 {
   // Path of least resistance: one route per entrance, and every pack takes it.
@@ -116,13 +116,16 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
   ok(ev.some(e => e.t === 'eat') && p.hp > 100, `bite eats the mouse and heals (hp ${p.hp.toFixed(0)})`);
 }
 
-// 10. Hairball fires even with no aim point, splashes and slows; pounce stuns.
+// 10. Fred's Hack-up (0.32): the furball rolls along the floor, bowls over the mice in its way
+// (hurt, slowed, knocked flat), leaves a wet trail, and has a real cooldown. Pounce stuns.
 {
   const s11 = new Sim({ seed: 2 }); const c = s11.addPlayer('p1', 'fred'); c.x = 60; c.z = 40; c.yaw = 0;
   for (let k = 0; k < 3; k++) s11.spawnMouse('mouse', 1);
-  s11.mice.forEach((m, k) => { m.x = 60 + k * 0.3; m.z = 45; m.state = 'stuck'; m.stuckT = 99; });
-  run(s11, 2, (t) => inp(s11, 'p1', { secondary: t === 0, aim: { x: 60.3, y: 0, z: 45 } }));
-  ok(s11.mice.filter(m => m.hp < m.maxHp && m.slowT > 0).length >= 2, 'hairball splash hits and slows several mice');
+  s11.mice.forEach((m, k) => { m.x = 60 + (k - 1) * 0.3; m.z = 44 + k * 1.5; m.state = 'stuck'; m.stuckT = 99; });
+  const evs = run(s11, 1.5, (t) => inp(s11, 'p1', { secondary: t === 0, aim: { x: 60, y: 0, z: 50 } }));
+  ok(s11.mice.filter(m => m.hp < m.maxHp && m.slowT > 0).length === 3, 'the furball rolls through a line of mice and hits all of them');
+  ok(evs.some(e => e.t === 'hairBowl') && s11.zones.some(z => z.kind === 'hairtrail'), 'it knocks them over and leaves a wet trail');
+  ok(c.secT > 4, `a real cooldown (${c.secT.toFixed(1)}s left)`);
   const s12 = new Sim({ seed: 2 }); const p = s12.addPlayer('p1', 'puddin'); p.x = 60; p.z = 40;
   s12.spawnMouse('tank', 1); const m = s12.mice[0]; m.x = 60; m.z = 44; m.state = 'stuck'; m.stuckT = 99;
   run(s12, 1.5, (t) => inp(s12, 'p1', { secondary: t === 0, aim: { x: 60, y: 0, z: 44 } }));
@@ -188,10 +191,23 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
 {
   const s = new Sim({ seed: 23 }); s.addPlayer('p1'); s.cats.get('p1').x = 90; s.cats.get('p1').z = 5;
   for (let k = 0; k < 30; k++) s.spawnMouse('mouse', 1, 30, 0);
-  run(s, 6);
-  const xs = s.mice.filter(m => m.z > 98).map(m => m.x);
+  run(s, 3);   // (0.32: measured on the road, before they queue for the log over the moat)
+  const xs = s.mice.filter(m => m.z > 100).map(m => m.x);
   const spread = Math.max(...xs) - Math.min(...xs);
   ok(spread > 2, `mob fills the road (spread ${spread.toFixed(1)} units across)`);
+}
+// 16b. (0.32) Mice keep off the walls: almost no route runs in the cells right beside a wall
+// (the entrance and passages used to be 60%).
+for (const id of MAP_ORDER) {
+  const s = new Sim({ map: id, seed: 5 }); s.addPlayer('p1'); s.step();
+  let n = 0, near = 0;
+  for (const r of s.routes()) for (const p of r) {
+    if ((p[2] || 0) > 0.5) continue; n++;
+    const cx = Math.floor(p[0] / CELL), cz = Math.floor(p[1] / CELL); let w = false;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!s.passSmall((cz + dz) * W + cx + dx)) w = true;
+    if (w) near++;
+  }
+  ok(near / n < 0.05, `${id}: routes keep off the walls (${(100 * near / n).toFixed(0)}% of the way right beside one)`);
 }
 // 17. Mice turn to attack a nearby cat; plague rats spit.
 {
@@ -476,14 +492,28 @@ for (const id of MAP_ORDER) {
   const base = trapParams('mousetrap'), t3 = trapParams('mousetrap', { tier: 3, special: 'a' });
   ok(t3.damage > base.damage && t3.cooldown < base.cooldown && t3.bleed === 3, 'upgrades: tier 2 hits harder, tier 3 resets faster, special switches on');
 }
-// 33. Shop and profile: unlocks, tiers, specials, hats, rewards, old saves.
+// 33. Profile (0.32): traps, items and maps are earned by reaching waves, never bought;
+// paw prints buy upgrades, yarn buys hats; old saves keep what they had.
 {
   const P = await import('../src/meta/profile.js');
+  const { UNLOCKS, STARTER_TRAPS, SLOTS, TRAP_ORDER: TO, ITEM_ORDER: IO, RULES } = await import('../src/config.js');
   const pr = P.freshProfile();
-  ok(P.hasTrap(pr, 'mousetrap') && !P.hasTrap(pr, 'skull'), 'starter traps unlocked, others locked');
-  ok(!P.buy(pr, { type: 'trap', kind: 'skull' }).ok, "can't unlock without paw prints");
+  ok(P.unlockedTraps(pr).length === 4 && SLOTS.every(sl => P.unlockedTraps(pr).filter(k => sl.fits(TRAPS[k], k)).length === 1), 'a new game starts with one trap for each slot (floor, ceiling, wall, barricade)');
+  ok(P.unlockedItems(pr).join() === 'laser' && P.unlockedMaps(pr).join() === 'entrance', 'one item, one map');
+  ok(!P.buy(pr, { type: 'trap', kind: 'skull' }).ok && !P.price(pr, { type: 'trap', kind: 'skull' }), "traps can't be bought");
+  const given = Object.values(UNLOCKS).flatMap(m => Object.values(m).map(u => u.trap)).filter(Boolean);
+  ok(given.length === new Set(given).size && [...STARTER_TRAPS, ...given].sort().join() === [...TO].sort().join(), `every trap is earned exactly once (${given.length} unlocks + ${STARTER_TRAPS.length} starters)`);
+  const items = Object.values(UNLOCKS).flatMap(m => Object.values(m).map(u => u.item)).filter(Boolean);
+  ok(['laser', ...items].sort().join() === [...IO].sort().join(), 'every item is earned');
+  ok(P.unlockAt(pr, 'entrance', 4).trap === 'flipper' && !P.unlockAt(pr, 'entrance', 5), 'wave 4 on the entrance is a milestone, wave 5 is not');
+  const got = P.applyReward(pr, { paws: 3, yarn: 0 }, { won: false, map: 'entrance', waves: 10 });
+  ok(got.traps.join() === 'flipper,gluepad' && P.hasTrap(pr, 'gluepad') && !P.hasTrap(pr, 'grinder'), `reaching wave 10 unlocks the wave 4 and 8 traps (${got.traps})`);
+  ok(!P.unlockAt(pr, 'entrance', 8), 'a milestone only counts the first time');
+  const won = P.applyReward(pr, { paws: 0, yarn: 0 }, { won: true, map: 'entrance', waves: RULES.winWave });
+  ok(won.maps.join() === 'market' && won.items.includes('tonic') && P.hasTrap(pr, 'oilslick'), `winning opens the next map and its unlocks (${won.traps}; ${won.items}; ${won.maps})`);
+  ok(P.hasProgress(pr) && !P.hasProgress(P.freshProfile()), 'Continue only when there is progress');
+  ok(!P.buy(pr, { type: 'tier', kind: 'mousetrap' }).ok, "upgrades need paw prints");
   pr.paws = 100;
-  ok(P.buy(pr, { type: 'trap', kind: 'skull' }).ok && P.hasTrap(pr, 'skull') && pr.paws === 100 - P.UNLOCK.traps.skull, 'unlocking a trap spends paw prints');
   ok(!P.buy(pr, { type: 'special', kind: 'mousetrap', which: 'a' }).ok, 'specials need tier 3');
   P.buy(pr, { type: 'tier', kind: 'mousetrap' }); P.buy(pr, { type: 'tier', kind: 'mousetrap' });
   ok(P.trapState(pr, 'mousetrap').tier === 3 && !P.price(pr, { type: 'tier', kind: 'mousetrap' }), 'two tier upgrades, then maxed');
@@ -491,13 +521,18 @@ for (const id of MAP_ORDER) {
   const mid = pr.paws; P.buy(pr, { type: 'special', kind: 'mousetrap', which: 'a' });
   ok(before - mid === 30 && pr.paws === mid && P.trapState(pr, 'mousetrap').special === 'a', 'both specials bought once, swapping back is free');
   ok(P.upgradesFor(pr).mousetrap.tier === 3 && P.upgradesFor(pr).mousetrap.special === 'a', 'upgrades handed to the game');
+  ok(P.hasTrap(pr, 'mousetrap'), 'an upgraded trap is still unlocked');
   pr.yarn = 3; ok(P.buy(pr, { type: 'hat', kind: 'tophat' }).ok && pr.yarn === 0, 'hats cost yarn');
   P.buy(pr, { type: 'wear', kind: 'tophat', cat: 'fred' }); ok(pr.worn.fred === 'tophat', 'wear a hat');
   const lose = P.runReward(P.freshProfile(), { won: false, waves: 10, map: 'entrance' });
   ok(lose.paws === 3, `a loss at wave 11 still pays (${lose.paws})`);
   const win = P.runReward(P.freshProfile(), { won: true, waves: 24, rating: { total: 6 }, yarn: 8, map: 'market' });
   ok(win.paws === 8 + 6 + P.FIRST_WIN_BONUS && win.yarn === 8, `a first win pays waves + rating + bonus (${win.paws})`);
-  const old = P.normalise({ paws: 4, yarn: 1 }); ok(old.paws === 4 && old.traps && Array.isArray(old.hats), 'old saves load');
+  const more = P.runReward(pr, { won: false, waves: 31, map: 'entrance', paid: 24 });
+  ok(more.paws === 2 && more.lines[0][0] === '7 more waves cleared', `endless after a win pays only the extra waves (${more.paws})`);
+  const old = P.normalise({ paws: 4, yarn: 1, traps: { skull: { unlocked: true, tier: 2 } }, wins: { entrance: 1 } });
+  ok(old.paws === 4 && old.traps && Array.isArray(old.hats) && P.hasTrap(old, 'skull') && P.hasTrap(old, 'zapper') && P.hasItem(old, 'bola'), 'old saves keep what they had (bought traps, the old starters)');
+  ok(P.unlockedMaps(old).includes('market') && P.trapState(old, 'skull').tier === 2, 'old saves: a won map opens the next one, upgrades kept');
   // Upgrades reach the traps in the game.
   const g = new Sim({ seed: 400 }); g.addPlayer('p1', 'fred', { upgrades: P.upgradesFor(pr) }); g.sardines = 1e5; g.step();
   g.placeTrap(g.cats.get('p1'), 'mousetrap', 80, 92, 0, -1);
@@ -525,9 +560,10 @@ for (const id of MAP_ORDER) {
   for (let k = 0; k < 120; k++) { dg.dangerT = 0; dg.stepDanger(); }
   ok(Math.max(...dg.danger) < 1, 'and forget it after a while');
   ok(buildWave(9, () => 0.5, false).queue.some(e => e.type === 'scout'), 'scouts lead the packs');
-  // Crates: the guard passage is a shortcut worth smashing; mice chew through and it opens.
-  const cr = new Sim({ seed: 501 }); cr.addPlayer('p1'); cr.gate.up = false; cr.flowDirty = true; cr.step();
-  const crate = cr.crates[0]; for (let k = 0; k < 6; k++) { const m = cr.spawnAt('tank', 48 + (k % 3 - 1), 23 + (k >> 1) * 0.3, 999); m.via = -1; }
+  // Crates: the market's tavern arch is a shortcut worth smashing (for mice too big to climb
+  // over on the plank); they chew through and it opens. (0.32: the entrance's guard passage is open now.)
+  const cr = new Sim({ map: 'market', seed: 501 }); cr.addPlayer('p1'); cr.flowDirty = true; cr.step();
+  const crate = cr.crates.find(c => c.rect[0] === 30 && c.rect[1] === 30); for (let k = 0; k < 6; k++) { const m = cr.spawnAt('tank', 33 + (k % 3 - 1), 35 + (k >> 1) * 0.3, 999); m.via = -1; }
   const evc = run(cr, 30, () => { for (const m of cr.mice) m.hp = m.maxHp; });
   ok(evc.some(e => e.t === 'crateHit') && !crate.up, 'mice smash through a crate stack to take the shortcut');
   cr.phase = 'build'; cr.phaseTimer = 0; cr.mice = []; cr.step(); ok(crate.up, 'servants stack the crates back each wave');
@@ -964,9 +1000,9 @@ let findSpot, setup;
 {
   const walk = (sim, c, mx, mz, secs) => run(sim, secs, () => inp(sim, c.id, { mx, mz, yaw: Math.atan2(mx, mz) }));
   const tw = new Sim({ seed: 1400 }); const c = tw.addPlayer('p1', 'nebbie'); tw.step();
-  c.x = 9; c.z = 40; c.y = 0;
-  walk(tw, c, 0, -1, 0.75); const onStairs = c.y;                // north up the courtyard stairs
-  walk(tw, c, -1, 0, 0.5); const onWalk = c.y;                   // west onto the walkway
+  c.x = 15; c.z = 34; c.y = 0;
+  walk(tw, c, -1, 0, 0.65); const onStairs = c.y;                // west up the courtyard stairs (0.32: they climb straight onto the walkway)
+  walk(tw, c, -1, 0, 0.35); const onWalk = c.y;                  // onto the walkway
   walk(tw, c, 0, 1, 2.5);                                         // south up the tower stairs
   ok(onStairs > 2.5 && onWalk > 2.9 && c.y > 7.9 && c.z > 48, `a cat walks up to the walkway (${onWalk.toFixed(1)}) and on up to the watchtower (${c.y.toFixed(1)} high)`);
   const st = new Sim({ map: 'stables', seed: 1401 }); const p = st.addPlayer('p1', 'puddin'); st.step();
@@ -1018,7 +1054,9 @@ let findSpot, setup;
     const s = new Sim({ map: id, seed: 1600 }); s.addPlayer('p1'); s.sardines = 1e6; s.step();
     const R = s.routes(), L = s.map.links.find(l => l.name === name);
     ok(L && high(R[0]).length > 20, `${id}: door 1's rats take the ${name} (${high(R[0]).length} points up high)`);
-    if (id !== 'cellar') {
+    // (0.32) The market's back-alley drain now takes the back alley (keeping off the walls tipped
+    // a near tie); its criss-cross comes back with the market re-layout.
+    if (id !== 'cellar' && id !== 'market') {
       const under = R.some((q, e) => e > 0 && high(R[0]).some(p => q.some(f => (f[2] || 0) < 0.5 && Math.hypot(p[0] - f[0], p[1] - f[1]) < 0.6)));
       ok(under, `${id}: another door's floor lane runs under it (criss-cross)`);
     }
@@ -1061,5 +1099,19 @@ let findSpot, setup;
   // One flat ceiling: not half under the market plank (2.8) and half under the tavern arch (7).
   const mk = new Sim({ map: 'market', seed: 1702 }); mk.addPlayer('p1'); mk.step();
   ok(mk.canPlace('zapper', 64, 48) !== true && mk.canPlace('zapper', 60, 48) === true, 'a ceiling trap cannot straddle two ceiling heights');
+}
+// 50. (0.32) Endless is offered after the win, not picked on the menu: the same run keeps
+// going from wave 25 with the traps still standing.
+{
+  const s = new Sim({ seed: 1800 }); s.addPlayer('p1'); s.sardines = 1e5; s.step();
+  s.placeTrap(s.cats.get('p1'), 'mousetrap', 80, 92, 0, -1);
+  s.wave = 24; s.phase = 'wave'; s.spawn = { queue: [], t: 0, hpMul: 1 }; s.mice = []; s.events.length = 0; s.step();
+  ok(s.phase === 'won' && s.events.some(e => e.t === 'end' && e.won), 'clearing wave 24 wins');
+  ok(s.continueEndless() && s.mode === 'endless' && s.phase === 'build' && s.traps.size === 1, 'keep going: build phase again, traps still there');
+  s.phaseTimer = 0; s.step();
+  ok(s.wave === 25 && s.phase === 'wave', 'wave 25 starts');
+  s.spawn.queue = []; s.mice = []; s.step();
+  ok(s.phase === 'build', 'clearing wave 25 does not end the run');
+  ok(!new Sim({ seed: 1 }).continueEndless(), "can't keep going before you've won");
 }
 process.exit(fails ? 1 : 0);

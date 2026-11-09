@@ -57,6 +57,9 @@ const roof = (name, rect, bot, top, look) => ({ name, kind: 'roof', rect, bot, t
 // `to` at the other (axis 'z': from at z0, to at z1; 'x': from at x0, to at x1). Built at
 // half a unit of rise per unit of run (15 cm steps, 30 cm treads), so every half-unit cell
 // rises at most 0.26 and the cats simply walk up. Mice can't use them (they're solid).
+// (v0.32) A farm cart: its bed is up on wheels, so mice run underneath (and a ceiling trap fits
+// under the bed). It used to be a solid block with bare ground drawn under it.
+const cart = (rect) => ({ name: 'Cart', kind: 'over', legs: 'none', rect, bot: 2.2, top: 2.8, look: 'cart' });
 const stair = (name, rect, axis, from, to, look = 'stairs') => ({ name, kind: 'solid', rect, h: Math.max(from, to), look, stairs: { axis, from, to } });
 
 export const MAPS = {
@@ -95,7 +98,9 @@ export const MAPS = {
       { name: 'East walkway', kind: 'solid', rect: [88, 30, 94, 56], h: 3, look: 'walkway' },
       // Ways up for the cats (v0.28): stairs from the courtyard to each walkway, then up the
       // walkway to a watchtower in the corner (2.4 m up), looking over the courtyard and the gate.
-      stair('Walkway stairs', [8, 32, 10, 38], 'z', 3, 0), stair('Walkway stairs', [86, 32, 88, 38], 'z', 3, 0),
+      // (v0.32) The walkway stairs climb straight onto the walkway's side (they used to run
+      // alongside it and seem to end in mid-air).
+      stair('Walkway stairs', [8, 32, 14, 36], 'x', 3, 0), stair('Walkway stairs', [82, 32, 88, 36], 'x', 0, 3),
       stair('Tower stairs', [2, 38, 8, 48], 'z', 3, 8), stair('Tower stairs', [88, 38, 94, 48], 'z', 3, 8),
       { name: 'West tower', kind: 'solid', rect: [2, 48, 10, 58], h: 8, look: 'tower' },
       { name: 'East tower', kind: 'solid', rect: [86, 48, 94, 58], h: 8, look: 'tower' },
@@ -115,7 +120,7 @@ export const MAPS = {
       { name: 'Guardhouse W', kind: 'solid', rect: [30, 10, 44, 30], h: 16, look: 'guardhouse' },
       { name: 'Guardhouse E', kind: 'solid', rect: [52, 10, 66, 30], h: 16, look: 'guardhouse' },
       { name: 'Guard passage', kind: 'roof', rect: [44, 10, 52, 30], bot: 7, top: 16, look: 'tunnelroof' },
-      { name: 'Cart', kind: 'solid', rect: [66, 14, 70, 22], h: 3.6, look: 'cart' },           // narrows the east lane to 2 tiles
+      cart([66, 14, 70, 22]),                                                                     // in the east lane (0.32: mice run under it)
       { name: 'Barracks', kind: 'solid', rect: [74, 10, 94, 30], h: 16, look: 'guardhouse' },
       { name: 'Hay bales', kind: 'solid', rect: [86, 2, 94, 6], h: 2.6, look: 'bales' },
       { name: 'Barrels', kind: 'solid', rect: [2, 2, 8, 6], h: 3.0, look: 'barrels' },
@@ -173,7 +178,7 @@ export const MAPS = {
       // a landing, and a plank through the tavern arch over the crates stacked in it.
       plank('Plank', [28, 48, 30, 60], 3), plank('Plank', [28, 40, 36, 44], 3), plank('Plank', [34, 22, 36, 40], 3),
       // The north yard by the back door.
-      blk('Crates', [10, 8, 16, 12], 1.6, 'crate'), blk('Crates', [72, 6, 78, 10], 1.6, 'crate'), blk('Cart', [20, 12, 26, 20], 3.6, 'cart'),
+      blk('Crates', [10, 8, 16, 12], 1.6, 'crate'), blk('Crates', [72, 6, 78, 10], 1.6, 'crate'), cart([20, 12, 26, 20]),
       over('Awning bench', [56, 8, 66, 11], 1.5, 1.9, 'bench'),
     ],
     clutter: [[2, 2, 10, 8], [78, 2, 86, 8], [14, 40, 18, 44], [70, 40, 74, 44], [14, 66, 18, 70], [70, 66, 74, 70], [26, 70, 32, 74], [58, 18, 64, 22]],
@@ -212,7 +217,7 @@ export const MAPS = {
       { name: 'Cart shed', kind: 'over', legs: 'corners', rect: [56, 12, 68, 28], bot: 7, top: 7.8, look: 'beams' },
       { name: 'Feed shed', kind: 'over', legs: 'corners', rect: [38, 12, 52, 28], bot: 7, top: 7.8, look: 'beams' },
       blk('Fence', [32, 72, 60, 73], 1.2, 'fence'), blk('Fence', [68, 30, 98, 31], 1.2, 'fence'),
-      blk('Cart', [76, 8, 82, 16], 3.6, 'cart'), blk('Hay bales', [86, 4, 98, 14], 2.6, 'bales'),
+      cart([76, 8, 82, 16]), blk('Hay bales', [86, 4, 98, 14], 2.6, 'bales'),
       blk('Oat sacks', [36, 2, 40, 5], 0.8, 'sacks'), blk('Water barrel', [92, 80, 96, 84], 3, 'barrels'),
     ],
     clutter: [[88, 20, 98, 28], [32, 86, 44, 94], [80, 86, 90, 94], [80, 66, 90, 70], [32, 14, 38, 20], [42, 66, 50, 70]],
