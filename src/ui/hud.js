@@ -60,14 +60,15 @@ export class Hud {
     $('catname').textContent = h.name;
     $('wave').textContent = h.wave ? `Wave ${h.wave}${h.mode === 'normal' ? ' / ' + RULES.winWave : ''}` : 'Get ready';
     let status = '';
-    if (h.phase === 'build') status = h.wave === 0 ? 'Build, then press G to release the mice' : `Next wave in ${Math.ceil(h.phaseTimer)}s — G to start now`;
+    // (v0.33) On OMD2-scripted maps some breaks have no countdown: the mice wait for you (as in OMD2).
+    if (h.phase === 'build') status = h.wave === 0 ? 'Build, then press G to release the mice' : h.phaseTimer > 60 ? 'Take your time — press G when you are ready' : `Next wave in ${Math.ceil(h.phaseTimer)}s — G to start now`;
     else if (h.phase === 'wave') status = `${h.miceLeft} mice left`;
     $('status').textContent = status;
     // What's coming next (build phase only).
     let next = '';
     if (h.phase === 'build') {
       const n = h.wave + 1;
-      if (this.previewWave !== n) { this.preview = previewWave(n, h.gateUp, { birds: this.sim.mapDef.birds !== false }); this.previewWave = n; }
+      if (this.previewWave !== n) { this.preview = previewWave(n, h.gateUp, { birds: this.sim.mapDef.birds !== false, script: this.sim.script, seen: this.sim.seenKinds }); this.previewWave = n; }   // (v0.33) scripted maps preview their script
       const p = this.preview;
       next = `Wave ${n}: ~${p.total} mice` + (p.fresh.length ? ` · <b class="new">NEW: ${p.fresh.join(', ')}</b>` : '') + (p.boss ? ` · <b class="boss">BOSS: ${p.boss}</b>` : '');
     }

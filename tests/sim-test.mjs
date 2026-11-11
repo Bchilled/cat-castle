@@ -1,6 +1,6 @@
 // Headless rules tests: runs the sim with no graphics.
 // Run: node tests/sim-test.mjs
-import { TRAPS, CATS, ITEMS } from '../src/config.js';
+import { TRAPS, CATS, ITEMS, MICE } from '../src/config.js';
 import { Sim as RealSim } from '../src/sim/sim.js';
 // Most tests check rules on a map with every door open; v0.31's late doors are tested on
 // their own with RealSim (doors shut until their wave).
@@ -1113,5 +1113,24 @@ let findSpot, setup;
   s.spawn.queue = []; s.mice = []; s.step();
   ok(s.phase === 'build', 'clearing wave 25 does not end the run');
   ok(!new Sim({ seed: 1 }).continueEndless(), "can't keep going before you've won");
+}
+// 51. (0.33) Servants' Passages runs Orcs Must Die! 2's Passages wave script: OMD2's doors open on
+// waves 1, 2, 3; each group comes from the door the script says; OMD2's countdown pattern
+// (12 s, or wait for Go on waves 1, 4, 7, 10); waves 13-24 replay the script tougher.
+{
+  const { OMD2_WAVES } = await import('../src/sim/waves-omd2.js');
+  const sc = OMD2_WAVES.passages;
+  ok(Object.keys(sc.waves).length === 12 && sc.waves[1].groups.every(g => g.door === 0) && sc.waves[2].groups.some(g => g.door === 1) && sc.waves[3].groups.some(g => g.door === 2), 'the script has 12 waves; wave 1 all from the Close tunnel, the Middle joins on 2, the Far on 3');
+  const s = new Sim({ map: 'passages', seed: 3 }); s.addPlayer('p1'); s.lives = 1e9; s.step();
+  ok(s.script === sc && s.mapDef.spawns[1].opens === 2 && s.mapDef.spawns[2].opens === 3, 'the passages use it, doors open on waves 2 and 3');
+  const spawnedAt = (w) => { s.phaseTimer = 0; s.step(); const xs = {}; let n = 0; while (s.spawn.queue.length && n++ < 30 * 300) { s.step(); for (const m of s.mice) if (!m.seen) { m.seen = 1; const k = m.x < 20 ? 'west' : m.x < 60 ? 'back' : 'east'; xs[k] = (xs[k] || 0) + 1; } s.events.length = 0; } s.mice = []; s.step(); return xs; };
+  const w1 = spawnedAt(1), w2 = spawnedAt(2), w3 = spawnedAt(3);
+  ok(w1.west === 49 && !w1.back && !w1.east, `wave 1: OMD2's 49 orcs, all from the west stair (${JSON.stringify(w1)})`);
+  ok(w2.west && w2.back && !w2.east && w3.east, `waves 2 and 3 bring in the back and east stairs (${JSON.stringify(w2)} ${JSON.stringify(w3)})`);
+  ok(s.countdownFor(2) === 12 && s.countdownFor(4) > 60 && s.countdownFor(13) > 60, "OMD2's countdowns: 12 s, and wave 4 (and 16) wait for Go");
+  ok(s.phaseTimer > 60, 'after wave 3 the timer holds for Go (OMD2 waits before wave 4)');
+  const w13 = buildWave(13, () => 0.5, false, { script: sc, birds: false });
+  ok(w13.queue.filter(e => e.type === 'mouse').length === 41 && w13.hpMul > 1.7, `wave 13 replays wave 1 with more, tougher mice (${w13.queue.length} mice, hp x${w13.hpMul.toFixed(2)})`);
+  ok(MICE.rat && MICE.rat.hp > MICE.mouse.hp && MICE.rat.hp < MICE.tank.hp, 'the Brown Rat sits between the House Mouse and the Sewer Rat');
 }
 process.exit(fails ? 1 : 0);

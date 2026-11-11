@@ -10,7 +10,7 @@ import {
   GATE, SPAWNS, CAT_SPAWN, DIRS4, WORLD_W, WORLD_H, VIAS, useMap, MAP,
 } from './map.js';
 import { computeFlow, nextCell, nearestReachable, linkCost } from './path.js';
-import { buildWave, ratePaws, INTRO_TEXT } from './waves.js';
+import { buildWave, ratePaws, INTRO_TEXT, scriptFor } from './waves.js';
 
 // Cat lines. Original, crude, bleeped. Each cat has its own voice:
 // Fred is a mouthy back-alley scrapper; Puddin is a lazy, posh glutton.
@@ -257,6 +257,7 @@ export class Sim {
     this.spawnCells = SPAWNS.map(p => cellOf(p.x, p.z - 0.3));
     this.spawnCell = this.spawnCells[0];
     this.door = 0;                     // which entrance the next pack uses
+    this.script = scriptFor(this.mapDef.id); this.seenKinds = new Set();   // (v0.33) OMD2 wave script, if this map has one
     this.doorsOpen = SPAWNS.map((_, k) => this.doorOpensAt(k) <= 1);   // (v0.31) later doors stay shut until their wave
     this.flowDirty = true; this.layoutVer = 0;   // layoutVer: bumps whenever walls/traps/doors change (caches key off it)
     this.updateFlow();
@@ -498,6 +499,14 @@ export class Sim {
   // A door counts from its wave on; between waves the routes also show the doors that open
   // next wave, so you can see where they'll come from and build for it.
   doorOpensAt(k) { return this.allDoors ? 1 : SPAWNS[k].opens || 1; }
+  // (v0.33) The break before wave n: on an OMD2-scripted map, OMD2's own countdown for that wave
+  // (12 s, or no countdown at all on the waves where OMD2 waits for you to press Go: the timer
+  // just holds at the full break). Elsewhere the usual break.
+  countdownFor(n) {
+    if (!this.script) return RULES.buildPhaseSeconds;
+    const c = this.script.countdown, v = c[(n - 1) % c.length];
+    return v > 0 ? v : RULES.buildPhaseSeconds * 4;
+  }
   doorShown(k) { return this.doorOpensAt(k) <= (this.phase === 'wave' ? this.wave : this.wave + 1); }
   nextOpenDoor(k) { for (let n = 1; n <= SPAWNS.length; n++) { const j = (k + n) % SPAWNS.length; if (this.doorsOpen[j]) return j; } return k; }
   routes() {
@@ -718,7 +727,9 @@ export class Sim {
           this.emit({ t: 'msg', text: `${(sp.name || 'A new hole').toUpperCase()} IS OPEN: a new way in!` });
         } });
         if (!this.doorsOpen[this.door]) this.door = this.nextOpenDoor(this.door);
-        this.spawn = { ...buildWave(this.wave, this.rng, this.gate.up, { birds: this.mapDef.birds !== false }), t: 0 }; this.packVia = -2;
+        // (v0.33) Maps with an OMD2 wave script (waves-omd2.js) follow it; the rest get the free-form waves.
+        this.spawn = { ...buildWave(this.wave, this.rng, this.gate.up, { birds: this.mapDef.birds !== false, script: this.script, seen: this.seenKinds }), t: 0 }; this.packVia = -2;
+        for (const e of this.spawn.queue) this.seenKinds.add(e.type);
         this.spawn.hpMul *= (1 + 0.08 * ((this.mapDef.order || 1) - 1)) * this.diff.hp;     // each map further in is a bit tougher; difficulty
         this.emit({ t: 'msg', text: `Wave ${this.wave}` + (this.wave % 12 === 0 ? ' — BIG BOSS RAT' : this.wave % 6 === 0 ? ' — mini boss' : '') });
         this.emit({ t: 'waveStart', wave: this.wave, boss: this.wave % 6 === 0 });
@@ -741,10 +752,11 @@ export class Sim {
       while (s.queue.length && s.t <= 0) {
         const e = s.queue.shift();
         if (this.packVia === -2) this.packVia = this.chooseVia(this.door);    // first mouse of a pack picks the lane
+        if (e.door != null && e.door !== this.door && this.doorsOpen[e.door]) { this.door = e.door; this.packVia = this.chooseVia(this.door); }   // (v0.33) scripted waves say which door
         if (MICE[e.type].bird) this.spawnBird(e.type, s.hpMul); else this.spawnMouse(e.type, s.hpMul, e.pack, this.door, this.packVia);
         if (e.intro) this.emit({ t: 'msg', text: `NEW: ${MICE[e.type].name} — ${INTRO_TEXT[e.type] || ''}` });
         s.t += e.gap;
-        if (e.gap > 0.1) { this.door = this.nextOpenDoor(this.door); this.packVia = -2; }   // next pack: the next open entrance, new lane
+        if (e.gap > 0.1 && e.door == null) { this.door = this.nextOpenDoor(this.door); this.packVia = -2; }   // next pack: the next open entrance, new lane (scripted waves pick their own)
       }
     } else if (this.mice.length === 0 && this.shots.length === 0 && this.birds.length === 0) {
       if (this.mode === 'normal' && this.wave >= RULES.winWave) {
@@ -752,7 +764,7 @@ export class Sim {
         this.rating = ratePaws(this.lives, this.stats, this.diff.lives);
         this.emit({ t: 'end', won: true, rating: this.rating });
       } else {
-        this.phase = 'build'; this.phaseTimer = RULES.buildPhaseSeconds; this.routeCache = null;
+        this.phase = 'build'; this.phaseTimer = this.countdownFor(this.wave + 1); this.routeCache = null;
         // Warn about a door that opens next wave (its route shows from now on).
         SPAWNS.forEach((sp, k) => { if (this.doorOpensAt(k) === this.wave + 1) { this.emit({ t: 'doorWarn', door: k }); this.emit({ t: 'msg', text: `Next wave they break through ${sp.name ? 'the ' + sp.name.toLowerCase() : 'a new hole'}! Its route is marked.` }); } });
         // Income that doesn't depend on hauling tails, so you can always build.

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.33.0 — 2026-11-11
+Servants' Passages now runs Orcs Must Die! 2's own Passages wave script, read from the game's data files on Brent's PC (see the decoded data in the 2026-11-10 review).
+- **The waves are OMD2's.** Every wave's groups, counts, order, which tunnel each group comes from, the half-second spacing inside a group and the gap between groups are the ones in OMD2's `PassagesTunnelClose / Middle / Far` onslaughts (spawn list 0). 86 groups over 12 waves. Nothing in them is invented.
+- **Orc to mouse**, by hit points against the basic grunt (Light Orc 50 hp = House Mouse 26 hp): Medium Orc = Brown Rat (new, 42 hp), Heavy Orc = Sewer Rat, Crossbow Orc and Hobgoblin Shaman = Plague Rat, Kobold Runner and Kobold Sapper = Scamper, Gnoll Hunter = Scout, Troll and Ogre = Fat Rat, Mountain Troll = Rat Captain, Earth Elementals = Ghost Mouse. The mapping is in `src/sim/waves-omd2.js`.
+- **Doors in OMD2's order:** the west stair from wave 1, the back stair from wave 2, the east stair from wave 3 (OMD2's Close, Middle and Far tunnels). Each group comes out of the door the script names.
+- **OMD2's countdown:** 12 seconds between waves, and before waves 1, 4, 7 and 10 (and 13, 16, 19, 22) the mice wait until you press G, as OMD2 waits for Go. The HUD says "Take your time" on those.
+- **24 waves from a 12-wave script:** waves 13 to 24 replay the script with 35% more mice and tougher ones; the mini boss every 6th wave and the King Rat on 12 and 24 stay (Brent's rule).
+- **Brown Rat:** new mouse, between the House Mouse and the Sewer Rat (42 hp, same pace as a mouse). Only the OMD2 script spawns it.
+- The next-wave line in the HUD previews the scripted wave, and newcomers get their one-line intro the first time the script brings them.
+- **Checked:** 335 tests pass (8 new for the script, doors, countdown and replay); the starter-trap bot wins the map on two seeds without a leak until the wave-24 boss, same as before the change. The other five maps are unchanged.
+- **Not done, waiting on Brent:** OMD2's map layouts (needs the scale decision) and OMD2's trap numbers (cost, damage, reset) on the trap roster.
+- **Files** (lines in this version):
+  - `VERSION`: 1
+  - `src/config.js`: 8, 306-307
+  - `src/sim/map.js`: 297
+  - `src/sim/sim.js`: 13, 260, 502-509, 730-732, 755-767
+  - `src/sim/waves-omd2.js`: new
+  - `src/sim/waves.js`: 8-12, 34-61
+  - `src/ui/hud.js`: 63-71
+  - `tests/sim-test.mjs`: 3, 1117-1135
+
 ## 0.32.1 — 2026-11-09
 Kanye's UI art kit in the game (requested by Claude by email, delivered to `assets/ui`).
 - **Title:** his key art (Fred, Puddin, Scary Cat and Casper on crates by the kitchen door, mice pouring out of a burrow with stolen cheese) is the title screen's background, darkened on the left behind the logo and buttons. It replaces the live 3D castle behind the title.

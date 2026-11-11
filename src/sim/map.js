@@ -294,7 +294,7 @@ export const MAPS = {
       { rect: [34, 48, 40, 49], period: 16, offset: 0 }, { rect: [20, 30, 21, 36], period: 18, offset: 6 },
       { rect: [56, 62, 57, 68], period: 14, offset: 3 }, { rect: [2, 76, 8, 77], period: 20, offset: 10 },
     ],
-    hole: { x0: 36, x1: 40, z0: 2, z1: 2.5 }, spawns: [{ x: 5, z: 98.8, name: 'West stair' }, { x: 75, z: 98.8, name: 'East stair', opens: 8 }, { x: 37, z: 98.8, name: 'Back stair', opens: 16 }], catSpawn: { x: 37, z: 5 },   // hole on the tile grid (2 tiles)
+    hole: { x0: 36, x1: 40, z0: 2, z1: 2.5 }, spawns: [{ x: 5, z: 98.8, name: 'West stair' }, { x: 37, z: 98.8, name: 'Back stair', opens: 2 }, { x: 75, z: 98.8, name: 'East stair', opens: 3 }] /* (v0.33) OMD2's Passages door order: Close, Middle, Far tunnels open on waves 1, 2, 3 */, catSpawn: { x: 37, z: 5 },   // hole on the tile grid (2 tiles)
     vias: [{ name: 'West passage', x: 5, z: 50, weight: 1 }, { name: 'Middle passage', x: 37, z: 33, weight: 1 }, { name: 'Laundry', x: 56, z: 79, weight: 1 }],
     torches: [[2, 20, 1, 0], [78, 80, -1, 0], [34, 50, -1, 0], [40, 20, 1, 0], [20, 50, 1, 0], [42, 78, 1, 0]],
     props: [['basket', 5, 1.4, 41.5], ['pot', 76, 1.4, 21]],

@@ -5,9 +5,11 @@
 // straggler wandering out on its own between packs.
 // Wave 6 also brings a siege lobber if the gate is somehow still standing.
 import { MICE } from '../config.js';
+import { OMD2_WAVES } from './waves-omd2.js';
 
 // What each new kind does — shown when it first appears.
 export const INTRO_TEXT = {
+  rat: 'a Brown Rat: twice the mouse, same pace. The bulk of every OMD2 wave.',
   magpie: 'steals your Cheese Chunks and pecks Paw Points off cats. Shoot it down.',
   crow: 'carries mice over your traps and drops them near the hole. Kill it in the air and they fall to their deaths.',
   miniboss: 'huge, fast, and it STOMPS. Red ring on the floor = get out.',
@@ -29,7 +31,34 @@ export const INTRO_TEXT = {
 const KINDS = [   // [type, weight once introduced]
   ['scout', 0], ['runner', 0.5], ['splitter', 0.35], ['tank', 0.3], ['plague', 0.25], ['fatty', 0.12], ['ghost', 0.2], ['lobber', 0.1],   // scouts lead packs instead (below)
 ];
+// (v0.33) A scripted wave from an Orcs Must Die! 2 onslaught (waves-omd2.js): the groups come out
+// in OMD2's order, from OMD2's doors, each mouse `every` seconds apart, `gap` seconds between
+// groups. Past the script's last wave it replays from the top with more mice and tougher ones.
+// Bosses still follow Brent's rule (mini boss every 6th wave, King Rat on 12 and 24).
+export function buildScriptedWave(script, n, rng, opts = {}) {
+  const N = Object.keys(script.waves).length, loop = Math.floor((n - 1) / N), base = ((n - 1) % N) + 1;
+  const w = script.waves[base], queue = [], more = 1 + 0.35 * loop;
+  for (const g of w.groups) {
+    const list = [];
+    for (const [type, count] of g.mobs) for (let k = 0; k < Math.round(count * more); k++) list.push(type);
+    list.forEach((type, k) => queue.push({ type, gap: k === list.length - 1 ? w.gap : g.every, pack: list.length, door: g.door }));
+  }
+  for (const bt of opts.birds === false ? [] : ['magpie', 'crow']) {     // birds as in the free-form waves
+    const b0 = MICE[bt].intro; if (n < b0) continue;
+    const count = n === b0 ? 1 : 1 + Math.floor((n - b0) / 4);
+    for (let k = 0; k < count; k++) queue.splice(Math.min(queue.length, Math.floor(queue.length * (0.2 + 0.6 * rng()))), 0, { type: bt, gap: n === b0 ? 6 : 0.3, pack: 1, intro: n === b0 && k === 0 });
+  }
+  const boss = n % 12 === 0 ? 'bigboss' : n % 6 === 0 ? 'miniboss' : null;
+  if (boss) { queue.push({ type: boss, gap: 1.5, pack: 1, intro: n === 6 || n === 12 }); for (let k = 0; k < 10 + n; k++) queue.push({ type: k % 4 ? 'pup' : 'mouse', gap: 0.05, pack: 10 + n }); }
+  // Newcomers get their one-line intro the first time they appear.
+  const seen = new Set(opts.seen || []);   // (a copy: the preview must not mark kinds as seen)
+  for (const e of queue) if (!seen.has(e.type) && MICE[e.type].intro != null && !MICE[e.type].boss && !MICE[e.type].bird) { e.intro = true; seen.add(e.type); }
+  return { queue, hpMul: 1 + 0.045 * (n - 1) + 0.25 * loop + (n > 24 ? 0.08 * (n - 24) : 0) };
+}
+export const scriptFor = (mapId) => OMD2_WAVES[mapId] || null;
+
 export function buildWave(n, rng, gateUp, opts = {}) {
+  if (opts.script) return buildScriptedWave(opts.script, n, rng, opts);
   const pool = [];
   const pups = Math.min(220, 12 + n * 8);
   const others = Math.min(60, 4 + n * 2);
