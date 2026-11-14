@@ -652,7 +652,7 @@ export function makeTrap(kind, ghost = false) {
     }
     g.userData.pans = pans;
     lamp(W * 0.42, -0.2, D * 0.38);
-  } else if (kind === 'firecracker') {  } else if (kind === 'firecracker') {
+  } else if (kind === 'firecracker') {
     // A bundle of red paper bangers with a fuse; once it's gone off, a scorch mark.
     const body = new THREE.Group(); add(body); g.userData.body = body;
     for (const [x, z] of [[0, 0], [0.32, 0.1], [-0.2, 0.28], [0.1, -0.3]]) {

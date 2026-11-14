@@ -11,6 +11,7 @@ import {
 } from './map.js';
 import { computeFlow, nextCell, nearestReachable, linkCost } from './path.js';
 import { buildWave, ratePaws, INTRO_TEXT, scriptFor } from './waves.js';
+import { initChaos, stepChaos } from './chaos.js';
 
 // Cat lines. Original, crude, bleeped. Each cat has its own voice:
 // Fred is a mouthy back-alley scrapper; Puddin is a lazy, posh glutton.
@@ -174,7 +175,7 @@ const SRC_EL = { cat: 'physical', bleed: 'physical', trap: 'physical', splat: 'p
 
 export class Sim {
   // map = which campaign map ('entrance', 'market', 'stables', 'cellar', 'passages', 'kitchen').
-  constructor({ mode = 'normal', seed = 1234, map = 'entrance', difficulty = 'normal', allDoors = false } = {}) {
+  constructor({ mode = 'normal', seed = 1234, map = 'entrance', difficulty = 'normal', allDoors = false, chaos = false } = {}) {
     this.allDoors = allDoors;          // (tests) every door open from the start
     this.diff = DIFFICULTY[difficulty] || DIFFICULTY.normal; this.difficulty = DIFFICULTY[difficulty] ? difficulty : 'normal';
     this.mapDef = useMap(map);
@@ -260,6 +261,7 @@ export class Sim {
     this.script = scriptFor(this.mapDef.id); this.seenKinds = new Set();   // (v0.33) OMD2 wave script, if this map has one
     this.doorsOpen = SPAWNS.map((_, k) => this.doorOpensAt(k) <= 1);   // (v0.31) later doors stay shut until their wave
     this.flowDirty = true; this.layoutVer = 0;   // layoutVer: bumps whenever walls/traps/doors change (caches key off it)
+    this.chaos = null; if (chaos) initChaos(this);   // (v0.34) chaos mode: scurries, rumbles, flings (chaos.js)
     this.updateFlow();
   }
 
@@ -686,6 +688,7 @@ export class Sim {
     this.stepMapFeatures();
     this.stepFallers();
     this.stepMissiles();
+    if (this.chaos) stepChaos(this);
     if (this.mice.some(m => m.dead)) this.mice = this.mice.filter(m => !m.dead);
     if (this.lives <= 0 && this.phase !== 'lost') {
       this.lives = 0; this.phase = 'lost'; this.emit({ t: 'end', won: false });
@@ -1950,6 +1953,7 @@ export class Sim {
     const i = cellOf(m.x, m.z);
     if (i >= 0 && this.map.type[i] === T.HOLE) {
       m.dead = true;
+      if (m.chaos) { this.emit({ t: 'steal', x: m.x, z: m.z }); return; }   // (v0.34) a chaos scurry only nicks crumbs: no life lost
       this.lives -= d.boss ? RULES.livesLostPerBoss : RULES.livesLostPerMouse;
       this.emit({ t: 'leak', boss: !!d.boss }); this.bark('leak');
       this.emit({ t: 'msg', text: d.boss ? 'A boss got into the great hall!' : 'A mouse got into the great hall' });

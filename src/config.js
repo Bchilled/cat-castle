@@ -5,7 +5,7 @@
 // Scale: 1 world unit ≈ 30 cm. Fred is about one unit long, so the castle's
 // furniture towers over him — mice and cats in a human world.
 
-export const VERSION = '0.33.0';
+export const VERSION = '0.34.0';
 export const GAME_TITLE = 'Nine Lives Keep';
 
 // Fixed simulation rate. Why: a fixed tick keeps the sim deterministic, which
@@ -80,9 +80,9 @@ export const ATTACK_EL = {
 
 // Difficulty (picked on the menu). hp = mouse health, lives = starting lives, paws = paw prints earned.
 export const DIFFICULTY = {
-  relaxed: { name: 'Relaxed', hp: 0.75, lives: 30, paws: 0.5, desc: 'Mice are softer and you get 30 lives. Half the paw prints.' },
-  normal:  { name: 'Normal',  hp: 1,    lives: 20, paws: 1,   desc: 'The way it is meant to be played.' },
-  brutal:  { name: 'Brutal',  hp: 1.3,  lives: 12, paws: 1.5, desc: 'Tougher mice, only 12 lives. 50% more paw prints.' },
+  relaxed: { name: 'Relaxed', hp: 0.75, lives: 27, paws: 0.5, desc: 'Mice are softer and you get 27 lives. Half the paw prints.' },
+  normal:  { name: 'Normal',  hp: 1,    lives: 18, paws: 1,   desc: 'The way it is meant to be played.' },
+  brutal:  { name: 'Brutal',  hp: 1.3,  lives: 9, paws: 1.5, desc: 'Tougher mice, only 9 lives. 50% more paw prints.' },
 };
 export const DIFFICULTY_ORDER = ['relaxed', 'normal', 'brutal'];
 
