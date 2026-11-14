@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Intro soundtrack (v0.34)</title>
+<!-- Renders the intro film's soundtrack with the game's own synthesised sounds (src/audio/sfx.js),
+     cued to the picture (assets/intro/intro.mp4, 14 s), and offers it as a WAV. The recorder
+     (tools/record/) runs this page headless; it can also be opened by hand: press Render.
+     The WAV is muxed into intro.mp4 with ffmpeg (see tools/record/README.md). -->
+<button id="go">Render</button> <a id="dl"></a>
+<script type="module">
+import { Sfx } from '../src/audio/sfx.js';
+const SECS = 14, SR = 48000;
+let clock = 0;   // the time each sound is played at (the offline context's own clock stays at 0 until it renders)
+window.AudioContext = function () {
+  const c = new OfflineAudioContext(2, SECS * SR, SR);
+  Object.defineProperty(c, 'currentTime', { get: () => clock });
+  Object.defineProperty(c, 'state', { get: () => 'running' });
+  c.resume = () => Promise.resolve();
+  return c;
+};
+let seed = 7; const R = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+const rnd = (a, b) => a + R() * (b - a);
+
+async function render() {
+  const sfx = new Sfx();
+  sfx.prefs = { master: 0.9, music: 0.7, sfx: 1, muted: false, musicV2: true };
+  sfx.startMusic = () => {}; sfx.setAmbience = () => {};
+  sfx.unlock();
+  sfx.last = { get: () => null, set() {} };            // no rate limits: every cue plays
+  sfx.allow = () => true;
+  const at = (t, name, x, z, opt) => { clock = t; sfx.play(name, x, z, opt); };
+  const music = (mode, t0, t1) => { sfx.musicMode = mode; sfx.step = 0; sfx.nextT = t0; while (sfx.nextT < t1) { clock = 0; sfx.musicStep(sfx.nextT); } };
+  const noise = (t, o) => { clock = t; sfx.noise(sfx.sfxBus, o); };
+  const tone = (t, o) => { clock = t; sfx.tone(sfx.sfxBus, o); };
+
+  // 0.0-1.5  Fred grinning at the camera: a boss sting under a low, menacing purr.
+  at(0.05, 'waveStart', undefined, undefined, { boss: true, vol: 0.9 });
+  at(0.2, 'purr', undefined, undefined, { vol: 0.8 });
+  // 1.5-4.5  The mice storm the castle at dusk: a stampede of little feet, squeaks everywhere,
+  // the gate taking hits, the ground shaking, a door bursting open.
+  music('boss', 1.4, 4.5);
+  at(1.5, 'rumble', undefined, undefined, { vol: 0.9 });
+  for (let t = 1.5; t < 4.5; t += rnd(0.12, 0.3)) at(t, 'scurry', rnd(-8, 8), rnd(2, 8), { vol: 2 });
+  for (let k = 0; k < 26; k++) at(rnd(1.55, 4.45), 'squeak', rnd(-7, 7), rnd(1, 7), { vol: 1.8, big: R() < 0.12 });
+  for (let t = 1.6; t < 4.5; t += 0.09) noise(t, { type: 'bandpass', f: rnd(300, 700), q: 2, dur: 0.05, vol: 0.18 });   // the stampede
+  for (const t of [2.1, 2.75, 3.4]) at(t, 'gateHit', rnd(-2, 2), 4, { vol: 1.6 });
+  at(3.95, 'doorOpen', 0, 5, { vol: 1.3 });
+  at(4.2, 'bossRoar', undefined, undefined, { vol: 0.6 });
+  // 4.5-8.5  Fred asleep by the hearth: the fire crackling, a snoring purr, a sleepy tune.
+  music('menu', 4.6, 8.6);
+  noise(4.5, { type: 'lowpass', f: 400, dur: 4.1, vol: 0.16, att: 0.4 });   // the fire's roar
+  for (let t = 4.5; t < 9.9; t += rnd(0.05, 0.22)) noise(t, { type: 'highpass', f: rnd(2500, 6000), dur: rnd(0.01, 0.03), vol: rnd(0.08, 0.3) });   // crackles
+  for (const t of [4.7, 6.2, 7.6]) at(t, 'purr', undefined, undefined, { vol: 0.9 });
+  // 8.5-10  He wakes: a big yawn and a stretch, then a meow.
+  at(8.55, 'yawn', undefined, undefined, { vol: 1.3 });
+  at(9.55, 'meow', undefined, undefined, { p: 0.9, vol: 1.4 });
+  // 10-13  The glare: a whoosh, a snarl and a hiss, the battle music, a roar.
+  at(9.98, 'whip', undefined, undefined, { vol: 0.9 });
+  at(10.0, 'waveStart', undefined, undefined, { boss: false, vol: 0.9 });
+  music('wave', 10.0, 13.2);
+  at(10.7, 'hiss', undefined, undefined, { vol: 1.3 });
+  at(12.0, 'roar', undefined, undefined, { vol: 0.8 });
+  for (let k = 0; k < 6; k++) at(rnd(11.2, 12.8), 'squeak', rnd(-8, 8), rnd(3, 8), { vol: 0.9 });   // the mice heard that
+  // 13-14  Fade to black on a thud.
+  at(13.1, 'pound', undefined, undefined, { vol: 0.45 });
+  tone(13.15, { type: 'sine', f: 55, f2: 30, dur: 0.9, vol: 0.5 });
+
+  const buf = await sfx.ctx.startRendering();
+  // Gentle fade out over the last half second.
+  const L = buf.getChannelData(0), Rt = buf.getChannelData(1), n = buf.length, f0 = n - SR / 2;
+  for (let i = f0; i < n; i++) { const g = (n - i) / (n - f0); L[i] *= g; Rt[i] *= g; }
+  const pcm = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++) { pcm[2 * i] = Math.max(-1, Math.min(1, L[i])) * 32767; pcm[2 * i + 1] = Math.max(-1, Math.min(1, Rt[i])) * 32767; }
+  const hdr = new DataView(new ArrayBuffer(44)), str = (o, s) => [...s].forEach((ch, k) => hdr.setUint8(o + k, ch.charCodeAt(0)));
+  str(0, 'RIFF'); hdr.setUint32(4, 36 + pcm.byteLength, true); str(8, 'WAVE'); str(12, 'fmt '); hdr.setUint32(16, 16, true); hdr.setUint16(20, 1, true); hdr.setUint16(22, 2, true);
+  hdr.setUint32(24, SR, true); hdr.setUint32(28, SR * 4, true); hdr.setUint16(32, 4, true); hdr.setUint16(34, 16, true); str(36, 'data'); hdr.setUint32(40, pcm.byteLength, true);
+  const blob = new Blob([hdr.buffer, pcm.buffer], { type: 'audio/wav' });
+  const a = document.getElementById('dl'); a.href = URL.createObjectURL(blob); a.download = 'intro-soundtrack.wav'; a.textContent = 'intro-soundtrack.wav';
+  const b = new Uint8Array(await blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  window.__wav = btoa(s);
+}
+document.getElementById('go').onclick = render;
+window.__render = render;
+</script>
