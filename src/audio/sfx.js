@@ -191,7 +191,7 @@ export class Sfx {
 }
 
 // Rate limits: [max plays, per seconds]. Unlisted sounds: 6 per 0.1 s.
-const LIMITS = { footstep: [2, 0.2], sizzle: [2, 0.3], chill: [2, 0.3], salt: [1, 0.4], slip: [2, 0.2], darts: [2, 0.2], combo_chain: [2, 0.15], combo_blaze: [2, 0.2], combo_freeze: [3, 0.15], combo_spread: [1, 0.3], combo_knockdown: [3, 0.1], combo_steam: [1, 0.3], execute: [3, 0.1], toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25], shelfHit: [2, 0.12], barrelHit: [2, 0.15], barrelRoll: [2, 0.4], knife: [3, 0.08], beam: [2, 0.3], honeyDrip: [2, 0.3], cuckoo: [2, 0.25], kettle: [2, 0.4], spicejar: [2, 0.3], jammed: [2, 0.15], prick: [3, 0.1], catapult: [2, 0.2], catapultLand: [2, 0.2], pan: [2, 0.2], cordZap: [3, 0.1], bubbles: [2, 0.3], wheelOn: [2, 0.3] };
+const LIMITS = { coin: [3, 0.1], boing: [2, 0.15], scurry: [2, 0.3], rumble: [1, 1], knock: [3, 0.1], smash: [3, 0.12], tip: [2, 0.1], propBack: [2, 0.2], nick: [2, 0.2], gorged: [1, 0.3], meow: [1, 0.6], footstep: [2, 0.2], sizzle: [2, 0.3], chill: [2, 0.3], salt: [1, 0.4], slip: [2, 0.2], darts: [2, 0.2], combo_chain: [2, 0.15], combo_blaze: [2, 0.2], combo_freeze: [3, 0.15], combo_spread: [1, 0.3], combo_knockdown: [3, 0.1], combo_steam: [1, 0.3], execute: [3, 0.1], toySqueak: [3, 0.2], pebble: [4, 0.1], claw: [3, 0.1], whisker: [4, 0.1], burr: [3, 0.1], dodge: [2, 0.2], squeak: [5, 0.12], hit: [4, 0.08], pellet: [6, 0.1], tack: [2, 0.15], dmg: [4, 0.1], splat: [4, 0.12], pickup: [3, 0.1], grind: [2, 0.25], shelfHit: [2, 0.12], barrelHit: [2, 0.15], barrelRoll: [2, 0.4], knife: [3, 0.08], beam: [2, 0.3], honeyDrip: [2, 0.3], cuckoo: [2, 0.25], kettle: [2, 0.4], spicejar: [2, 0.3], jammed: [2, 0.15], prick: [3, 0.1], catapult: [2, 0.2], catapultLand: [2, 0.2], pan: [2, 0.2], cordZap: [3, 0.1], bubbles: [2, 0.3], wheelOn: [2, 0.3] };
 
 // Each sound: (sfx, output node, random, options).
 const SOUNDS = {
@@ -366,6 +366,37 @@ const SOUNDS = {
   combo_steam: (a, o) => { a.noise(o, { dur: 0.6, vol: 0.4, type: 'highpass', f: 2800, att: 0.03 }); },
   execute: (a, o) => { a.tone(o, { type: 'sawtooth', f: 220, f2: 55, dur: 0.6, vol: 0.18, vib: 10 }); a.tone(o, { f: 110, f2: 40, t: 0.1, dur: 0.5, vol: 0.4 }); },
   click: (a, o) => { a.tone(o, { type: 'triangle', f: 700, f2: 500, dur: 0.05, vol: 0.15 }); },
+  // (v0.34) Chaos mode and the sounds that used to be missing.
+  // Paw Points from a kill: a tiny two-note coin.
+  coin: (a, o, R) => { const f = 1319 * (1 + R() * 0.06); a.tone(o, { type: 'triangle', f, dur: 0.07, vol: 0.12 }); a.tone(o, { type: 'triangle', f: f * 1.5, t: 0.06, dur: 0.16, vol: 0.12 }); },
+  // A flung mouse: a spring boing and a surprised squeak.
+  boing: (a, o, R) => { a.tone(o, { type: 'sine', f: 180, f2: 620, dur: 0.28, vol: 0.3, vib: 40 }); const f = 2200 + R() * 900; a.tone(o, { f, f2: f * 1.6, t: 0.05, dur: 0.12, vol: 0.14 }); },
+  // A scurry bursting out of a hole: a patter of little feet under a chorus of squeaks.
+  scurry: (a, o, R) => { for (let k = 0; k < 10; k++) a.noise(o, { type: 'bandpass', f: 2500 + R() * 1500, q: 4, t: k * 0.045, dur: 0.03, vol: 0.12 });
+    for (let k = 0; k < 4; k++) { const f = 1900 + R() * 1400; a.tone(o, { f, f2: f * (1.2 + R() * 0.5), t: 0.05 + k * 0.08 + R() * 0.04, dur: 0.07, vol: 0.12 }); } },
+  // The castle shaking: a long low rumble with stones and crockery rattling in it.
+  rumble: (a, o, R) => { a.noise(o, { type: 'lowpass', f: 160, f2: 60, dur: 1.8, vol: 0.9, att: 0.15 }); a.tone(o, { f: 42, f2: 30, dur: 1.6, vol: 0.6, att: 0.1, vib: 4 });
+    for (let k = 0; k < 7; k++) a.noise(o, { type: 'highpass', f: 2500 + R() * 2500, t: 0.2 + R() * 1.2, dur: 0.05, vol: 0.12 }); },
+  // Pots and jars: knocked off (a wooden knock), toppled (a clunk), smashed on the floor (crash and shards).
+  knock: (a, o, R) => { a.tone(o, { type: 'triangle', f: 320 + R() * 80, f2: 200, dur: 0.08, vol: 0.3 }); a.noise(o, { dur: 0.05, vol: 0.15, f: 1500, q: 3 }); },
+  tip: (a, o) => { a.tone(o, { f: 180, f2: 90, dur: 0.12, vol: 0.35 }); },
+  smash: (a, o, R) => { a.tone(o, { f: 130, f2: 50, dur: 0.25, vol: 0.6 }); a.noise(o, { dur: 0.25, vol: 0.6, type: 'highpass', f: 2200 });
+    for (let k = 0; k < 6; k++) a.tone(o, { type: 'triangle', f: 2500 + R() * 3000, t: 0.04 + k * 0.035 + R() * 0.03, dur: 0.06, vol: 0.06 }); },
+  propBack: (a, o) => { a.tone(o, { type: 'triangle', f: 600, f2: 900, dur: 0.08, vol: 0.06 }); },
+  // A scurry mouse making off with crumbs (no life lost): a cheeky up-squeak.
+  nick: (a, o, R) => { const f = 1800 + R() * 400; a.tone(o, { type: 'square', f, f2: f * 1.4, dur: 0.08, vol: 0.05 }); },
+  gorged: (a, o, R) => { for (let k = 0; k < 3; k++) a.noise(o, { dur: 0.05, vol: 0.25, f: 1200 + R() * 400, q: 2, t: k * 0.09 }); },
+  // A cat's meow (each cat has its own pitch, opt.p): a buzzy voice through a vowel that opens
+  // ("mi") and closes ("ow"), with the pitch rising then falling.
+  meow: (a, o, R, { p = 1 }) => {
+    const c = a.ctx, s = c.currentTime, d = 0.42 + R() * 0.2, f0 = 520 * p * (0.95 + R() * 0.1);
+    const osc = c.createOscillator(), bp = c.createBiquadFilter(), bp2 = c.createBiquadFilter(), g = c.createGain(), mix = c.createGain();
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(f0 * 0.8, s); osc.frequency.linearRampToValueAtTime(f0 * 1.25, s + d * 0.35); osc.frequency.exponentialRampToValueAtTime(f0 * 0.7, s + d);
+    bp.type = 'bandpass'; bp.Q.value = 5; bp.frequency.setValueAtTime(700, s); bp.frequency.linearRampToValueAtTime(1900, s + d * 0.4); bp.frequency.linearRampToValueAtTime(800, s + d);
+    bp2.type = 'bandpass'; bp2.Q.value = 8; bp2.frequency.setValueAtTime(2600, s); bp2.frequency.linearRampToValueAtTime(3000, s + d * 0.4); bp2.frequency.linearRampToValueAtTime(2200, s + d);
+    g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.5, s + 0.05); g.gain.setValueAtTime(0.5, s + d * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, s + d);
+    mix.gain.value = 0.9; osc.connect(bp); osc.connect(bp2); bp.connect(g); bp2.connect(mix); mix.connect(g); g.connect(o); osc.start(s); osc.stop(s + d + 0.05);
+  },
   deny: (a, o) => { a.tone(o, { type: 'square', f: 180, dur: 0.12, vol: 0.08 }); },
 };
 export const SOUND_NAMES = Object.keys(SOUNDS);   // for the self-test

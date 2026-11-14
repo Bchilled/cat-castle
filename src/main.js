@@ -14,6 +14,8 @@ import { initMenus } from './ui/menus.js';
 import { makeFlyover } from './render/flyover.js';
 import { Coach } from './ui/coach.js';
 import { loadKit } from './render/kit.js';
+import { ChaosFx } from './render/chaosfx.js';
+import { runDemo } from './demo.js';
 // The castle's 3D models load in the background from the menu (a game waits for them if needed).
 const kitLoad = loadKit();
 
@@ -28,6 +30,11 @@ const relaunch = (flag) => { location.href = location.pathname + '?' + [SANDBOX 
 const dropFlags = () => history.replaceState(null, '', location.pathname + (SANDBOX ? '?sandbox' : ''));
 window.__relaunch = relaunch;
 let profile = SANDBOX ? sandboxProfile() : loadProfile();
+// (v0.34) Chaos mode (sim/chaos.js + render/chaosfx.js): scurries from every hole, rumbles that knock
+// the pots off the shelves, flung mice. On unless the URL has ?calm. ?demo: the game plays itself
+// (demo.js; used to record the gameplay video).
+const CHAOS_ON = !FLAGS.has('calm'), DEMO = FLAGS.has('demo');
+const MEOW_PITCH = { fred: 0.9, puddin: 0.75, scary: 1.15, nebbie: 1.3, casper: 1.05, meow: 1.2, mimo: 1.4 };   // each cat's own voice
 const $ = (id) => document.getElementById(id);
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
@@ -55,7 +62,7 @@ const menus = initMenus({
 
 // (v0.32.1) The title shows Kanye's key art (assets/ui/title.jpg) instead of the live castle.
 
-// First screen: the intro film (once per visit; it plays muted, Skip or any key skips it),
+// First screen: the intro film (once per visit; with sound if the browser allows, Skip or any key skips it),
 // then the title. ?go starts a game straight away (Try again, Onward), ?kit opens Your traps.
 function intro() {
   const v = $('introvid');
@@ -65,7 +72,12 @@ function intro() {
   menus.go('intro');
   v.onended = leave; v.onerror = leave; $('introskip').onclick = leave; addEventListener('keydown', leave);
   v.src = 'assets/intro/intro.mp4';
-  v.play().catch(leave);
+  // (v0.34) The film has a soundtrack now. Browsers only allow sound after a click, so try with
+  // sound (at the game's volume), and if that's refused play it muted: a click on it turns the sound on.
+  const vol = sfx.prefs.muted ? 0 : Math.min(1, sfx.prefs.master * Math.max(sfx.prefs.sfx, 0.5));
+  v.muted = !vol; v.volume = vol || 1;
+  v.onclick = () => { if (v.muted && vol) { v.muted = false; v.volume = vol; } };
+  v.play().catch(() => { v.muted = true; v.play().catch(leave); });
   setTimeout(() => { if (v.readyState < 2) leave(); }, 4000);   // not there, or too slow: straight to the title
 }
 if (FLAGS.has('go')) { dropFlags(); setTimeout(() => start('normal'), 0); }   // (after the rest of this file has run)
@@ -136,7 +148,7 @@ async function start(mode, co = null) {
   sfx.setAmbience(chosenMap);   // distant life of this map (voices, horses, pots, drips...)
   const guest = co && co.role === 'guest', LOCAL_ID = guest ? co.you : 'p1';
   const difficulty = co ? co.difficulty || 'normal' : menus.state.diff;   // co-op: the host's choice
-  const sim = new Sim({ mode, seed: co ? co.seed : (Date.now() & 0xffff) | 1, map: chosenMap, difficulty });
+  const sim = new Sim({ mode, seed: co ? co.seed : (Date.now() & 0xffff) | 1, map: chosenMap, difficulty, chaos: CHAOS_ON });
   const mine = { loadout, item: chosenItem, upgrades: upgradesFor(profile), hat: profile.worn[chosenCat] || null };
   if (!co) sim.addPlayer('p1', chosenCat, mine);
   else for (const p of co.players) {
@@ -185,9 +197,10 @@ async function start(mode, co = null) {
   const canvas = document.getElementById('game');
   const scene = new Scene(canvas, sim);
   const hud = new Hud(sim, loadout);
+  const chaosFx = CHAOS_ON ? new ChaosFx(scene) : null;
   scene.onStep = (x, z) => sfx.play('footstep', x, z, { vol: 0.6 });   // humans walking past
   game = { stop() {
-    running = false; ac.abort(); offs.forEach(f => f()); scene.dispose(); sfx.setAmbience(null); document.exitPointerLock?.();
+    running = false; ac.abort(); offs.forEach(f => f()); if (chaosFx) chaosFx.dispose(); scene.dispose(); sfx.setAmbience(null); document.exitPointerLock?.();
     const c = document.getElementById('game'); c.replaceWith(c.cloneNode(false));   // a clean canvas for the next game
   } };
 
@@ -196,6 +209,7 @@ async function start(mode, co = null) {
   let yaw = Math.PI, pitch = 0.3;
   let attackHeld = false, jumpQ = false, jumpHeld = false, secondaryQ = false, altQ = false;
   let selected = null, rot = 0, aim = null;
+  let demo = null;
   canvas.addEventListener('click', () => { if (document.pointerLockElement !== canvas) canvas.requestPointerLock(); }, sig);
   // First-run tips: cleared by doing what they ask; the pause screen can skip or replay them.
   const coach = new Coach(document.getElementById('coach')), tipsBtn = document.getElementById('tipsbtn');
@@ -301,6 +315,7 @@ async function start(mode, co = null) {
   }
 
   function sendInput() {
+    if (demo) { const cmd = demo.tick(); if (cmd) net.send(cmd); jumpQ = secondaryQ = altQ = false; return; }
     const f = (keys.has('w') ? 1 : 0) - (keys.has('s') ? 1 : 0);
     const r = (keys.has('d') ? 1 : 0) - (keys.has('a') ? 1 : 0);
     // forward = (sin yaw, cos yaw); right = (-cos yaw, sin yaw)
@@ -366,6 +381,12 @@ async function start(mode, co = null) {
       case 'stallBreak': sfx.play('shelfBreak', x, z); break;
       case 'stallUp': sfx.play('shelfUp', x, z); break;
       case 'combo': sfx.play('combo_' + e.kind, x, z); break;
+      // (v0.34) Chaos mode and the sounds that were missing: coins for Paw Points, cats meow when they talk.
+      case 'points': sfx.play('coin', x, z, { vol: 0.8 }); break;
+      case 'bark': sfx.play('meow', ...at({ id: [...sim.cats.values()].find(c => c.name === e.who)?.id }), { p: MEOW_PITCH[e.kind] || 1 }); break;
+      case 'fling': sfx.play('boing', x, z); sfx.play('squeak', x, z); break;
+      case 'rumble': sfx.play('rumble', undefined, undefined, { vol: 0.9 }); sfx.play('squeak', x, z, { vol: 0.8 }); break;
+      case 'steal': sfx.play('nick', x, z); break;
       default: sfx.play(e.t, x, z, e);   // names that match a sound directly (snap, flip, zap, splat, ...)
     }
   }
@@ -422,6 +443,7 @@ async function start(mode, co = null) {
       }
       for (const e of sim.events) {
         scene.onEvent(e);
+        if (chaosFx) chaosFx.onEvent(e);
         sound(e);
         if (e.t === 'msg') hud.message(e.text);
         if (e.t === 'bark') hud.bark(e.who, e.text, e.kind);
@@ -458,6 +480,8 @@ async function start(mode, co = null) {
     if (scene.sniff) coachSeen.sniffed = true;
     if (ended) document.getElementById('coach').classList.remove('show');
     else if (!paused) coach.update(dt, { moved: coachSeen.moved, sel: selected, placed: coachSeen.placed, phase: sim.phase, kills: sim.stats.kills, sniffed: coachSeen.sniffed });
+    if (chaosFx) chaosFx.step(dt);
+    if (demo) demo.frame(dt);
     scene.render(dt, yaw, pitch, LOCAL_ID);
     requestAnimationFrame(frame);
   }
@@ -475,6 +499,8 @@ async function start(mode, co = null) {
     scene.camDriver = (cam, dt) => { const r = fly.drive(cam, dt); if (r === false) document.body.classList.remove('cine'); return r; };
     window.__skipFlyover = skip; window.__fly = fly;   // used by the screenshot tests
   }
+  // (v0.34) ?demo: the game plays itself (demo.js).
+  demo = DEMO && !co ? runDemo({ sim, LOCAL_ID, scene, setView: (y, p) => { yaw = y; pitch = p; } }) : null;
   requestAnimationFrame(frame);
   window.__sim = sim; window.__scene = scene;   // handy for debugging in the browser console
   window.__setYaw = (y, p) => { yaw = y; if (p !== undefined) pitch = p; };   // used by the screenshot tests
