@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.34.0 — 2026-11-14
+Chaos all over the castle, the sounds that were missing, the intro film's soundtrack, and a gameplay video (Brent: "needs sound effects and some chaos in the game all over"). On the branch `carlon/chaos-audio`, not merged.
+- **Chaos mode** (`src/sim/chaos.js`), on unless the URL has `?calm`. While a wave is on:
+  - **Scurries:** every 1.4-2.8 s a pack of 5-10 little mice (Pinkies and House Mice, half health) bursts out of a random hole. Every hole is open from wave 1. A scurry mouse that reaches the great hall only steals crumbs: no life lost.
+  - **Rumbles:** every 5-9 s the castle shakes. The three pots nearest the mice jump off their shelves and tables towards them and smash on whatever is underneath; the nearest shelf, stall leg or barrel takes a knock (enough and the shelf or stall comes down, the barrel rolls through them).
+  - **Flings:** a kill can throw the mice next to it into the air.
+  - Knocked pots go back on their shelves 5 s after they land, so there's always more to knock over.
+  - The sim tests build a Sim without chaos, so the balance tests are unchanged.
+- **Chaos on screen** (`src/render/chaosfx.js`): killed mice go tumbling through the air (a little cartoon body that bounces once and puffs into fur), gold specks pop from every kill, dust from flung mice and scurries, rumbles shake the camera and drop dust from the ceiling, and big hits (explosions, shelves and stalls coming down, the Meat Tenderizer, smashed pots) flash the screen. A bigger particle pool (1600) for the swarms.
+- **Sounds** (all synthesised in `src/audio/sfx.js`, no files; see `src/audio/SOUNDS.md`): a coin for every kill's Paw Points, a boing for flung mice, the scurry's patter and squeaks, the rumble, pots being knocked, toppled and smashed (silent before), a mouse stuffing itself, and **meows**: each cat has its own pitch and meows whenever it says something.
+- **The intro film has sound:** a soundtrack cued to the picture, made from the game's own sounds (the mice storming the castle, the fire crackling, Fred's snoring purr, the yawn, a meow, the hiss and the battle music). `tools/intro-soundtrack.html` renders it. The game plays the film with sound when the browser allows it; otherwise muted, and a click on it turns the sound on.
+- **`?demo`** (`src/demo.js`): the game plays itself. Three cats (yours plus Scary Cat and Fred) guard the busiest route, traps are laid along every route, it starts on wave 6 (`&wave=N` to change), and an action camera follows the fight. Used to record the gameplay video.
+- **Gameplay video recorder** (`tools/record/`): headless Chrome on a fake clock, one frame at a time, with the game's audio rendered offline on the same clock, so picture and sound line up exactly.
+- **Lives:** Normal 18, Relaxed 27, Brutal 9 (Brent's call on 12 Nov; was 20 / 30 / 12).
+- **Fixed:** the Firecracker had no model (a duplicated `else if` left its branch empty), and the first one placed stopped the game drawing.
+- **Files:** `VERSION`; `src/config.js` (version, lives); `src/sim/chaos.js` (new); `src/sim/sim.js` (chaos option and step, scurry leak); `src/render/chaosfx.js` (new); `src/render/models.js` (Firecracker); `src/audio/sfx.js` (new sounds); `src/audio/SOUNDS.md` (new); `src/demo.js` (new); `src/main.js` (chaos, demo, sounds, intro with sound); `assets/intro/intro.mp4` (with soundtrack); `tools/intro-soundtrack.html`, `tools/record/` (new); `tests/sim-test.mjs` (lives, 5 chaos tests).
+
 ## 0.33.0 — 2026-11-11
 Servants' Passages now runs Orcs Must Die! 2's own Passages wave script, read from the game's data files on Brent's PC (see the decoded data in the 2026-11-10 review).
 - **The waves are OMD2's.** Every wave's groups, counts, order, which tunnel each group comes from, the half-second spacing inside a group and the gap between groups are the ones in OMD2's `PassagesTunnelClose / Middle / Far` onslaughts (spawn list 0). 86 groups over 12 waves. Nothing in them is invented.

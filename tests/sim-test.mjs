@@ -95,7 +95,7 @@ ok(ev.some(e => e.t === 'leak'), 'mice reach the exit');
 {
   const s8 = new Sim({ seed: 2 }); const c = s8.addPlayer('p1'); c.x = 48; c.z = 88;
   run(s8, 2, () => inp(s8, 'p1', { mx: 1 }));
-  ok(!c.alive && s8.lives === 17, `walking off the branch drowns the cat (lives ${s8.lives})`);
+  ok(!c.alive && s8.lives === 15, `walking off the branch drowns the cat (lives ${s8.lives})`);
 }
 
 // 8. Fred's pellets kill with bleed; the kill pays Paw Points straight away.
@@ -649,7 +649,7 @@ for (const id of MAP_ORDER) {
   const { ratePaws } = await import('../src/sim/waves.js'); const P = await import('../src/meta/profile.js');
   const r = new Sim({ seed: 900, difficulty: 'relaxed' }), b = new Sim({ seed: 900, difficulty: 'brutal' });
   r.addPlayer('p1'); b.addPlayer('p1'); r.phaseTimer = 0; b.phaseTimer = 0; r.step(); b.step();
-  ok(r.lives === 30 && b.lives === 12 && b.spawn.hpMul > r.spawn.hpMul * 1.6, `relaxed: 30 lives, brutal: 12 lives and much tougher mice (${(b.spawn.hpMul / r.spawn.hpMul).toFixed(2)}x)`);
+  ok(r.lives === 27 && b.lives === 9 && b.spawn.hpMul > r.spawn.hpMul * 1.6, `relaxed: 27 lives, brutal: 9 lives and much tougher mice (${(b.spawn.hpMul / r.spawn.hpMul).toFixed(2)}x)`);
   ok(ratePaws(12, {}, 12).base === 5 && ratePaws(6, {}, 12).base <= 3, 'a flawless Brutal run still rates 5 paws');
   const w = P.runReward(P.freshProfile(), { won: true, waves: 24, rating: { total: 6 }, map: 'entrance', difficulty: 'brutal' });
   ok(w.paws === Math.round((8 + 6 + P.FIRST_WIN_BONUS) * 1.5), `Brutal pays 50% more paw prints (${w.paws})`);
@@ -1132,5 +1132,21 @@ let findSpot, setup;
   const w13 = buildWave(13, () => 0.5, false, { script: sc, birds: false });
   ok(w13.queue.filter(e => e.type === 'mouse').length === 41 && w13.hpMul > 1.7, `wave 13 replays wave 1 with more, tougher mice (${w13.queue.length} mice, hp x${w13.hpMul.toFixed(2)})`);
   ok(MICE.rat && MICE.rat.hp > MICE.mouse.hp && MICE.rat.hp < MICE.tank.hp, 'the Brown Rat sits between the House Mouse and the Sewer Rat');
+}
+// 0.34: chaos mode (scurries from every hole, rumbles knocking pots off, flung mice). Off unless asked for.
+{
+  ok(new RealSim({ map: 'kitchen', seed: 5 }).chaos === null, 'chaos is off unless the game asks for it (these tests run without it)');
+  const s = new RealSim({ map: 'kitchen', seed: 5, chaos: true }); s.addPlayer('p1', 'fred', {});
+  ok(s.doorsOpen.every(Boolean), 'chaos: every hole is open from wave 1');
+  s.command({ type: 'startWave', id: 'p1' });
+  const cnt = {};
+  for (let i = 0; i < 30 * 20; i++) { s.step(); for (const e of s.events) cnt[e.t] = (cnt[e.t] || 0) + 1; s.events.length = 0; }
+  ok(cnt.scurry >= 5 && cnt.rumble >= 2 && cnt.knock >= 2 && cnt.smash >= 1, `chaos: scurries, rumbles, pots knocked off and smashed (${cnt.scurry} scurries, ${cnt.rumble} rumbles, ${cnt.knock} knocked, ${cnt.smash} smashed)`);
+  ok(s.props.every(p => p.state !== 'down' || (p.downT || 0) <= 5.01), 'chaos: knocked pots go back on their shelves');
+  let hole = -1; for (let i = 0; i < s.map.type.length; i++) if (s.map.type[i] === T.HOLE) { hole = i; break; }
+  const m = s.mice.find(x => x.chaos && !x.dead), lives = s.lives;
+  m.x = (hole % W + 0.5) * CELL; m.z = (((hole / W) | 0) + 0.5) * CELL; m.y = 0; m.state = 'walk'; m.climb = null; m.link = null;
+  s.stepMouse(m);
+  ok(m.dead && s.lives === lives && s.events.some(e => e.t === 'steal'), 'chaos: a scurry mouse in the great hall only steals crumbs (no life lost)');
 }
 process.exit(fails ? 1 : 0);
